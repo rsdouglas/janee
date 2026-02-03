@@ -2,6 +2,7 @@
  * Tests for rules engine
  */
 
+import { describe, it, expect } from 'vitest';
 import { checkRules, matchPattern, validateRules, Rules } from './rules';
 
 describe('Rules Engine', () => {

@@ -15,7 +15,8 @@
     "build:plugin": "npm run build --workspace=packages/openclaw-plugin",
     "dev": "tsc --watch",
     "start": "node dist/cli/index.js",
-    "test": "jest"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "ai",
@@ -35,7 +36,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18.0.0"
