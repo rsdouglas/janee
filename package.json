@@ -1,0 +1,35 @@
+{
+  "name": "janee",
+  "version": "0.1.0",
+  "description": "Secrets management for AI agents — with LLM-adjudicated access control",
+  "main": "dist/index.js",
+  "bin": {
+    "janee": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli/index.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "security",
+    "secrets",
+    "proxy",
+    "llm"
+  ],
+  "author": "Ross Douglas & David Wilson",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
