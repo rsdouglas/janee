@@ -27,7 +27,8 @@ export async function serveMCPCommand(): Promise<void> {
         service: cap.service,
         ttl: cap.ttl,
         autoApprove: cap.autoApprove,
-        requiresReason: cap.requiresReason
+        requiresReason: cap.requiresReason,
+        rules: cap.rules
       })
     );
 
@@ -41,6 +42,7 @@ export async function serveMCPCommand(): Promise<void> {
       capabilities,
       services,
       sessionManager,
+      auditLogger,
       
       onExecute: async (session, request) => {
         // Get service config

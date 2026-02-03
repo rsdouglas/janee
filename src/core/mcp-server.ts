@@ -11,6 +11,8 @@ import {
   Tool
 } from '@modelcontextprotocol/sdk/types.js';
 import { SessionManager } from './sessions.js';
+import { checkRules, Rules } from './rules.js';
+import { AuditLogger } from './audit.js';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
@@ -21,6 +23,7 @@ export interface Capability {
   ttl: string;  // e.g., "1h", "30m"
   autoApprove?: boolean;
   requiresReason?: boolean;
+  rules?: Rules;  // Optional allow/deny patterns
 }
 
 export interface ServiceConfig {
@@ -52,6 +55,7 @@ export interface MCPServerOptions {
   capabilities: Capability[];
   services: Map<string, ServiceConfig>;
   sessionManager: SessionManager;
+  auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
 }
 
@@ -79,7 +83,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { capabilities, services, sessionManager, onExecute } = options;
+  const { capabilities, services, sessionManager, auditLogger, onExecute } = options;
 
   const server = new Server(
     {
@@ -165,7 +169,8 @@ export function createMCPServer(options: MCPServerOptions): Server {
                   service: cap.service,
                   ttl: cap.ttl,
                   autoApprove: cap.autoApprove,
-                  requiresReason: cap.requiresReason
+                  requiresReason: cap.requiresReason,
+                  rules: cap.rules
                 })),
                 null,
                 2
@@ -185,6 +190,20 @@ export function createMCPServer(options: MCPServerOptions): Server {
           // Check if reason required
           if (cap.requiresReason && !reason) {
             throw new Error(`Capability "${capability}" requires a reason`);
+          }
+
+          // Check rules (path-based policies)
+          const ruleCheck = checkRules(cap.rules, method, path);
+          if (!ruleCheck.allowed) {
+            // Log denied request
+            auditLogger.logDenied(
+              cap.service,
+              method,
+              path,
+              ruleCheck.reason || 'Request denied by policy',
+              reason
+            );
+            throw new Error(ruleCheck.reason || 'Request denied by policy');
           }
 
           // Get or create session

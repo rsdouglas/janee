@@ -27,6 +27,10 @@ export interface CapabilityConfig {
   ttl: string;
   autoApprove?: boolean;
   requiresReason?: boolean;
+  rules?: {
+    allow?: string[];
+    deny?: string[];
+  };
 }
 
 export interface LLMConfig {

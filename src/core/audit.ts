@@ -30,6 +30,8 @@ export interface AuditEvent {
   duration?: number;
   reason?: string;
   agentId?: string;
+  denied?: boolean;
+  denyReason?: string;
 }
 
 export class AuditLogger {
@@ -67,6 +69,34 @@ export class AuditLogger {
       statusCode: res?.statusCode,
       duration,
       // TODO: Extract reason/agentId from request headers if present
+    };
+
+    // Append to log file (JSONL format)
+    const logLine = JSON.stringify(event) + '\n';
+    
+    // Check if we need to rotate to a new file
+    const currentFile = this.getLogFilePath();
+    if (currentFile !== this.currentLogFile) {
+      this.currentLogFile = currentFile;
+    }
+
+    fs.appendFileSync(this.currentLogFile, logLine, { mode: 0o600 });
+  }
+
+  /**
+   * Log a denied request (blocked by rules)
+   */
+  logDenied(service: string, method: string, path: string, denyReason: string, userReason?: string): void {
+    const event: AuditEvent = {
+      id: this.generateId(),
+      timestamp: new Date().toISOString(),
+      service,
+      method,
+      path,
+      denied: true,
+      denyReason,
+      reason: userReason,
+      statusCode: 403
     };
 
     // Append to log file (JSONL format)

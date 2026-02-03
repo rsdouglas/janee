@@ -155,6 +155,50 @@ capabilities:
 - `ttl`: How long a session lasts
 - `autoApprove`: Skip approval for low-risk capabilities
 - `requiresReason`: Agent must explain why (logged, optionally LLM-evaluated)
+- `rules`: Optional allow/deny patterns for path-based access control
+
+### Request policies (rules)
+
+Capabilities can include `rules` to enforce exactly what requests are allowed:
+
+```yaml
+capabilities:
+  stripe_readonly:
+    service: stripe
+    ttl: 1h
+    rules:
+      allow:
+        - GET *
+      deny:
+        - POST *
+        - PUT *
+        - DELETE *
+
+  stripe_billing:
+    service: stripe
+    ttl: 15m
+    requiresReason: true
+    rules:
+      allow:
+        - GET *
+        - POST /v1/refunds/*
+        - POST /v1/invoices/*
+      deny:
+        - POST /v1/charges/*  # Can't charge cards
+```
+
+**How rules work:**
+1. Deny patterns checked first (explicit deny wins)
+2. Then allow patterns checked
+3. No rules = allow all (backward compatible)
+4. Rules defined but no match = deny by default
+
+**Pattern format:** `METHOD PATH`
+- `GET *` → any GET request
+- `POST /v1/charges/*` → POST to /v1/charges/ and subpaths
+- `* /v1/customers` → any method to /v1/customers
+
+**This is real security:** Even if an agent lies about its reason, it can only access endpoints the policy allows. Enforcement happens server-side before the request is proxied.
 
 ### Auth types
 

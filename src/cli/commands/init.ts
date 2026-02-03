@@ -54,19 +54,34 @@ services:
 
 # Capabilities - what agents can access
 capabilities:
-  # Example: Read-only Stripe access
-  # stripe:
+  # Example: Read-only Stripe access (with path policies)
+  # stripe_readonly:
   #   service: stripe
   #   ttl: 1h
   #   autoApprove: true
+  #   rules:
+  #     allow:
+  #       - GET *
+  #     deny:
+  #       - POST *
+  #       - PUT *
+  #       - DELETE *
 
-  # Example: Sensitive Stripe operations (requires reason)
-  # stripe_sensitive:
+  # Example: Stripe billing operations (limited write access)
+  # stripe_billing:
   #   service: stripe
-  #   ttl: 5m
+  #   ttl: 15m
   #   requiresReason: true
+  #   rules:
+  #     allow:
+  #       - GET *
+  #       - POST /v1/refunds/*
+  #       - POST /v1/invoices/*
+  #     deny:
+  #       - POST /v1/charges/*
+  #       - DELETE *
 
-  # Example: GitHub access
+  # Example: GitHub access (no restrictions)
   # github:
   #   service: github
   #   ttl: 30m

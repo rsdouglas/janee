@@ -204,6 +204,55 @@ capabilities:
 
 ---
 
+## Request Policies
+
+Control exactly what requests each capability can make using `rules`:
+
+```yaml
+capabilities:
+  stripe_readonly:
+    service: stripe
+    ttl: 1h
+    rules:
+      allow:
+        - GET *
+      deny:
+        - POST *
+        - PUT *
+        - DELETE *
+
+  stripe_billing:
+    service: stripe
+    ttl: 15m
+    requiresReason: true
+    rules:
+      allow:
+        - GET *
+        - POST /v1/refunds/*
+        - POST /v1/invoices/*
+      deny:
+        - POST /v1/charges/*  # Can't charge cards
+        - DELETE *
+```
+
+**How rules work:**
+
+1. **`deny` patterns are checked first** — explicit deny always wins
+2. **Then `allow` patterns are checked** — must match to proceed
+3. **No rules defined** → allow all (backward compatible)
+4. **Rules defined but no match** → denied by default
+
+**Pattern format:** `METHOD PATH`
+
+- `GET *` → any GET request
+- `POST /v1/charges/*` → POST to /v1/charges/ and subpaths
+- `* /v1/customers` → any method to /v1/customers
+- `DELETE /v1/customers/*` → DELETE any customer
+
+**This makes security real:** Even if an agent lies about its "reason", it can only access the endpoints the policy allows. Enforcement happens server-side.
+
+---
+
 ## CLI Reference
 
 ```bash
