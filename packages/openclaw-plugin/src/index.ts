@@ -5,12 +5,30 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 let mcpClient: Client | null = null;
 let isConnecting = false;
 
-async function ensureConnected(api: any) {
-  if (mcpClient) return mcpClient;
+async function connect(api: any): Promise<Client> {
+  const transport = new StdioClientTransport({
+    command: "janee",
+    args: ["serve"]
+  });
+  
+  const client = new Client(
+    { name: "openclaw-janee", version: "0.1.0" },
+    { capabilities: {} }
+  );
+  
+  await client.connect(transport);
+  api.log?.info?.("Connected to Janee MCP server");
+  return client;
+}
+
+async function ensureConnected(api: any): Promise<Client> {
+  // If we have a client, try to use it
+  if (mcpClient) {
+    return mcpClient;
+  }
   
   // Prevent multiple simultaneous connection attempts
   if (isConnecting) {
-    // Wait for the connection to complete
     while (isConnecting) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -20,25 +38,29 @@ async function ensureConnected(api: any) {
   isConnecting = true;
   
   try {
-    // Spawn janee serve and connect via stdio
-    const transport = new StdioClientTransport({
-      command: "janee",
-      args: ["serve"]
-    });
-    
-    mcpClient = new Client(
-      { name: "openclaw-janee", version: "0.1.0" },
-      { capabilities: {} }
-    );
-    
-    await mcpClient.connect(transport);
-    api.log?.info?.("Connected to Janee MCP server");
+    mcpClient = await connect(api);
     return mcpClient;
   } catch (error) {
     api.log?.error?.(`Failed to connect to Janee MCP server: ${error}`);
     throw error;
   } finally {
     isConnecting = false;
+  }
+}
+
+async function callWithReconnect(api: any, fn: (client: Client) => Promise<any>): Promise<any> {
+  try {
+    const client = await ensureConnected(api);
+    return await fn(client);
+  } catch (error: any) {
+    // If connection failed, reset and retry once
+    if (error?.message?.includes('Not connected') || error?.message?.includes('closed')) {
+      api.log?.warn?.("Connection lost, reconnecting...");
+      mcpClient = null;
+      const client = await ensureConnected(api);
+      return await fn(client);
+    }
+    throw error;
   }
 }
 
@@ -49,9 +71,10 @@ export default function(api: any) {
     description: "List available API services managed by Janee. Shows which services have stored credentials.",
     parameters: Type.Object({}),
     async execute() {
-      const client = await ensureConnected(api);
-      const result = await client.callTool({ name: "list_services", arguments: {} });
-      return { content: result.content };
+      return await callWithReconnect(api, async (client) => {
+        const result = await client.callTool({ name: "list_services", arguments: {} });
+        return { content: result.content };
+      });
     }
   });
 
@@ -66,18 +89,19 @@ export default function(api: any) {
       reason: Type.Optional(Type.String({ description: "Reason for this request (for audit logs, may be required for sensitive operations)" })),
     }),
     async execute(_id: string, params: any) {
-      const client = await ensureConnected(api);
-      const result = await client.callTool({ 
-        name: "execute", 
-        arguments: {
-          capability: params.service,
-          method: params.method,
-          path: params.path,
-          body: params.body,
-          reason: params.reason,
-        }
+      return await callWithReconnect(api, async (client) => {
+        const result = await client.callTool({ 
+          name: "execute", 
+          arguments: {
+            capability: params.service,
+            method: params.method,
+            path: params.path,
+            body: params.body,
+            reason: params.reason,
+          }
+        });
+        return { content: result.content };
       });
-      return { content: result.content };
     }
   });
 

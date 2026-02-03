@@ -4,6 +4,7 @@ import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
 import { URL } from 'url';
+import { createHmac } from 'crypto';
 
 export async function serveMCPCommand(): Promise<void> {
   try {
@@ -62,8 +63,20 @@ export async function serveMCPCommand(): Promise<void> {
           headers['Authorization'] = `Bearer ${serviceConfig.auth.key}`;
         } else if (serviceConfig.auth.type === 'headers' && serviceConfig.auth.headers) {
           Object.assign(headers, serviceConfig.auth.headers);
+        } else if (serviceConfig.auth.type === 'hmac' && serviceConfig.auth.apiKey && serviceConfig.auth.apiSecret) {
+          // HMAC signature (MEXC-style)
+          const timestamp = Date.now().toString();
+          targetUrl.searchParams.set('timestamp', timestamp);
+          
+          // Create signature from query string
+          const queryString = targetUrl.searchParams.toString();
+          const signature = createHmac('sha256', serviceConfig.auth.apiSecret)
+            .update(queryString)
+            .digest('hex');
+          
+          targetUrl.searchParams.set('signature', signature);
+          headers['X-MEXC-APIKEY'] = serviceConfig.auth.apiKey;
         }
-        // TODO: HMAC signature support
 
         // Make API request
         const response = await makeAPIRequest(targetUrl, {
