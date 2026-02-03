@@ -52,8 +52,12 @@ export async function serveMCPCommand(): Promise<void> {
           throw new Error(`Service not found: ${request.service}`);
         }
 
-        // Build target URL
-        const targetUrl = new URL(request.path, serviceConfig.baseUrl);
+        // Build target URL (properly join base + path)
+        let baseUrl = serviceConfig.baseUrl;
+        if (!baseUrl.endsWith('/')) baseUrl += '/';
+        let reqPath = request.path;
+        if (reqPath.startsWith('/')) reqPath = reqPath.slice(1);
+        const targetUrl = new URL(reqPath, baseUrl);
 
         // Build headers
         const headers: Record<string, string> = { ...request.headers };
@@ -76,6 +80,11 @@ export async function serveMCPCommand(): Promise<void> {
           
           targetUrl.searchParams.set('signature', signature);
           headers['X-MEXC-APIKEY'] = serviceConfig.auth.apiKey;
+        }
+
+        // Set Content-Type for requests with body
+        if (request.body && !headers['Content-Type'] && !headers['content-type']) {
+          headers['Content-Type'] = 'application/json';
         }
 
         // Make API request
