@@ -315,19 +315,6 @@ Works with any agent that speaks MCP:
 
 ---
 
-## Roadmap
-
-- [x] MCP server interface
-- [x] Encrypted key storage  
-- [x] Audit logging
-- [x] Session management
-- [x] OpenClaw plugin
-- [ ] LLM adjudication (evaluate requests with AI)
-- [ ] Policy engine (rate limits, allowlists)
-- [ ] Cloud version (managed hosting)
-
----
-
 ## Contributing
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
