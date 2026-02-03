@@ -19,8 +19,9 @@ npm install -g janee
 # Initialize Janee
 janee init
 
-# Edit config file with your API credentials
-# Edit ~/.janee/config.yaml and add your services
+# Add your API credentials (interactive)
+janee add
+# Or edit ~/.janee/config.yaml directly
 
 # Install the plugin in OpenClaw
 openclaw plugins install @openclaw/janee

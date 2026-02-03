@@ -7,6 +7,8 @@
 
 import { Command } from 'commander';
 import { initCommand } from './commands/init';
+import { addCommand } from './commands/add';
+import { removeCommand } from './commands/remove';
 import { serveCommand } from './commands/serve';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
@@ -26,6 +28,18 @@ program
   .command('init')
   .description('Initialize Janee configuration with example config')
   .action(initCommand);
+
+program
+  .command('add [service]')
+  .description('Add a service to Janee (interactive if no args)')
+  .option('-u, --url <url>', 'Base URL of the service')
+  .option('-k, --key <key>', 'API key for the service')
+  .action(addCommand);
+
+program
+  .command('remove <service>')
+  .description('Remove a service from Janee')
+  .action(removeCommand);
 
 program
   .command('serve')

@@ -35,6 +35,16 @@ Creates `~/.janee/config.yaml` with example config.
 
 ### 3. Add Your API Credentials
 
+**Option A: Interactive (recommended for first-time users)**
+
+```bash
+janee add
+```
+
+Follow the prompts to add each service.
+
+**Option B: Edit config file**
+
 Edit `~/.janee/config.yaml` and uncomment/add your services:
 
 ```yaml

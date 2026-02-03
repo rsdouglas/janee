@@ -45,9 +45,37 @@ janee init
 
 This creates `~/.janee/config.yaml` with example services.
 
-### Configure
+### Add Services
 
-Edit `~/.janee/config.yaml` and uncomment/add your services:
+**Option 1: Interactive (recommended for first-time users)**
+
+```bash
+janee add
+```
+
+Janee will guide you through adding a service:
+
+```
+Service name: stripe
+Base URL: https://api.stripe.com
+Auth type (bearer/hmac/headers): bearer
+API key: sk_live_xxx
+
+✓ Added service "stripe"
+
+Create a capability for this service? (Y/n): y
+Capability name (default: stripe): 
+TTL (e.g., 1h, 30m): 1h
+Auto-approve? (Y/n): y
+
+✓ Added capability "stripe"
+
+Done! Run 'janee serve' to start.
+```
+
+**Option 2: Edit config directly**
+
+Edit `~/.janee/config.yaml`:
 
 ```yaml
 services:
@@ -179,16 +207,19 @@ capabilities:
 ## CLI Reference
 
 ```bash
-janee init          # Set up ~/.janee/ with example config
-janee list          # List configured services
-janee serve         # Start MCP server
-janee logs          # View audit log
-janee logs -f       # Tail audit log
-janee sessions      # List active sessions
-janee revoke <id>   # Kill a session
+janee init             # Set up ~/.janee/ with example config
+janee add              # Add a service (interactive)
+janee add stripe -u https://api.stripe.com -k sk_xxx  # Add with args
+janee remove <service> # Remove a service
+janee list             # List configured services
+janee serve            # Start MCP server
+janee logs             # View audit log
+janee logs -f          # Tail audit log
+janee sessions         # List active sessions
+janee revoke <id>      # Kill a session
 ```
 
-Add/edit services by editing `~/.janee/config.yaml` directly.
+You can also edit `~/.janee/config.yaml` directly if you prefer.
 
 ---
 
