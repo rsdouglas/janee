@@ -12,7 +12,6 @@ import { removeCommand } from './commands/remove';
 import { serveCommand } from './commands/serve';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
-import { migrateCommand } from './commands/migrate';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
 
@@ -58,11 +57,6 @@ program
   .option('-n, --lines <count>', 'Number of recent logs to show', '20')
   .option('-s, --service <name>', 'Filter by service')
   .action(logsCommand);
-
-program
-  .command('migrate')
-  .description('Migrate config from JSON to YAML (for MCP support)')
-  .action(migrateCommand);
 
 program
   .command('sessions')

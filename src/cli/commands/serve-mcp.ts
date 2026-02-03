@@ -2,7 +2,7 @@ import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import { createMCPServer, startMCPServer, Capability, ServiceConfig, makeAPIRequest } from '../../core/mcp-server';
 import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
-import { getAuditDir } from '../config';
+import { getAuditDir } from '../config-yaml';
 import { URL } from 'url';
 
 export async function serveMCPCommand(): Promise<void> {

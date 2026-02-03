@@ -56,6 +56,15 @@ export interface JaneeYAMLConfig {
 const CONFIG_DIR = path.join(os.homedir(), '.janee');
 const CONFIG_FILE_YAML = path.join(CONFIG_DIR, 'config.yaml');
 const CONFIG_FILE_JSON = path.join(CONFIG_DIR, 'config.json');
+const AUDIT_DIR = path.join(CONFIG_DIR, 'logs');
+
+export function getAuditDir(): string {
+  return AUDIT_DIR;
+}
+
+export function getConfigDir(): string {
+  return CONFIG_DIR;
+}
 
 /**
  * Check if using YAML config
@@ -79,17 +88,29 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
   config.services = config.services || {};
   config.capabilities = config.capabilities || {};
 
-  // Decrypt service auth keys
+  // Decrypt service auth keys (or use as-is if not encrypted)
   for (const [name, service] of Object.entries(config.services)) {
     const svc = service as ServiceConfig;
     if (svc.auth.type === 'bearer' && svc.auth.key) {
-      svc.auth.key = decryptSecret(svc.auth.key, config.masterKey);
+      try {
+        svc.auth.key = decryptSecret(svc.auth.key, config.masterKey);
+      } catch {
+        // Key is plaintext, use as-is
+      }
     } else if (svc.auth.type === 'hmac') {
       if (svc.auth.apiKey) {
-        svc.auth.apiKey = decryptSecret(svc.auth.apiKey, config.masterKey);
+        try {
+          svc.auth.apiKey = decryptSecret(svc.auth.apiKey, config.masterKey);
+        } catch {
+          // Key is plaintext, use as-is
+        }
       }
       if (svc.auth.apiSecret) {
-        svc.auth.apiSecret = decryptSecret(svc.auth.apiSecret, config.masterKey);
+        try {
+          svc.auth.apiSecret = decryptSecret(svc.auth.apiSecret, config.masterKey);
+        } catch {
+          // Key is plaintext, use as-is
+        }
       }
     }
   }
