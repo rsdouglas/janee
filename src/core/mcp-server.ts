@@ -51,12 +51,18 @@ export interface APIResponse {
   body: string;
 }
 
+export interface ReloadResult {
+  capabilities: Capability[];
+  services: Map<string, ServiceConfig>;
+}
+
 export interface MCPServerOptions {
   capabilities: Capability[];
   services: Map<string, ServiceConfig>;
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
+  onReloadConfig?: () => ReloadResult;
 }
 
 /**
@@ -83,7 +89,11 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { capabilities, services, sessionManager, auditLogger, onExecute } = options;
+  const { sessionManager, auditLogger, onExecute, onReloadConfig } = options;
+  
+  // Store as mutable to support hot-reloading
+  let capabilities = options.capabilities;
+  let services = options.services;
 
   const server = new Server(
     {
@@ -146,11 +156,25 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   };
 
+  // Tool: reload_config
+  const reloadConfigTool: Tool = {
+    name: 'reload_config',
+    description: 'Reload Janee configuration from disk without restarting the server. Use after adding new services or capabilities.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: [listServicesTool, executeTool]
-    };
+    const tools = [listServicesTool, executeTool];
+    // Only expose reload_config if a reload handler is provided
+    if (onReloadConfig) {
+      tools.push(reloadConfigTool);
+    }
+    return { tools };
   });
 
   // Handle tool calls
@@ -177,6 +201,39 @@ export function createMCPServer(options: MCPServerOptions): Server {
               )
             }]
           };
+
+        case 'reload_config': {
+          if (!onReloadConfig) {
+            throw new Error('Config reload not supported');
+          }
+
+          try {
+            const result = onReloadConfig();
+            const prevCapCount = capabilities.length;
+            const prevServiceCount = services.size;
+            
+            capabilities = result.capabilities;
+            services = result.services;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: 'Configuration reloaded successfully',
+                  services: services.size,
+                  capabilities: capabilities.length,
+                  changes: {
+                    services: services.size - prevServiceCount,
+                    capabilities: capabilities.length - prevCapCount
+                  }
+                }, null, 2)
+              }]
+            };
+          } catch (error) {
+            throw new Error(`Failed to reload config: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
 
         case 'execute': {
           const { capability, method, path, body, headers, reason } = args as any;

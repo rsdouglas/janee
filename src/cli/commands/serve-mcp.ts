@@ -1,10 +1,35 @@
 import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import { createMCPServer, startMCPServer, Capability, ServiceConfig, makeAPIRequest } from '../../core/mcp-server';
+import { createMCPServer, startMCPServer, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
 import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
 import { URL } from 'url';
 import { createHmac } from 'crypto';
+
+/**
+ * Load config and convert to MCP format
+ */
+function loadConfigForMCP(): ReloadResult {
+  const config = loadYAMLConfig();
+
+  const capabilities: Capability[] = Object.entries(config.capabilities).map(
+    ([name, cap]) => ({
+      name,
+      service: cap.service,
+      ttl: cap.ttl,
+      autoApprove: cap.autoApprove,
+      requiresReason: cap.requiresReason,
+      rules: cap.rules
+    })
+  );
+
+  const services = new Map<string, ServiceConfig>();
+  for (const [name, service] of Object.entries(config.services)) {
+    services.set(name, service);
+  }
+
+  return { capabilities, services };
+}
 
 export async function serveMCPCommand(): Promise<void> {
   try {
@@ -17,26 +42,14 @@ export async function serveMCPCommand(): Promise<void> {
       process.exit(1);
     }
 
-    const config = loadYAMLConfig();
     const sessionManager = new SessionManager();
     const auditLogger = new AuditLogger(getAuditDir());
 
-    // Convert config to MCP format
-    const capabilities: Capability[] = Object.entries(config.capabilities).map(
-      ([name, cap]) => ({
-        name,
-        service: cap.service,
-        ttl: cap.ttl,
-        autoApprove: cap.autoApprove,
-        requiresReason: cap.requiresReason,
-        rules: cap.rules
-      })
-    );
-
-    const services = new Map<string, ServiceConfig>();
-    for (const [name, service] of Object.entries(config.services)) {
-      services.set(name, service);
-    }
+    // Load initial config
+    const { capabilities, services } = loadConfigForMCP();
+    
+    // Keep a mutable reference to services for the onExecute closure
+    let currentServices = services;
 
     // Create MCP server
     const mcpServer = createMCPServer({
@@ -45,9 +58,16 @@ export async function serveMCPCommand(): Promise<void> {
       sessionManager,
       auditLogger,
       
+      onReloadConfig: () => {
+        const result = loadConfigForMCP();
+        // Update our local reference for onExecute
+        currentServices = result.services;
+        return result;
+      },
+      
       onExecute: async (session, request) => {
-        // Get service config
-        const serviceConfig = services.get(request.service);
+        // Get service config (use currentServices for hot-reload support)
+        const serviceConfig = currentServices.get(request.service);
         if (!serviceConfig) {
           throw new Error(`Service not found: ${request.service}`);
         }
