@@ -31,14 +31,48 @@ npm install -g janee
 janee init
 ```
 
-Creates `~/.janee/config.json` with encrypted master key.
+Creates `~/.janee/config.yaml` with example config.
 
 ### 3. Add Your API Credentials
 
-```bash
-janee add stripe --url https://api.stripe.com --key sk_live_xxx
-janee add github --url https://api.github.com --key ghp_xxx
-janee add bybit --url https://api.bybit.com --key <api-key>
+Edit `~/.janee/config.yaml` and uncomment/add your services:
+
+```yaml
+services:
+  stripe:
+    baseUrl: https://api.stripe.com
+    auth:
+      type: bearer
+      key: sk_live_xxx
+
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: ghp_xxx
+
+  bybit:
+    baseUrl: https://api.bybit.com
+    auth:
+      type: hmac
+      apiKey: xxx
+      apiSecret: xxx
+
+capabilities:
+  stripe:
+    service: stripe
+    ttl: 1h
+    autoApprove: true
+
+  github:
+    service: github
+    ttl: 30m
+    autoApprove: true
+
+  bybit:
+    service: bybit
+    ttl: 15m
+    requiresReason: true
 ```
 
 ### 4. Install OpenClaw Plugin
@@ -427,11 +461,32 @@ If your agent currently has API keys in config:
 }
 ```
 
-Move keys to Janee:
+Move keys to Janee by editing `~/.janee/config.yaml`:
 
-```bash
-janee add stripe --url https://api.stripe.com --key sk_live_xxx
-janee add github --url https://api.github.com --key ghp_xxx
+```yaml
+services:
+  stripe:
+    baseUrl: https://api.stripe.com
+    auth:
+      type: bearer
+      key: sk_live_xxx
+
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: ghp_xxx
+
+capabilities:
+  stripe:
+    service: stripe
+    ttl: 1h
+    autoApprove: true
+
+  github:
+    service: github
+    ttl: 30m
+    autoApprove: true
 ```
 
 Update agent code to use tools:

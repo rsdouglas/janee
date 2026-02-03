@@ -7,11 +7,9 @@
 
 import { Command } from 'commander';
 import { initCommand } from './commands/init';
-import { addCommand } from './commands/add';
 import { serveCommand } from './commands/serve';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
-import { removeCommand } from './commands/remove';
 import { migrateCommand } from './commands/migrate';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
@@ -26,16 +24,8 @@ program
 // Commands
 program
   .command('init')
-  .description('Initialize Janee configuration')
+  .description('Initialize Janee configuration with example config')
   .action(initCommand);
-
-program
-  .command('add <service>')
-  .description('Add a service to Janee')
-  .option('-u, --url <url>', 'Base URL of the service')
-  .option('-k, --key <key>', 'API key for the service')
-  .option('-d, --description <desc>', 'Description of the service')
-  .action(addCommand);
 
 program
   .command('serve')
@@ -54,11 +44,6 @@ program
   .option('-n, --lines <count>', 'Number of recent logs to show', '20')
   .option('-s, --service <name>', 'Filter by service')
   .action(logsCommand);
-
-program
-  .command('remove <service>')
-  .description('Remove a service from Janee')
-  .action(removeCommand);
 
 program
   .command('migrate')

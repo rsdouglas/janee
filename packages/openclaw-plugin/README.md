@@ -19,9 +19,8 @@ npm install -g janee
 # Initialize Janee
 janee init
 
-# Add your API credentials
-janee add stripe --url https://api.stripe.com --key sk_live_xxx
-janee add github --url https://api.github.com --key ghp_xxx
+# Edit config file with your API credentials
+# Edit ~/.janee/config.yaml and add your services
 
 # Install the plugin in OpenClaw
 openclaw plugins install @openclaw/janee

@@ -43,10 +43,25 @@ npm install -g janee
 janee init
 ```
 
-### Add a service
+This creates `~/.janee/config.yaml` with example services.
 
-```bash
-janee add stripe --url https://api.stripe.com --key sk_live_xxx
+### Configure
+
+Edit `~/.janee/config.yaml` and uncomment/add your services:
+
+```yaml
+services:
+  stripe:
+    baseUrl: https://api.stripe.com
+    auth:
+      type: bearer
+      key: sk_live_xxx
+
+capabilities:
+  stripe:
+    service: stripe
+    ttl: 1h
+    autoApprove: true
 ```
 
 ### Start the MCP server
@@ -80,7 +95,7 @@ If you're using [OpenClaw](https://openclaw.ai), install the plugin for native t
 ```bash
 npm install -g janee
 janee init
-janee add stripe --url https://api.stripe.com --key sk_live_xxx
+# Edit ~/.janee/config.yaml with your services
 
 # Install the OpenClaw plugin
 openclaw plugins install @openclaw/janee
@@ -164,16 +179,16 @@ capabilities:
 ## CLI Reference
 
 ```bash
-janee init          # Set up ~/.janee/
-janee add <service> # Add a service
+janee init          # Set up ~/.janee/ with example config
 janee list          # List configured services
 janee serve         # Start MCP server
 janee logs          # View audit log
 janee logs -f       # Tail audit log
 janee sessions      # List active sessions
 janee revoke <id>   # Kill a session
-janee remove <service> # Remove a service
 ```
+
+Add/edit services by editing `~/.janee/config.yaml` directly.
 
 ---
 
