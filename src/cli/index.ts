@@ -21,7 +21,7 @@ const program = new Command();
 program
   .name('janee')
   .description('Secrets management for AI agents')
-  .version('0.1.0');
+  .version('0.2.1');
 
 // Commands
 program
