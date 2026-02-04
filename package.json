@@ -41,6 +41,7 @@
   "homepage": "https://janee.io",
   "license": "MIT",
   "dependencies": {
+    "@inquirer/prompts": "^8.2.0",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@types/js-yaml": "^4.0.9",
     "@types/jsonwebtoken": "^9.0.10",

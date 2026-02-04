@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from 'process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { select } from '@inquirer/prompts';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
@@ -117,14 +118,46 @@ export async function addCommand(
       if (options.authType) {
         authType = options.authType.toLowerCase() as typeof authType;
       } else {
-        const authTypeInput = await rl.question('Auth type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account): ');
-        authType = authTypeInput.trim().toLowerCase() as typeof authType;
-      }
-
-      if (!['bearer', 'basic', 'hmac', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account'].includes(authType)) {
-        console.error('❌ Invalid auth type');
-        rl.close();
-        process.exit(1);
+        authType = await select({
+          message: 'Auth type:',
+          choices: [
+            {
+              name: 'bearer — API key in Authorization header',
+              value: 'bearer',
+              description: 'Single API key sent as "Authorization: Bearer <key>"'
+            },
+            {
+              name: 'service-account — Google-style OAuth2',
+              value: 'service-account',
+              description: 'Service account JSON for Google Analytics, Sheets, etc.'
+            },
+            {
+              name: 'hmac — Request signing (generic)',
+              value: 'hmac',
+              description: 'HMAC-based request signing with API key + secret'
+            },
+            {
+              name: 'hmac-bybit — Bybit exchange HMAC',
+              value: 'hmac-bybit',
+              description: 'Bybit-specific HMAC request signing'
+            },
+            {
+              name: 'hmac-okx — OKX exchange HMAC',
+              value: 'hmac-okx',
+              description: 'OKX-specific HMAC with passphrase'
+            },
+            {
+              name: 'basic — HTTP Basic Auth',
+              value: 'basic',
+              description: 'Username + password sent as Basic auth header'
+            },
+            {
+              name: 'headers — Custom headers',
+              value: 'headers',
+              description: 'Custom key-value headers for non-standard auth'
+            }
+          ]
+        });
       }
     }
 
