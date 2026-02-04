@@ -1,5 +1,8 @@
 import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
@@ -7,7 +10,14 @@ import { validateServiceAccountCredentials, testServiceAccountAuth } from '../..
 
 export async function addCommand(
   serviceName?: string,
-  options: { url?: string; key?: string; description?: string } = {}
+  options: { 
+    url?: string; 
+    key?: string; 
+    description?: string;
+    authType?: string;
+    credentialsFile?: string;
+    scope?: string | string[];
+  } = {}
 ): Promise<void> {
   try {
     // Check for YAML config
@@ -104,8 +114,12 @@ export async function addCommand(
       }
 
       // Auth type
-      const authTypeInput = await rl.question('Auth type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account): ');
-      authType = authTypeInput.trim().toLowerCase() as typeof authType;
+      if (options.authType) {
+        authType = options.authType.toLowerCase() as typeof authType;
+      } else {
+        const authTypeInput = await rl.question('Auth type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account): ');
+        authType = authTypeInput.trim().toLowerCase() as typeof authType;
+      }
 
       if (!['bearer', 'basic', 'hmac', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account'].includes(authType)) {
         console.error('❌ Invalid auth type');
@@ -185,41 +199,59 @@ export async function addCommand(
       };
     } else if (authType === 'service-account') {
       console.log('\n📋 Service Account Setup');
-      console.log('Paste the service account JSON content (end with empty line):');
-      console.log('');
 
-      let jsonContent = '';
-      while (true) {
-        const line = await rl.question('');
-        if (!line.trim() && jsonContent) break;
-        jsonContent += line + '\n';
+      // Get credentials file path
+      let credentialsPath = options.credentialsFile;
+      if (!credentialsPath) {
+        credentialsPath = await rl.question('📄 Path to service account JSON file: ');
+        credentialsPath = credentialsPath.trim();
       }
 
-      if (!jsonContent.trim()) {
-        console.error('❌ Service account JSON is required');
+      if (!credentialsPath) {
+        console.error('❌ Credentials file path is required');
         rl.close();
         process.exit(1);
       }
 
-      // Parse and validate credentials
+      // Expand ~ to home directory
+      if (credentialsPath.startsWith('~/')) {
+        credentialsPath = path.join(os.homedir(), credentialsPath.slice(2));
+      } else if (credentialsPath === '~') {
+        credentialsPath = os.homedir();
+      }
+
+      // Read and parse credentials file
       let credentials;
       try {
-        credentials = JSON.parse(jsonContent);
+        const fileContent = fs.readFileSync(credentialsPath, 'utf-8');
+        credentials = JSON.parse(fileContent);
         validateServiceAccountCredentials(credentials);
       } catch (error) {
-        console.error('❌ Invalid service account JSON:', error instanceof Error ? error.message : 'Unknown error');
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          console.error(`❌ File not found: ${credentialsPath}`);
+        } else if (error instanceof SyntaxError) {
+          console.error('❌ Invalid JSON in credentials file');
+        } else {
+          console.error('❌ Invalid service account JSON:', error instanceof Error ? error.message : 'Unknown error');
+        }
         rl.close();
         process.exit(1);
       }
 
-      // Ask for scopes
-      console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
-      const scopes: string[] = [];
+      // Get scopes
+      let scopes: string[] = [];
+      if (options.scope) {
+        // Non-interactive: scope provided via --scope flag(s)
+        scopes = Array.isArray(options.scope) ? options.scope : [options.scope];
+      } else {
+        // Interactive: ask for scopes
+        console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
 
-      while (true) {
-        const scope = await rl.question('  ');
-        if (!scope.trim()) break;
-        scopes.push(scope.trim());
+        while (true) {
+          const scope = await rl.question('  ');
+          if (!scope.trim()) break;
+          scopes.push(scope.trim());
+        }
       }
 
       if (scopes.length === 0) {

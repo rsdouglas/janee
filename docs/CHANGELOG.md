@@ -2,6 +2,18 @@
 
 All notable changes to Janee will be documented in this file.
 
+## [0.2.1] - 2026-02-04
+
+### Fixed
+
+- **Service Account File Input** — CLI now prompts for file path instead of pasting JSON (#5)
+  - Interactive: `📄 Path to service account JSON file: ~/Downloads/service-account.json`
+  - Non-interactive: `--credentials-file` flag for scripting
+  - Supports `~` expansion to home directory
+  - Multiple `--scope` flags for specifying OAuth scopes
+  - Better error messages for missing/invalid files
+  - Fixes issue where multi-line private keys were garbled during paste
+
 ## [0.2.0] - 2026-02-04
 
 ### Added
