@@ -34,7 +34,11 @@
     "model-context-protocol",
     "api-proxy"
   ],
-  "author": "True and Useful LLC",
+  "author": {
+    "name": "True and Useful LLC",
+    "url": "https://x.com/janaborhood"
+  },
+  "homepage": "https://janee.io",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
