@@ -4,6 +4,7 @@ import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
 import { signBybit, signOKX, signMEXC } from '../../core/signing';
+import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCredentials, clearCachedToken } from '../../core/service-account';
 import { URL } from 'url';
 
 /**
@@ -121,6 +122,34 @@ export async function serveMCPCommand(): Promise<void> {
             body: request.body
           });
           Object.assign(headers, result.headers);
+        } else if (serviceConfig.auth.type === 'service-account' && serviceConfig.auth.credentials && serviceConfig.auth.scopes) {
+          // Google service account OAuth2
+          try {
+            const credentials = JSON.parse(serviceConfig.auth.credentials) as ServiceAccountCredentials;
+            validateServiceAccountCredentials(credentials);
+            
+            const accessToken = await getAccessToken(
+              request.service,
+              credentials,
+              serviceConfig.auth.scopes
+            );
+            
+            headers['Authorization'] = `Bearer ${accessToken}`;
+          } catch (error) {
+            // If we get a 401, clear cache and retry once
+            if (error instanceof Error && error.message.includes('401')) {
+              clearCachedToken(request.service, serviceConfig.auth.scopes);
+              const credentials = JSON.parse(serviceConfig.auth.credentials) as ServiceAccountCredentials;
+              const accessToken = await getAccessToken(
+                request.service,
+                credentials,
+                serviceConfig.auth.scopes
+              );
+              headers['Authorization'] = `Bearer ${accessToken}`;
+            } else {
+              throw error;
+            }
+          }
         }
 
         // Set Content-Type for requests with body

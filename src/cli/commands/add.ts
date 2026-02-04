@@ -3,6 +3,7 @@ import { stdin as input, stdout as output } from 'process';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
+import { validateServiceAccountCredentials, testServiceAccountAuth } from '../../core/service-account';
 
 export async function addCommand(
   serviceName?: string,
@@ -66,7 +67,7 @@ export async function addCommand(
     }
 
     let baseUrl: string;
-    let authType: 'bearer' | 'basic' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers';
+    let authType: 'bearer' | 'basic' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
 
     if (template) {
       // Use template from directory
@@ -103,10 +104,10 @@ export async function addCommand(
       }
 
       // Auth type
-      const authTypeInput = await rl.question('Auth type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers): ');
+      const authTypeInput = await rl.question('Auth type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account): ');
       authType = authTypeInput.trim().toLowerCase() as typeof authType;
 
-      if (!['bearer', 'basic', 'hmac', 'hmac-bybit', 'hmac-okx', 'headers'].includes(authType)) {
+      if (!['bearer', 'basic', 'hmac', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account'].includes(authType)) {
         console.error('❌ Invalid auth type');
         rl.close();
         process.exit(1);
@@ -181,6 +182,67 @@ export async function addCommand(
         apiKey: apiKey.trim(),
         apiSecret: apiSecret.trim(),
         passphrase: passphrase.trim()
+      };
+    } else if (authType === 'service-account') {
+      console.log('\n📋 Service Account Setup');
+      console.log('Paste the service account JSON content (end with empty line):');
+      console.log('');
+
+      let jsonContent = '';
+      while (true) {
+        const line = await rl.question('');
+        if (!line.trim() && jsonContent) break;
+        jsonContent += line + '\n';
+      }
+
+      if (!jsonContent.trim()) {
+        console.error('❌ Service account JSON is required');
+        rl.close();
+        process.exit(1);
+      }
+
+      // Parse and validate credentials
+      let credentials;
+      try {
+        credentials = JSON.parse(jsonContent);
+        validateServiceAccountCredentials(credentials);
+      } catch (error) {
+        console.error('❌ Invalid service account JSON:', error instanceof Error ? error.message : 'Unknown error');
+        rl.close();
+        process.exit(1);
+      }
+
+      // Ask for scopes
+      console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
+      const scopes: string[] = [];
+
+      while (true) {
+        const scope = await rl.question('  ');
+        if (!scope.trim()) break;
+        scopes.push(scope.trim());
+      }
+
+      if (scopes.length === 0) {
+        console.error('❌ At least one scope is required');
+        rl.close();
+        process.exit(1);
+      }
+
+      // Test authentication
+      console.log('\n🔐 Testing authentication...');
+      try {
+        await testServiceAccountAuth(credentials, scopes);
+        console.log('✅ Authentication successful');
+      } catch (error) {
+        console.error('❌ Authentication failed:', error instanceof Error ? error.message : 'Unknown error');
+        rl.close();
+        process.exit(1);
+      }
+
+      auth = {
+        type: 'service-account',
+        credentials: JSON.stringify(credentials),
+        scopes
       };
     } else {
       // headers

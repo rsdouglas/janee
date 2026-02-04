@@ -10,12 +10,14 @@ import yaml from 'js-yaml';
 import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
 
 export interface AuthConfig {
-  type: 'bearer' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers';
+  type: 'bearer' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
   key?: string;
   apiKey?: string;
   apiSecret?: string;
   passphrase?: string;  // For OKX
   headers?: Record<string, string>;
+  credentials?: string;  // For service-account: encrypted JSON blob
+  scopes?: string[];     // For service-account: OAuth scopes
 }
 
 export interface ServiceConfig {
@@ -120,6 +122,12 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
           // Passphrase is plaintext, use as-is
         }
       }
+    } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
+      try {
+        svc.auth.credentials = decryptSecret(svc.auth.credentials, config.masterKey);
+      } catch {
+        // Credentials are plaintext, use as-is
+      }
     }
   }
 
@@ -147,6 +155,8 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
       if (svc.auth.passphrase) {
         svc.auth.passphrase = encryptSecret(svc.auth.passphrase, config.masterKey);
       }
+    } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
+      svc.auth.credentials = encryptSecret(svc.auth.credentials, config.masterKey);
     }
   }
 
