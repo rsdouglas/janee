@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-04
+
 ### Added
 
 - **Request Body Logging** — POST/PUT/PATCH request bodies now logged in audit trail
