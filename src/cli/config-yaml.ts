@@ -45,6 +45,7 @@ export interface LLMConfig {
 export interface ServerConfig {
   port: number;
   host: string;
+  logBodies?: boolean;  // Log request bodies in audit trail (default: true)
 }
 
 export interface JaneeYAMLConfig {
