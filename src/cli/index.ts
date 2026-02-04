@@ -35,6 +35,11 @@ program
   .option('-u, --url <url>', 'Base URL of the service')
   .option('-k, --key <key>', 'API key for the service')
   .option('--auth-type <type>', 'Authentication type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account)')
+  .option('--api-secret <secret>', 'API secret (for hmac auth types)')
+  .option('--passphrase <passphrase>', 'Passphrase (for hmac-okx)')
+  .option('--key-from-env <var>', 'Read API key from environment variable')
+  .option('--secret-from-env <var>', 'Read API secret from environment variable')
+  .option('--passphrase-from-env <var>', 'Read passphrase from environment variable')
   .option('--credentials-file <path>', 'Path to service account JSON file (for service-account auth type)')
   .option('--scope <scope...>', 'OAuth scope(s) for service-account auth type')
   .action(addCommand);

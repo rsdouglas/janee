@@ -9,13 +9,27 @@ import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml
 import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
 import { validateServiceAccountCredentials, testServiceAccountAuth } from '../../core/service-account';
 
+function resolveEnvVar(varName: string, label: string): string {
+  const value = process.env[varName];
+  if (!value) {
+    console.error(`❌ Environment variable ${varName} is not set (needed for ${label})`);
+    process.exit(1);
+  }
+  return value.trim();
+}
+
 export async function addCommand(
   serviceName?: string,
-  options: { 
-    url?: string; 
-    key?: string; 
+  options: {
+    url?: string;
+    key?: string;
     description?: string;
     authType?: string;
+    apiSecret?: string;
+    passphrase?: string;
+    keyFromEnv?: string;
+    secretFromEnv?: string;
+    passphraseFromEnv?: string;
     credentialsFile?: string;
     scope?: string | string[];
   } = {}
@@ -27,17 +41,53 @@ export async function addCommand(
       process.exit(1);
     }
 
-    const rl = readline.createInterface({ input, output });
+    // Resolve --from-env flags into their direct equivalents early.
+    // This way the rest of the code doesn't need to know the source.
+    if (options.keyFromEnv) {
+      if (options.key) {
+        console.error('❌ Cannot use both --key and --key-from-env');
+        process.exit(1);
+      }
+      options.key = resolveEnvVar(options.keyFromEnv, 'API key');
+    }
+    if (options.secretFromEnv) {
+      if (options.apiSecret) {
+        console.error('❌ Cannot use both --api-secret and --secret-from-env');
+        process.exit(1);
+      }
+      options.apiSecret = resolveEnvVar(options.secretFromEnv, 'API secret');
+    }
+    if (options.passphraseFromEnv) {
+      if (options.passphrase) {
+        console.error('❌ Cannot use both --passphrase and --passphrase-from-env');
+        process.exit(1);
+      }
+      options.passphrase = resolveEnvVar(options.passphraseFromEnv, 'passphrase');
+    }
+
+    // Lazy readline — only created when a prompt is actually needed.
+    // Prevents the process from hanging on stdin when fully non-interactive.
+    let _rl: readline.Interface | null = null;
+    let prompted = false;
+    function getRL(): readline.Interface {
+      if (!_rl) {
+        _rl = readline.createInterface({ input, output });
+      }
+      prompted = true;
+      return _rl;
+    }
+    function closeRL(): void {
+      if (_rl) _rl.close();
+    }
 
     // Service name
     if (!serviceName) {
-      serviceName = await rl.question('Service name (or search term): ');
+      serviceName = await getRL().question('Service name (or search term): ');
       serviceName = serviceName.trim();
     }
 
     if (!serviceName) {
       console.error('❌ Service name is required');
-      rl.close();
       process.exit(1);
     }
 
@@ -46,20 +96,19 @@ export async function addCommand(
     // Check if service already exists
     if (config.services[serviceName]) {
       console.error(`❌ Service "${serviceName}" already exists`);
-      rl.close();
       process.exit(1);
     }
 
     // Check directory for known service
     let template = getService(serviceName);
-    
+
     // If no exact match, search and suggest
     if (!template) {
       const matches = searchDirectory(serviceName);
       if (matches.length === 1) {
         // Single match - suggest it
         const suggest = matches[0];
-        const useIt = await rl.question(`Found "${suggest.name}" (${suggest.description}). Use it? (Y/n): `);
+        const useIt = await getRL().question(`Found "${suggest.name}" (${suggest.description}). Use it? (Y/n): `);
         if (!useIt || useIt.toLowerCase() === 'y' || useIt.toLowerCase() === 'yes') {
           template = suggest;
           serviceName = suggest.name;
@@ -68,7 +117,7 @@ export async function addCommand(
         // Multiple matches - list them
         console.log(`\nFound ${matches.length} matching services:`);
         matches.forEach((m, i) => console.log(`  ${i + 1}. ${m.name} - ${m.description}`));
-        const choice = await rl.question('Enter number to use, or press Enter to configure manually: ');
+        const choice = await getRL().question('Enter number to use, or press Enter to configure manually: ');
         const idx = parseInt(choice) - 1;
         if (idx >= 0 && idx < matches.length) {
           template = matches[idx];
@@ -88,29 +137,28 @@ export async function addCommand(
         console.log(`   Docs: ${template.docs}`);
       }
       console.log('');
-      
+
       baseUrl = template.baseUrl;
       authType = template.auth.type;
-      
+
       // Handle services with placeholder URLs (like Supabase)
       if (baseUrl.includes('<')) {
-        baseUrl = await rl.question(`Base URL (template: ${baseUrl}): `);
+        baseUrl = options.url || await getRL().question(`Base URL (template: ${baseUrl}): `);
         baseUrl = baseUrl.trim();
       }
     } else {
       // Manual configuration
       console.log('\n📝 Manual service configuration');
-      
+
       // Base URL
       baseUrl = options.url || '';
       if (!baseUrl) {
-        baseUrl = await rl.question('Base URL: ');
+        baseUrl = await getRL().question('Base URL: ');
         baseUrl = baseUrl.trim();
       }
 
       if (!baseUrl || !baseUrl.startsWith('http')) {
         console.error('❌ Invalid base URL. Must start with http:// or https://');
-        rl.close();
         process.exit(1);
       }
 
@@ -167,13 +215,12 @@ export async function addCommand(
     if (authType === 'bearer') {
       let apiKey = options.key;
       if (!apiKey) {
-        apiKey = await rl.question('API key: ');
+        apiKey = await getRL().question('API key: ');
         apiKey = apiKey.trim();
       }
 
       if (!apiKey) {
         console.error('❌ API key is required');
-        rl.close();
         process.exit(1);
       }
 
@@ -182,12 +229,11 @@ export async function addCommand(
         key: apiKey
       };
     } else if (authType === 'basic') {
-      const username = await rl.question('Username/Account ID: ');
-      const password = await rl.question('Password/Auth Token: ');
+      const username = await getRL().question('Username/Account ID: ');
+      const password = await getRL().question('Password/Auth Token: ');
 
       if (!username || !password) {
         console.error('❌ Username and password are required for basic auth');
-        rl.close();
         process.exit(1);
       }
 
@@ -199,12 +245,18 @@ export async function addCommand(
         key: `Basic ${encoded}`
       };
     } else if (authType === 'hmac' || authType === 'hmac-bybit') {
-      const apiKey = await rl.question('API key: ');
-      const apiSecret = await rl.question('API secret: ');
+      let apiKey = options.key;
+      let apiSecret = options.apiSecret;
+
+      if (!apiKey) {
+        apiKey = await getRL().question('API key: ');
+      }
+      if (!apiSecret) {
+        apiSecret = await getRL().question('API secret: ');
+      }
 
       if (!apiKey || !apiSecret) {
         console.error('❌ API key and secret are required for HMAC');
-        rl.close();
         process.exit(1);
       }
 
@@ -214,13 +266,22 @@ export async function addCommand(
         apiSecret: apiSecret.trim()
       };
     } else if (authType === 'hmac-okx') {
-      const apiKey = await rl.question('API key: ');
-      const apiSecret = await rl.question('API secret: ');
-      const passphrase = await rl.question('Passphrase: ');
+      let apiKey = options.key;
+      let apiSecret = options.apiSecret;
+      let passphrase = options.passphrase;
+
+      if (!apiKey) {
+        apiKey = await getRL().question('API key: ');
+      }
+      if (!apiSecret) {
+        apiSecret = await getRL().question('API secret: ');
+      }
+      if (!passphrase) {
+        passphrase = await getRL().question('Passphrase: ');
+      }
 
       if (!apiKey || !apiSecret || !passphrase) {
         console.error('❌ API key, secret, and passphrase are required for OKX');
-        rl.close();
         process.exit(1);
       }
 
@@ -236,13 +297,12 @@ export async function addCommand(
       // Get credentials file path
       let credentialsPath = options.credentialsFile;
       if (!credentialsPath) {
-        credentialsPath = await rl.question('📄 Path to service account JSON file: ');
+        credentialsPath = await getRL().question('📄 Path to service account JSON file: ');
         credentialsPath = credentialsPath.trim();
       }
 
       if (!credentialsPath) {
         console.error('❌ Credentials file path is required');
-        rl.close();
         process.exit(1);
       }
 
@@ -267,7 +327,6 @@ export async function addCommand(
         } else {
           console.error('❌ Invalid service account JSON:', error instanceof Error ? error.message : 'Unknown error');
         }
-        rl.close();
         process.exit(1);
       }
 
@@ -281,7 +340,7 @@ export async function addCommand(
         console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
 
         while (true) {
-          const scope = await rl.question('  ');
+          const scope = await getRL().question('  ');
           if (!scope.trim()) break;
           scopes.push(scope.trim());
         }
@@ -289,7 +348,6 @@ export async function addCommand(
 
       if (scopes.length === 0) {
         console.error('❌ At least one scope is required');
-        rl.close();
         process.exit(1);
       }
 
@@ -300,7 +358,6 @@ export async function addCommand(
         console.log('✅ Authentication successful');
       } catch (error) {
         console.error('❌ Authentication failed:', error instanceof Error ? error.message : 'Unknown error');
-        rl.close();
         process.exit(1);
       }
 
@@ -315,7 +372,7 @@ export async function addCommand(
       const headers: Record<string, string> = {};
 
       while (true) {
-        const line = await rl.question('  ');
+        const line = await getRL().question('  ');
         if (!line.trim()) break;
 
         const [key, ...valueParts] = line.split(':');
@@ -328,7 +385,6 @@ export async function addCommand(
 
       if (Object.keys(headers).length === 0) {
         console.error('❌ At least one header is required');
-        rl.close();
         process.exit(1);
       }
 
@@ -349,29 +405,45 @@ export async function addCommand(
     console.log(`✅ Added service "${serviceName}"`);
     console.log();
 
+    // If readline was never opened, we're fully non-interactive.
+    // Auto-create a capability with sensible defaults instead of prompting.
+    if (!prompted) {
+      if (!config.capabilities[serviceName]) {
+        config.capabilities[serviceName] = {
+          service: serviceName,
+          ttl: '1h',
+          autoApprove: true,
+        };
+        saveYAMLConfig(config);
+        console.log(`✅ Added capability "${serviceName}" (1h TTL, auto-approve)`);
+        console.log();
+      }
+      console.log("Done! Run 'janee serve' to start.");
+      return;
+    }
+
     // Ask about capability
-    const createCapAnswer = await rl.question('Create a capability for this service? (Y/n): ');
+    const createCapAnswer = await getRL().question('Create a capability for this service? (Y/n): ');
     const createCap = !createCapAnswer || createCapAnswer.toLowerCase() === 'y' || createCapAnswer.toLowerCase() === 'yes';
 
     if (createCap) {
       const capNameDefault = serviceName;
-      const capNameInput = await rl.question(`Capability name (default: ${capNameDefault}): `);
+      const capNameInput = await getRL().question(`Capability name (default: ${capNameDefault}): `);
       const capName = capNameInput.trim() || capNameDefault;
 
       // Check if capability already exists
       if (config.capabilities[capName]) {
         console.error(`❌ Capability "${capName}" already exists`);
-        rl.close();
         process.exit(1);
       }
 
-      const ttlInput = await rl.question('TTL (e.g., 1h, 30m): ');
+      const ttlInput = await getRL().question('TTL (e.g., 1h, 30m): ');
       const ttl = ttlInput.trim() || '1h';
 
-      const autoApproveInput = await rl.question('Auto-approve? (Y/n): ');
+      const autoApproveInput = await getRL().question('Auto-approve? (Y/n): ');
       const autoApprove = !autoApproveInput || autoApproveInput.toLowerCase() === 'y' || autoApproveInput.toLowerCase() === 'yes';
 
-      const requiresReasonInput = await rl.question('Requires reason? (y/N): ');
+      const requiresReasonInput = await getRL().question('Requires reason? (y/N): ');
       const requiresReason = requiresReasonInput.toLowerCase() === 'y' || requiresReasonInput.toLowerCase() === 'yes';
 
       // Add capability
@@ -388,7 +460,7 @@ export async function addCommand(
       console.log();
     }
 
-    rl.close();
+    closeRL();
 
     console.log("Done! Run 'janee serve' to start.");
 
