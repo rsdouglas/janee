@@ -64,26 +64,23 @@ janee add myservice --base-url https://api.example.com
 
 ## Step 3: Configure Cursor
 
-Cursor stores MCP settings in its configuration file. The location depends on your OS:
+### Option A: Cursor Settings UI (recommended)
 
-| OS | Settings file location |
-|----|----------------------|
-| **macOS** | `~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/settings.json` |
-| **Linux** | `~/.config/Cursor/User/globalStorage/cursor.mcp/settings.json` |
-| **Windows** | `%APPDATA%\Cursor\User\globalStorage\cursor.mcp\settings.json` |
+1. Open **Cursor Settings** (⌘, on macOS)
+2. Go to **Tools & MCP**
+3. Click **New MCP Server**
+4. Add the Janee server config
 
-> **Note:** The path may vary by Cursor version. If the above doesn't exist, check Cursor's documentation or search for `cursor.mcp` in your config directories.
+### Option B: Edit config file directly
 
-### Create or edit the settings file
-
-If the file doesn't exist, create it. Add Janee as an MCP server:
+Cursor stores MCP settings in `~/.cursor/mcp.json`. Create or edit the file:
 
 ```json
 {
   "mcpServers": {
     "janee": {
       "command": "janee",
-      "args": ["mcp"]
+      "args": ["serve"]
     }
   }
 }
@@ -96,7 +93,7 @@ If `janee` isn't in your PATH, use the full path:
   "mcpServers": {
     "janee": {
       "command": "/usr/local/bin/janee",
-      "args": ["mcp"]
+      "args": ["serve"]
     }
   }
 }
@@ -116,7 +113,7 @@ If you prefer not to install globally:
   "mcpServers": {
     "janee": {
       "command": "npx",
-      "args": ["@true-and-useful/janee", "mcp"]
+      "args": ["@true-and-useful/janee", "serve"]
     }
   }
 }
