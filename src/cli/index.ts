@@ -14,6 +14,7 @@ import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
+import { auditCommand } from './commands/audit';
 
 const program = new Command();
 
@@ -33,6 +34,7 @@ program
   .description('Add a service to Janee (interactive if no args)')
   .option('-u, --url <url>', 'Base URL of the service')
   .option('-k, --key <key>', 'API key for the service')
+  .option('-p, --policy <policy>', 'Access policy: readonly, readwrite, or none')
   .action(addCommand);
 
 program
@@ -67,5 +69,10 @@ program
   .command('revoke <session>')
   .description('Revoke a session immediately')
   .action(revokeCommand);
+
+program
+  .command('audit')
+  .description('Check config for security issues (exits non-zero if problems found)')
+  .action(auditCommand);
 
 program.parse();

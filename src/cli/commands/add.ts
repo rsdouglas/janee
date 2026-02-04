@@ -3,9 +3,20 @@ import { stdin as input, stdout as output } from 'process';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 
+const RULE_TEMPLATES: Record<string, { allow: string[]; deny: string[] }> = {
+  readonly: {
+    allow: ['GET *'],
+    deny: ['POST *', 'PUT *', 'DELETE *']
+  },
+  readwrite: {
+    allow: ['GET *', 'POST *', 'PUT *'],
+    deny: ['DELETE *']
+  }
+};
+
 export async function addCommand(
   serviceName?: string,
-  options: { url?: string; key?: string; description?: string } = {}
+  options: { url?: string; key?: string; description?: string; policy?: string } = {}
 ): Promise<void> {
   try {
     // Check for YAML config
@@ -171,23 +182,75 @@ export async function addCommand(
       const ttlInput = await rl.question('TTL (e.g., 1h, 30m): ');
       const ttl = ttlInput.trim() || '1h';
 
-      const autoApproveInput = await rl.question('Auto-approve? (Y/n): ');
-      const autoApprove = !autoApproveInput || autoApproveInput.toLowerCase() === 'y' || autoApproveInput.toLowerCase() === 'yes';
+      // Rule template — from --policy flag or interactive prompt
+      let policyChoice = options.policy?.toLowerCase();
+      if (!policyChoice) {
+        console.log();
+        console.log('Access policy:');
+        console.log('  1) readonly  — GET only (recommended)');
+        console.log('  2) readwrite — GET, POST, PUT (no DELETE)');
+        console.log('  3) none      — no restrictions');
+        const policyInput = await rl.question('Choose policy (1/2/3, default: 1): ');
+        const choice = policyInput.trim();
+        if (choice === '2' || choice === 'readwrite') {
+          policyChoice = 'readwrite';
+        } else if (choice === '3' || choice === 'none') {
+          policyChoice = 'none';
+        } else {
+          policyChoice = 'readonly';
+        }
+      }
 
-      const requiresReasonInput = await rl.question('Requires reason? (y/N): ');
-      const requiresReason = requiresReasonInput.toLowerCase() === 'y' || requiresReasonInput.toLowerCase() === 'yes';
+      // Validate --policy flag values
+      if (!['readonly', 'readwrite', 'none'].includes(policyChoice)) {
+        console.error(`❌ Invalid policy: "${policyChoice}". Must be readonly, readwrite, or none.`);
+        rl.close();
+        process.exit(1);
+      }
 
-      // Add capability
-      config.capabilities[capName] = {
+      // Build capability config
+      const capConfig: CapabilityConfig = {
         service: serviceName,
         ttl,
-        autoApprove,
-        requiresReason
       };
+
+      if (policyChoice === 'none') {
+        // No rules — warn based on effective default policy
+        const effectivePolicy = config.defaultPolicy || 'allow';
+        console.log();
+        if (effectivePolicy === 'allow') {
+          console.log(`⚠️  No rules — this capability ALLOWS ALL requests to ${serviceName}`);
+        } else {
+          console.log(`ℹ️  No rules — this capability DENIES ALL requests to ${serviceName} (defaultPolicy: deny).`);
+          console.log('   Add rules later to enable access.');
+        }
+        // Default autoApprove to false for ruleless capabilities
+        capConfig.autoApprove = false;
+      } else {
+        // Apply the template
+        capConfig.rules = RULE_TEMPLATES[policyChoice];
+
+        // Ask about auto-approve (only when rules are defined)
+        const autoApproveInput = await rl.question('Auto-approve? (Y/n): ');
+        capConfig.autoApprove = !autoApproveInput || autoApproveInput.toLowerCase() === 'y' || autoApproveInput.toLowerCase() === 'yes';
+      }
+
+      const requiresReasonInput = await rl.question('Requires reason? (y/N): ');
+      capConfig.requiresReason = requiresReasonInput.toLowerCase() === 'y' || requiresReasonInput.toLowerCase() === 'yes';
+
+      // Add capability
+      config.capabilities[capName] = capConfig;
 
       saveYAMLConfig(config);
 
       console.log(`✅ Added capability "${capName}"`);
+      if (capConfig.rules) {
+        console.log(`   Policy: ${policyChoice}`);
+        console.log(`   Allow: ${capConfig.rules.allow?.join(', ')}`);
+        if (capConfig.rules.deny?.length) {
+          console.log(`   Deny: ${capConfig.rules.deny.join(', ')}`);
+        }
+      }
       console.log();
     }
 

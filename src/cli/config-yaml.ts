@@ -48,6 +48,7 @@ export interface ServerConfig {
 export interface JaneeYAMLConfig {
   version: string;
   masterKey: string;
+  defaultPolicy?: 'allow' | 'deny';
   server: ServerConfig;
   llm?: LLMConfig;
   services: Record<string, ServiceConfig>;

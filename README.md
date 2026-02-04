@@ -53,7 +53,7 @@ This creates `~/.janee/config.yaml` with example services.
 janee add
 ```
 
-Janee will guide you through adding a service:
+Janee will guide you through adding a service and choosing an access policy:
 
 ```
 Service name: stripe
@@ -64,20 +64,33 @@ API key: sk_live_xxx
 ✓ Added service "stripe"
 
 Create a capability for this service? (Y/n): y
-Capability name (default: stripe): 
+Capability name (default: stripe):
 TTL (e.g., 1h, 30m): 1h
+
+Access policy:
+  1) readonly  — GET only (recommended)
+  2) readwrite — GET, POST, PUT (no DELETE)
+  3) none      — no restrictions
+Choose policy (1/2/3, default: 1): 1
 Auto-approve? (Y/n): y
 
 ✓ Added capability "stripe"
+   Policy: readonly
+   Allow: GET *
+   Deny: POST *, PUT *, DELETE *
 
 Done! Run 'janee serve' to start.
 ```
+
+For scripted usage: `janee add stripe -u https://api.stripe.com -k sk_xxx --policy readonly`
 
 **Option 2: Edit config directly**
 
 Edit `~/.janee/config.yaml`:
 
 ```yaml
+defaultPolicy: deny  # capabilities without rules deny all requests
+
 services:
   stripe:
     baseUrl: https://api.stripe.com
@@ -86,10 +99,17 @@ services:
       key: sk_live_xxx
 
 capabilities:
-  stripe:
+  stripe_readonly:
     service: stripe
     ttl: 1h
     autoApprove: true
+    rules:
+      allow:
+        - GET *
+      deny:
+        - POST *
+        - PUT *
+        - DELETE *
 ```
 
 ### Start the MCP server
@@ -171,6 +191,8 @@ Agents discover what's available, then call APIs through Janee. Same audit trail
 Config lives in `~/.janee/config.yaml`:
 
 ```yaml
+defaultPolicy: deny  # deny-by-default for capabilities without rules
+
 server:
   host: localhost
 
@@ -188,19 +210,34 @@ services:
       key: ghp_xxx
 
 capabilities:
-  stripe:
+  stripe_readonly:
     service: stripe
     ttl: 1h
     autoApprove: true
+    rules:
+      allow:
+        - GET *
+      deny:
+        - POST *
+        - PUT *
+        - DELETE *
 
-  stripe_sensitive:
+  stripe_billing:
     service: stripe
     ttl: 5m
     requiresReason: true
+    rules:
+      allow:
+        - GET *
+        - POST /v1/refunds/*
+      deny:
+        - POST /v1/charges/*
+        - DELETE *
 ```
 
-**Services** = Real APIs with real keys  
+**Services** = Real APIs with real keys
 **Capabilities** = What agents can request, with policies
+**`defaultPolicy`** = What happens when a capability has no rules (`deny` recommended)
 
 ---
 
@@ -239,7 +276,7 @@ capabilities:
 
 1. **`deny` patterns are checked first** — explicit deny always wins
 2. **Then `allow` patterns are checked** — must match to proceed
-3. **No rules defined** → allow all (backward compatible)
+3. **No rules defined** → behavior depends on `defaultPolicy` (deny recommended)
 4. **Rules defined but no match** → denied by default
 
 **Pattern format:** `METHOD PATH`
@@ -256,12 +293,13 @@ capabilities:
 ## CLI Reference
 
 ```bash
-janee init             # Set up ~/.janee/ with example config
-janee add              # Add a service (interactive)
-janee add stripe -u https://api.stripe.com -k sk_xxx  # Add with args
+janee init             # Set up ~/.janee/ with example config (defaultPolicy: deny)
+janee add              # Add a service (interactive, with policy templates)
+janee add stripe -u https://api.stripe.com -k sk_xxx --policy readonly
 janee remove <service> # Remove a service
 janee list             # List configured services
-janee serve            # Start MCP server
+janee serve            # Start MCP server (warns about insecure capabilities)
+janee audit            # Check config for security issues (CI-friendly, exits non-zero)
 janee logs             # View audit log
 janee logs -f          # Tail audit log
 janee sessions         # List active sessions
@@ -296,11 +334,14 @@ Agent never touches the real key.
 
 ## Security
 
+- **Deny by default**: New configs use `defaultPolicy: deny` — capabilities without rules block all requests
 - **Encryption**: Keys stored with AES-256-GCM
+- **Rules enforcement**: Path-based allow/deny patterns, checked server-side before key injection
 - **Local only**: MCP server over stdio (no network exposure)
 - **Audit log**: Every request logged to `~/.janee/logs/`
 - **Sessions**: Time-limited, revocable
 - **Kill switch**: `janee revoke` or delete config
+- **Config audit**: `janee audit` checks for insecure patterns (useful in CI)
 
 ---
 

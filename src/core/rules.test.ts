@@ -73,6 +73,47 @@ describe('Rules Engine', () => {
     });
   });
 
+  describe('checkRules with defaultPolicy', () => {
+    it('should allow all when no rules and defaultPolicy=allow', () => {
+      const result = checkRules(undefined, 'GET', '/v1/customers', 'allow');
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should deny all when no rules and defaultPolicy=deny', () => {
+      const result = checkRules(undefined, 'POST', '/v1/charges', 'deny');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('default policy: deny');
+    });
+
+    it('should deny when empty rules and defaultPolicy=deny', () => {
+      const result = checkRules({}, 'GET', '/v1/customers', 'deny');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toContain('default policy: deny');
+    });
+
+    it('should still enforce explicit rules under defaultPolicy=deny', () => {
+      const rules: Rules = {
+        allow: ['GET *'],
+        deny: ['DELETE *']
+      };
+      expect(checkRules(rules, 'GET', '/v1/customers', 'deny').allowed).toBe(true);
+      expect(checkRules(rules, 'POST', '/v1/charges', 'deny').allowed).toBe(false);
+      expect(checkRules(rules, 'DELETE', '/v1/customers/123', 'deny').allowed).toBe(false);
+    });
+
+    it('should allow with "* *" escape hatch under defaultPolicy=deny', () => {
+      const rules: Rules = { allow: ['* *'] };
+      const result = checkRules(rules, 'POST', '/v1/charges', 'deny');
+      expect(result.allowed).toBe(true);
+      expect(result.matchedRule).toBe('* *');
+    });
+
+    it('should default to allow when defaultPolicy omitted (backward compat)', () => {
+      const result = checkRules(undefined, 'POST', '/v1/charges');
+      expect(result.allowed).toBe(true);
+    });
+  });
+
   describe('matchPattern', () => {
     it('should match exact method and path', () => {
       expect(matchPattern('GET /v1/balance', 'GET', '/v1/balance')).toBe(true);

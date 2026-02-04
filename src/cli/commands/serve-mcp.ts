@@ -6,10 +6,14 @@ import { getAuditDir } from '../config-yaml';
 import { URL } from 'url';
 import { createHmac } from 'crypto';
 
+interface ConfigForMCP extends ReloadResult {
+  defaultPolicy: 'allow' | 'deny';
+}
+
 /**
  * Load config and convert to MCP format
  */
-function loadConfigForMCP(): ReloadResult {
+function loadConfigForMCP(): ConfigForMCP {
   const config = loadYAMLConfig();
 
   const capabilities: Capability[] = Object.entries(config.capabilities).map(
@@ -28,7 +32,7 @@ function loadConfigForMCP(): ReloadResult {
     services.set(name, service);
   }
 
-  return { capabilities, services };
+  return { capabilities, services, defaultPolicy: config.defaultPolicy || 'allow' };
 }
 
 export async function serveMCPCommand(): Promise<void> {
@@ -46,8 +50,25 @@ export async function serveMCPCommand(): Promise<void> {
     const auditLogger = new AuditLogger(getAuditDir());
 
     // Load initial config
-    const { capabilities, services } = loadConfigForMCP();
-    
+    const { capabilities, services, defaultPolicy } = loadConfigForMCP();
+
+    // Startup security warnings
+    const config = loadYAMLConfig();
+    if (!config.defaultPolicy) {
+      console.error('Security: defaultPolicy is not set; defaulting to "allow" (backward-compatible).');
+      console.error('  Consider adding `defaultPolicy: deny` to ~/.janee/config.yaml');
+      console.error('');
+    }
+    const rulelessCaps = capabilities.filter(c => !c.rules || (!c.rules.allow && !c.rules.deny));
+    for (const cap of rulelessCaps) {
+      if (defaultPolicy === 'deny') {
+        console.error(`  ${cap.name}: no rules defined — DENIES ALL requests (defaultPolicy: deny)`);
+      } else {
+        console.error(`  Warning: ${cap.name}: no rules defined — ALLOWS ALL requests to ${cap.service}`);
+      }
+    }
+    if (rulelessCaps.length > 0) console.error('');
+
     // Keep a mutable reference to services for the onExecute closure
     let currentServices = services;
 
@@ -55,6 +76,7 @@ export async function serveMCPCommand(): Promise<void> {
     const mcpServer = createMCPServer({
       capabilities,
       services,
+      defaultPolicy,
       sessionManager,
       auditLogger,
       

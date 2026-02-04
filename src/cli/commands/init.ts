@@ -13,6 +13,11 @@ const EXAMPLE_CONFIG = `# Janee Configuration
 version: '0.2.0'
 masterKey: '{{MASTER_KEY}}'
 
+# Default policy for capabilities without rules.
+# "deny" = secure default (recommended) — capabilities with no rules block all requests.
+# "allow" = backward-compatible — capabilities with no rules allow all requests.
+defaultPolicy: deny
+
 # LLM for adjudication (optional - Phase 2 feature)
 # llm:
 #   provider: openai  # or anthropic
@@ -43,18 +48,10 @@ services:
   #     apiKey: xxx
   #     apiSecret: xxx
 
-  # Example: API with custom headers
-  # custom:
-  #   baseUrl: https://api.example.com
-  #   auth:
-  #     type: headers
-  #     headers:
-  #       X-API-Key: xxx
-  #       X-Custom-Header: yyy
-
 # Capabilities - what agents can access
+# IMPORTANT: Always define rules for every capability.
 capabilities:
-  # Example: Read-only Stripe access (with path policies)
+  # Example: Read-only Stripe access
   # stripe_readonly:
   #   service: stripe
   #   ttl: 1h
@@ -81,11 +78,13 @@ capabilities:
   #       - POST /v1/charges/*
   #       - DELETE *
 
-  # Example: GitHub access (no restrictions)
-  # github:
+  # Escape hatch: explicitly allow everything (use with caution)
+  # github_full:
   #   service: github
   #   ttl: 30m
-  #   autoApprove: true
+  #   rules:
+  #     allow:
+  #       - "* *"
 `;
 
 export async function initCommand(): Promise<void> {

@@ -16,9 +16,9 @@ export interface RuleCheckResult {
 
 /**
  * Check if a request matches policy rules
- * 
+ *
  * Logic:
- * 1. No rules defined → allow all (backward compatible)
+ * 1. No rules defined → use defaultPolicy ('allow' for backward compat, 'deny' for secure mode)
  * 2. Check deny patterns first (explicit deny wins)
  * 3. Check allow patterns
  * 4. If rules defined but no match → deny by default
@@ -26,10 +26,14 @@ export interface RuleCheckResult {
 export function checkRules(
   rules: Rules | undefined,
   method: string,
-  path: string
+  path: string,
+  defaultPolicy: 'allow' | 'deny' = 'allow'
 ): RuleCheckResult {
-  // No rules = allow all (backward compatible)
+  // No rules = use default policy
   if (!rules || (!rules.allow && !rules.deny)) {
+    if (defaultPolicy === 'deny') {
+      return { allowed: false, reason: 'No rules defined (default policy: deny)' };
+    }
     return { allowed: true };
   }
   

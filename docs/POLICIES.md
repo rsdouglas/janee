@@ -112,7 +112,7 @@ Agent provided a reason. Rules denied it anyway.
 ## Rule Evaluation
 
 ```
-1. No rules defined? → ALLOW (backward compatible)
+1. No rules defined? → depends on defaultPolicy (deny recommended, allow for backward compat)
 2. Check DENY patterns → if match, DENY (deny always wins)
 3. Check ALLOW patterns → if match, ALLOW
 4. No match? → DENY (default deny when rules exist)
@@ -234,16 +234,50 @@ Reason logged for review, but rules enforce the boundary.
 
 ---
 
-## Backward Compatibility
+## Default Policy
 
-No rules = allow all (existing configs work unchanged):
+The `defaultPolicy` config setting controls what happens when a capability has no rules:
 
 ```yaml
-stripe:
-  service: stripe
-  ttl: 1h
-  # No rules defined = all requests allowed
+# In ~/.janee/config.yaml
+defaultPolicy: deny   # recommended — no rules = block everything
+# defaultPolicy: allow  # backward-compatible — no rules = allow everything
 ```
+
+**New installs (`janee init`) default to `deny`.** Existing configs without `defaultPolicy` default to `allow` for backward compatibility.
+
+> **Define rules for every capability.** If you need unrestricted access to a specific service, use the explicit escape hatch: `allow: ["* *"]`
+
+---
+
+## Escape Hatch
+
+If you need a capability with no restrictions under `defaultPolicy: deny`, use the wildcard rule explicitly:
+
+```yaml
+my_service_full:
+  service: my_service
+  ttl: 1h
+  rules:
+    allow:
+      - "* *"   # Explicitly allows all methods and paths
+```
+
+This is visible in config and in `janee audit` output, making the security decision intentional and auditable.
+
+---
+
+## Config Audit
+
+Run `janee audit` to check your config for security issues:
+
+```bash
+janee audit
+# Found 1 security issue(s):
+#   ✗ stripe: no rules + autoApprove — ALLOWS ALL requests to stripe (highest risk)
+```
+
+Exits non-zero if issues are found — useful in CI or dotfiles setups.
 
 ---
 
@@ -251,10 +285,11 @@ stripe:
 
 **Defense in depth:**
 
-1. **Encryption** — Keys encrypted at rest
-2. **Isolation** — Agent never sees real keys
-3. **Policies** — Rules enforce allowed operations ← this
-4. **Audit** — All requests logged
-5. **TTL** — Time limits on capabilities
+1. **Default deny** — Capabilities without rules block all requests (when `defaultPolicy: deny`)
+2. **Encryption** — Keys encrypted at rest
+3. **Isolation** — Agent never sees real keys
+4. **Policies** — Rules enforce allowed operations ← this
+5. **Audit** — All requests logged, config auditable
+6. **TTL** — Time limits on capabilities
 
 Policies limit blast radius even if an agent session is compromised.

@@ -60,6 +60,7 @@ export interface ReloadResult {
 export interface MCPServerOptions {
   capabilities: Capability[];
   services: Map<string, ServiceConfig>;
+  defaultPolicy?: 'allow' | 'deny';
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
@@ -90,7 +91,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onReloadConfig } = options;
+  const { sessionManager, auditLogger, onExecute, onReloadConfig, defaultPolicy = 'allow' } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -251,7 +252,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
           }
 
           // Check rules (path-based policies)
-          const ruleCheck = checkRules(cap.rules, method, path);
+          const ruleCheck = checkRules(cap.rules, method, path, defaultPolicy);
           if (!ruleCheck.allowed) {
             // Log denied request
             auditLogger.logDenied(
