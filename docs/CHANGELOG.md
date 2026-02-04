@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-02-04
+
 ### Improved
 
 - **Interactive Auth Type Selector** — CLI now uses searchable list for auth types (#4)
