@@ -182,24 +182,8 @@ export async function addCommand(
       const ttlInput = await rl.question('TTL (e.g., 1h, 30m): ');
       const ttl = ttlInput.trim() || '1h';
 
-      // Rule template — from --policy flag or interactive prompt
-      let policyChoice = options.policy?.toLowerCase();
-      if (!policyChoice) {
-        console.log();
-        console.log('Access policy:');
-        console.log('  1) readonly  — GET only (recommended)');
-        console.log('  2) readwrite — GET, POST, PUT (no DELETE)');
-        console.log('  3) none      — no restrictions');
-        const policyInput = await rl.question('Choose policy (1/2/3, default: 1): ');
-        const choice = policyInput.trim();
-        if (choice === '2' || choice === 'readwrite') {
-          policyChoice = 'readwrite';
-        } else if (choice === '3' || choice === 'none') {
-          policyChoice = 'none';
-        } else {
-          policyChoice = 'readonly';
-        }
-      }
+      // Rule template — from --policy flag, defaults to readonly
+      const policyChoice = options.policy?.toLowerCase() || 'readonly';
 
       // Validate --policy flag values
       if (!['readonly', 'readwrite', 'none'].includes(policyChoice)) {

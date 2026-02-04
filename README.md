@@ -53,7 +53,7 @@ This creates `~/.janee/config.yaml` with example services.
 janee add
 ```
 
-Janee will guide you through adding a service and choosing an access policy:
+Janee will guide you through adding a service with secure defaults:
 
 ```
 Service name: stripe
@@ -66,12 +66,6 @@ API key: sk_live_xxx
 Create a capability for this service? (Y/n): y
 Capability name (default: stripe):
 TTL (e.g., 1h, 30m): 1h
-
-Access policy:
-  1) readonly  — GET only (recommended)
-  2) readwrite — GET, POST, PUT (no DELETE)
-  3) none      — no restrictions
-Choose policy (1/2/3, default: 1): 1
 Auto-approve? (Y/n): y
 
 ✓ Added capability "stripe"
@@ -82,7 +76,13 @@ Auto-approve? (Y/n): y
 Done! Run 'janee serve' to start.
 ```
 
-For scripted usage: `janee add stripe -u https://api.stripe.com -k sk_xxx --policy readonly`
+Capabilities default to **readonly** (GET only). Use `--policy` to override:
+
+```bash
+janee add stripe -u https://api.stripe.com -k sk_xxx                     # readonly (default)
+janee add stripe -u https://api.stripe.com -k sk_xxx --policy readwrite  # GET, POST, PUT (no DELETE)
+janee add stripe -u https://api.stripe.com -k sk_xxx --policy none       # no restrictions
+```
 
 **Option 2: Edit config directly**
 
