@@ -34,6 +34,9 @@ program
   .description('Add a service to Janee (interactive if no args)')
   .option('-u, --url <url>', 'Base URL of the service')
   .option('-k, --key <key>', 'API key for the service')
+  .option('--auth-type <type>', 'Authentication type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account)')
+  .option('--credentials-file <path>', 'Path to service account JSON file (for service-account auth type)')
+  .option('--scope <scope...>', 'OAuth scope(s) for service-account auth type')
   .action(addCommand);
 
 program

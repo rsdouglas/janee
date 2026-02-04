@@ -92,11 +92,23 @@ Janee supports multiple authentication methods:
 
 For Google APIs that require service account auth:
 
+**Interactive:**
+```bash
+janee add google-analytics
+# Follow prompts:
+# - Base URL: https://analyticsdata.googleapis.com
+# - Auth type: service-account
+# - Path to service account JSON file: ~/Downloads/service-account.json
+# - OAuth scopes: (enter one per line)
+```
+
+**Non-interactive:**
 ```bash
 janee add google-analytics \
   --base-url https://analyticsdata.googleapis.com \
-  --auth-type service-account
-# Then paste your service account JSON and provide OAuth scopes
+  --auth-type service-account \
+  --credentials-file ~/Downloads/service-account.json \
+  --scope https://www.googleapis.com/auth/analytics.readonly
 ```
 
 Janee handles JWT signing, token caching, and refresh automatically.
