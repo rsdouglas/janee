@@ -47,27 +47,13 @@ This creates `~/.janee/config.yaml` with example services.
 
 ### Add Services
 
-**Option 1: Interactive (recommended for first-time users)**
+**Built-in service templates** — Janee knows common APIs so you don't have to type URLs and auth types:
 
 ```bash
-janee add
-```
-
-Janee will guide you through adding a service with secure defaults:
-
-```
-Service name: stripe
-Base URL: https://api.stripe.com
-Auth type (bearer/hmac/headers): bearer
+$ janee add stripe
 API key: sk_live_xxx
 
-✓ Added service "stripe"
-
-Create a capability for this service? (Y/n): y
-Capability name (default: stripe):
-TTL (e.g., 1h, 30m): 1h
-Auto-approve? (Y/n): y
-
+✓ Added service "stripe" (https://api.stripe.com)
 ✓ Added capability "stripe"
    Policy: readonly
    Allow: GET *
@@ -76,13 +62,21 @@ Auto-approve? (Y/n): y
 Done! Run 'janee serve' to start.
 ```
 
-Capabilities default to **readonly** (GET only). Use `--policy` to override:
+That's it. One question, secure by default.
+
+**Supported services:** `stripe`, `github`, `openai`, `bybit`, `okx`
+
+For scripted usage: `janee add stripe -k sk_xxx`
+
+Override the default readonly policy with `--policy`:
 
 ```bash
-janee add stripe -u https://api.stripe.com -k sk_xxx                     # readonly (default)
-janee add stripe -u https://api.stripe.com -k sk_xxx --policy readwrite  # GET, POST, PUT (no DELETE)
-janee add stripe -u https://api.stripe.com -k sk_xxx --policy none       # no restrictions
+janee add stripe -k sk_xxx                    # readonly (default)
+janee add stripe -k sk_xxx --policy readwrite  # GET, POST, PUT (no DELETE)
+janee add stripe -k sk_xxx --policy none       # no restrictions
 ```
+
+**Custom services** — For services without a built-in template, `janee add myapi` falls back to interactive mode (asks for URL, auth type, etc.).
 
 **Option 2: Edit config directly**
 
@@ -294,8 +288,8 @@ capabilities:
 
 ```bash
 janee init             # Set up ~/.janee/ with example config (defaultPolicy: deny)
-janee add              # Add a service (interactive, with policy templates)
-janee add stripe -u https://api.stripe.com -k sk_xxx --policy readonly
+janee add stripe       # Add a known service (just asks for key)
+janee add myapi        # Add a custom service (interactive)
 janee remove <service> # Remove a service
 janee list             # List configured services
 janee serve            # Start MCP server (warns about insecure capabilities)

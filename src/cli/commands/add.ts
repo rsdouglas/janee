@@ -3,6 +3,19 @@ import { stdin as input, stdout as output } from 'process';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 
+interface ServiceTemplate {
+  baseUrl: string;
+  authType: 'bearer' | 'hmac-bybit' | 'hmac-okx';
+}
+
+const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
+  stripe:  { baseUrl: 'https://api.stripe.com',  authType: 'bearer' },
+  github:  { baseUrl: 'https://api.github.com',  authType: 'bearer' },
+  openai:  { baseUrl: 'https://api.openai.com',  authType: 'bearer' },
+  bybit:   { baseUrl: 'https://api.bybit.com',   authType: 'hmac-bybit' },
+  okx:     { baseUrl: 'https://www.okx.com',      authType: 'hmac-okx' },
+};
+
 const RULE_TEMPLATES: Record<string, { allow: string[]; deny: string[] }> = {
   readonly: {
     allow: ['GET *'],
@@ -47,6 +60,111 @@ export async function addCommand(
       rl.close();
       process.exit(1);
     }
+
+    // Check for built-in service template
+    const template = SERVICE_TEMPLATES[serviceName.toLowerCase()];
+
+    if (template) {
+      // ── Template path: just collect credentials ──
+      const baseUrl = options.url || template.baseUrl;
+      let auth: AuthConfig;
+
+      if (template.authType === 'bearer') {
+        let apiKey = options.key;
+        if (!apiKey) {
+          apiKey = await rl.question('API key: ');
+          apiKey = apiKey.trim();
+        }
+        if (!apiKey) {
+          console.error('❌ API key is required');
+          rl.close();
+          process.exit(1);
+        }
+        auth = { type: 'bearer', key: apiKey };
+
+      } else if (template.authType === 'hmac-bybit') {
+        const apiKey = await rl.question('API key: ');
+        const apiSecret = await rl.question('API secret: ');
+        if (!apiKey.trim() || !apiSecret.trim()) {
+          console.error('❌ API key and secret are required');
+          rl.close();
+          process.exit(1);
+        }
+        auth = { type: 'hmac-bybit', apiKey: apiKey.trim(), apiSecret: apiSecret.trim() };
+
+      } else {
+        // hmac-okx
+        const apiKey = await rl.question('API key: ');
+        const apiSecret = await rl.question('API secret: ');
+        const passphrase = await rl.question('Passphrase: ');
+        if (!apiKey.trim() || !apiSecret.trim() || !passphrase.trim()) {
+          console.error('❌ API key, secret, and passphrase are required for OKX');
+          rl.close();
+          process.exit(1);
+        }
+        auth = { type: 'hmac-okx', apiKey: apiKey.trim(), apiSecret: apiSecret.trim(), passphrase: passphrase.trim() };
+      }
+
+      // Add service
+      config.services[serviceName] = { baseUrl, auth };
+
+      // Auto-create capability with readonly rules and sensible defaults
+      const policyChoice = options.policy?.toLowerCase() || 'readonly';
+      if (!['readonly', 'readwrite', 'none'].includes(policyChoice)) {
+        console.error(`❌ Invalid policy: "${policyChoice}". Must be readonly, readwrite, or none.`);
+        rl.close();
+        process.exit(1);
+      }
+
+      if (config.capabilities[serviceName]) {
+        // Service added, but capability name already taken
+        saveYAMLConfig(config);
+        console.log(`✓ Added service "${serviceName}" (${baseUrl})`);
+        console.log(`  Capability "${serviceName}" already exists — skipped.`);
+        rl.close();
+        console.log();
+        console.log("Done! Run 'janee serve' to start.");
+        return;
+      }
+
+      const capConfig: CapabilityConfig = {
+        service: serviceName,
+        ttl: '1h',
+        autoApprove: policyChoice !== 'none',
+      };
+
+      if (policyChoice === 'none') {
+        const effectivePolicy = config.defaultPolicy || 'allow';
+        if (effectivePolicy === 'allow') {
+          console.log(`⚠️  No rules — this capability ALLOWS ALL requests to ${serviceName}`);
+        } else {
+          console.log(`ℹ️  No rules — all requests DENIED (defaultPolicy: deny). Add rules to enable access.`);
+        }
+      } else {
+        capConfig.rules = RULE_TEMPLATES[policyChoice];
+      }
+
+      config.capabilities[serviceName] = capConfig;
+      saveYAMLConfig(config);
+
+      console.log();
+      console.log(`✓ Added service "${serviceName}" (${baseUrl})`);
+      console.log(`✓ Added capability "${serviceName}"`);
+      if (capConfig.rules) {
+        console.log(`   Policy: ${policyChoice}`);
+        console.log(`   Allow: ${capConfig.rules.allow?.join(', ')}`);
+        if (capConfig.rules.deny?.length) {
+          console.log(`   Deny: ${capConfig.rules.deny.join(', ')}`);
+        }
+      }
+      console.log();
+
+      rl.close();
+      console.log("Done! Run 'janee serve' to start.");
+      return;
+    }
+
+    // ── Interactive path: unknown service ──
 
     // Base URL
     let baseUrl = options.url;
