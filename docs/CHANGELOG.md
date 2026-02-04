@@ -4,6 +4,14 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Request Body Logging** — POST/PUT/PATCH request bodies now logged in audit trail
+  - Bodies automatically truncated at 10KB to prevent log bloat from file uploads
+  - New `requestBody` field in audit events (optional)
+  - Config option `server.logBodies` to disable (default: `true`)
+  - No automatic redaction — full visibility into what agents sent
+
 ## [0.2.2] - 2026-02-04
 
 ### Improved

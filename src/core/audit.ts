@@ -32,15 +32,19 @@ export interface AuditEvent {
   agentId?: string;
   denied?: boolean;
   denyReason?: string;
+  requestBody?: string;  // Request body (truncated at ~10KB)
 }
 
 export class AuditLogger {
   private logDir: string;
   private currentLogFile: string;
+  private logBodies: boolean;
+  private readonly MAX_BODY_LENGTH = 10 * 1024; // 10KB
 
-  constructor(logDir: string) {
+  constructor(logDir: string, options: { logBodies?: boolean } = {}) {
     this.logDir = logDir;
     this.currentLogFile = this.getLogFilePath();
+    this.logBodies = options.logBodies ?? true; // Default to true
 
     // Ensure log directory exists
     if (!fs.existsSync(logDir)) {
@@ -71,6 +75,11 @@ export class AuditLogger {
       // TODO: Extract reason/agentId from request headers if present
     };
 
+    // Log request body for POST/PUT/PATCH if enabled
+    if (this.logBodies && req.body && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      event.requestBody = this.truncateBody(req.body);
+    }
+
     // Append to log file (JSONL format)
     const logLine = JSON.stringify(event) + '\n';
     
@@ -81,6 +90,16 @@ export class AuditLogger {
     }
 
     fs.appendFileSync(this.currentLogFile, logLine, { mode: 0o600 });
+  }
+
+  /**
+   * Truncate request body to avoid log bloat
+   */
+  private truncateBody(body: string): string {
+    if (body.length <= this.MAX_BODY_LENGTH) {
+      return body;
+    }
+    return body.substring(0, this.MAX_BODY_LENGTH) + `... [truncated, original length: ${body.length}]`;
   }
 
   /**

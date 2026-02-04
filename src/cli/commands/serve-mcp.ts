@@ -43,8 +43,11 @@ export async function serveMCPCommand(): Promise<void> {
       process.exit(1);
     }
 
+    const config = loadYAMLConfig();
     const sessionManager = new SessionManager();
-    const auditLogger = new AuditLogger(getAuditDir());
+    const auditLogger = new AuditLogger(getAuditDir(), {
+      logBodies: config.server.logBodies
+    });
 
     // Load initial config
     const { capabilities, services } = loadConfigForMCP();
