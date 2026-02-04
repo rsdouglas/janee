@@ -1,8 +1,9 @@
 # RFC-0002: Service Account Authentication
 
-**Status:** Draft  
+**Status:** Implemented  
 **Author:** Kit (with Ross)  
-**Created:** 2026-02-04
+**Created:** 2026-02-04  
+**Implemented:** 2026-02-04 (PR #3)
 
 ## Summary
 

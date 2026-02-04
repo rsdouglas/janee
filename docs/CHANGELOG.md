@@ -2,6 +2,18 @@
 
 All notable changes to Janee will be documented in this file.
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- **Service Account Authentication** — Support for Google-style OAuth2 service accounts (RFC-0002)
+  - New auth type: `service-account` with encrypted credentials and OAuth scopes
+  - JWT signing with RS256 algorithm using `jsonwebtoken` library
+  - Automatic token caching (50-minute lifetime) with refresh when <10 minutes remaining
+  - Validation and authentication testing during `janee add`
+  - Handles 401 responses by clearing cache and retrying
+  - Enables access to Google APIs (Analytics, Sheets, Drive, Cloud services)
+
 ## [0.1.0] - 2026-02-03
 
 ### Added

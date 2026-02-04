@@ -79,6 +79,28 @@ janee_execute(service="moltbook", method="POST", path="/posts", body=...)
 
 Your Moltbook key stays encrypted. Even if your agent is compromised, the key can't be exfiltrated.
 
+## Auth Types
+
+Janee supports multiple authentication methods:
+
+- **`bearer`** — Static API keys (Stripe, OpenAI, most APIs)
+- **`service-account`** — Google-style OAuth2 (Analytics, Sheets, Cloud services)
+- **`hmac`** — Request signing for crypto exchanges (Bybit, MEXC, OKX)
+- **`headers`** — Custom header-based auth
+
+### Service Account Example (Google APIs)
+
+For Google APIs that require service account auth:
+
+```bash
+janee add google-analytics \
+  --base-url https://analyticsdata.googleapis.com \
+  --auth-type service-account
+# Then paste your service account JSON and provide OAuth scopes
+```
+
+Janee handles JWT signing, token caching, and refresh automatically.
+
 ## Config Example
 
 ```yaml
@@ -88,6 +110,14 @@ services:
     auth:
       type: bearer
       key: sk_live_xxx  # encrypted
+
+  google-analytics:
+    baseUrl: https://analyticsdata.googleapis.com
+    auth:
+      type: service-account
+      credentials: {...}  # encrypted JSON
+      scopes:
+        - https://www.googleapis.com/auth/analytics.readonly
 
   moltbook:
     baseUrl: https://www.moltbook.com/api/v1
@@ -101,6 +131,11 @@ capabilities:
     rules:
       allow: [GET *]
       deny: [POST *, DELETE *]
+
+  google-analytics:
+    service: google-analytics
+    ttl: 1h
+    autoApprove: true
 
   moltbook:
     service: moltbook
