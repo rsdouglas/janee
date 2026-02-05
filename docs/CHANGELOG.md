@@ -4,6 +4,15 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Non-interactive `janee add`** — Agent-friendly setup without readline prompts (#9)
+  - New flags: `--api-secret`, `--passphrase` for direct credential input
+  - New flags: `--key-from-env`, `--secret-from-env`, `--passphrase-from-env` to read credentials from environment variables (keeps secrets out of command args and agent context)
+  - Auto-creates capability with sensible defaults (1h TTL, auto-approve) when fully non-interactive
+  - Lazy readline initialization — stdin only opened when prompts are actually needed
+  - Interactive mode unchanged
+
 ## [0.3.0] - 2026-02-04
 
 ### Added

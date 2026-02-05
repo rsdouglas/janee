@@ -298,6 +298,25 @@ janee sessions         # List active sessions
 janee revoke <id>      # Kill a session
 ```
 
+### Non-interactive Setup (for AI agents)
+
+AI agents can't respond to interactive prompts. Use `--*-from-env` flags to read credentials from environment variables — this keeps secrets out of the agent's context window:
+
+```bash
+# Bearer auth (Stripe, OpenAI, etc.)
+janee add stripe -u https://api.stripe.com --auth-type bearer --key-from-env STRIPE_KEY
+
+# HMAC auth (Bybit)
+janee add bybit --auth-type hmac-bybit --key-from-env BYBIT_KEY --secret-from-env BYBIT_SECRET
+
+# HMAC auth with passphrase (OKX)
+janee add okx --auth-type hmac-okx --key-from-env OKX_KEY --secret-from-env OKX_SECRET --passphrase-from-env OKX_PASS
+```
+
+When all required credentials are provided via flags, Janee:
+- Never opens readline (no hanging on stdin)
+- Auto-creates a capability with sensible defaults (1h TTL, auto-approve)
+
 You can also edit `~/.janee/config.yaml` directly if you prefer.
 
 ---
