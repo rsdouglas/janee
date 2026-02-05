@@ -30,11 +30,29 @@ janee init
 
 ## Add a Service
 
+**Interactive (for humans):**
 ```bash
 janee add
 ```
 
 Follow the prompts to add your API credentials. Keys are encrypted automatically.
+
+**Non-interactive (for agents):**
+
+Use `--*-from-env` flags to read credentials from environment variables. This keeps secrets out of your context window:
+
+```bash
+# Bearer auth (most APIs)
+janee add stripe -u https://api.stripe.com --auth-type bearer --key-from-env STRIPE_KEY
+
+# HMAC auth (Bybit, MEXC)
+janee add bybit --auth-type hmac-bybit --key-from-env BYBIT_KEY --secret-from-env BYBIT_SECRET
+
+# HMAC with passphrase (OKX)
+janee add okx --auth-type hmac-okx --key-from-env OKX_KEY --secret-from-env OKX_SECRET --passphrase-from-env OKX_PASS
+```
+
+When all credentials are provided via flags, Janee auto-creates a capability (1h TTL, auto-approve) and never prompts.
 
 ## Use in Your Agent
 
