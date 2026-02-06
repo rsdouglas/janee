@@ -88,7 +88,7 @@ Janee will guide you through adding a service:
 ```
 Service name: stripe
 Base URL: https://api.stripe.com
-Auth type (bearer/hmac/headers): bearer
+Auth type: bearer
 API key: sk_live_xxx
 
 ✓ Added service "stripe"
@@ -102,6 +102,8 @@ Auto-approve? (Y/n): y
 
 Done! Run 'janee serve' to start.
 ```
+
+**Using an AI agent?** See [Non-interactive Setup](#non-interactive-setup-for-ai-agents) for flags that skip prompts, or the [agent-specific guides](#integrations) below.
 
 **Option 2: Edit config directly**
 
@@ -135,7 +137,7 @@ Agents that support MCP (Claude Desktop, Cursor, OpenClaw) can now call the `exe
 ```typescript
 // Agent calls the execute tool
 execute({
-  service: "stripe",
+  capability: "stripe",
   method: "GET",
   path: "/v1/balance",
   reason: "User asked for account balance"
@@ -143,6 +145,18 @@ execute({
 ```
 
 Janee decrypts the key, makes the request, logs everything, and returns the response.
+
+---
+
+## Integrations
+
+Works with any agent that speaks MCP:
+
+- **OpenClaw** — Native plugin (`@true-and-useful/janee-openclaw`)
+- **Cursor** — [Setup guide](docs/cursor.md)
+- **Claude Code** — [Setup guide](docs/claude-code.md)
+- **Codex CLI** — [Setup guide](docs/codex.md)
+- **Any MCP client** — just point at `janee serve`
 
 ---
 
@@ -179,18 +193,17 @@ Your agent now has these tools:
 
 The plugin spawns `janee serve` automatically. All requests are logged to `~/.janee/logs/`.
 
-**See [docs/OPENCLAW.md](docs/OPENCLAW.md) for full integration guide.**
-
 ---
 
 ## MCP Tools
 
-Janee exposes two MCP tools:
+Janee exposes three MCP tools:
 
 | Tool | Description |
 |------|-------------|
 | `list_services` | Discover available APIs and their policies |
 | `execute` | Make an API request through Janee |
+| `reload_config` | Reload config from disk after adding/removing services (available when started with `janee serve`) |
 
 Agents discover what's available, then call APIs through Janee. Same audit trail, same protection.
 
@@ -333,7 +346,7 @@ You can also edit `~/.janee/config.yaml` directly if you prefer.
                     + logs request
 ```
 
-1. Agent calls `execute` MCP tool with service, method, path
+1. Agent calls `execute` MCP tool with capability, method, path
 2. Janee looks up service config, decrypts the real key
 3. Makes HTTP request to real API with key
 4. Logs: timestamp, service, method, path, status
@@ -350,18 +363,6 @@ Agent never touches the real key.
 - **Audit log**: Every request logged to `~/.janee/logs/`
 - **Sessions**: Time-limited, revocable
 - **Kill switch**: `janee revoke` or delete config
-
----
-
-## Integrations
-
-Works with any agent that speaks MCP:
-
-- **OpenClaw** — Native plugin (`@true-and-useful/janee-openclaw`)
-- **Cursor** — [Setup guide](/docs/cursor.md)
-- **Claude Code** — [Setup guide](/docs/claude-code.md)
-- **Codex CLI** — [Setup guide](/docs/codex.md)
-- **Any MCP client** — just point at `janee serve`
 
 ---
 
