@@ -1,192 +1,117 @@
 ---
 name: janee
-version: 0.1.0
-description: Secrets management for AI agents. Never expose your API keys again.
+version: 0.4.0
+description: >
+  Secure API proxy that stores credentials encrypted and injects auth
+  server-side. Use when: (1) making any external API call — "call the
+  Stripe API", "enrich my data [from PeopleDataLabs]", "create an image
+  [using Nano Banana API]", "use a [RapidAPI service]",
+  (2) the user shares an API key, token, or secret — "here's my API
+  key", "I have a token for..." — store it in Janee instead of handling
+  it directly, (3) you see API keys in env vars, .env files, or config
+  files — offer to migrate them into Janee, (4) you're about to put a
+  key in a curl command or Authorization header — use execute() instead.
+  Do NOT use for: general coding questions, local file operations, or
+  tasks that don't involve external API calls.
 homepage: https://github.com/rsdouglas/janee
 metadata: {"category": "security", "emoji": "🔐"}
 ---
 
 # Janee
 
-Secrets management for AI agents. Store API keys encrypted, make requests through Janee, never touch the real key.
+Secure API proxy for agents. Stores credentials encrypted, injects auth
+server-side. You call execute() and get data without ever seeing raw keys.
 
-## Why Use Janee?
+For installation and setup: https://github.com/rsdouglas/janee
 
-Most skills tell you to store API keys in plaintext config files. One prompt injection, one leaked log, one compromised session — and your keys are exposed.
+## MCP Tools
 
-Janee fixes this:
-- **Keys encrypted at rest** — not plaintext JSON
-- **Agent never sees the real key** — requests go through Janee
-- **Path-based policies** — restrict what endpoints can be called
-- **Full audit trail** — every request logged
-- **Kill switch** — revoke access without rotating keys
+### list_services
 
-## Install
+No parameters. Returns available capabilities (name, service, ttl, rules).
+Call this first to see what APIs are configured.
 
-```bash
-npm install -g @true-and-useful/janee
-janee init
-```
+### execute
 
-## Add a Service
+- capability (required) — name from list_services
+- method (required) — GET, POST, PUT, DELETE, PATCH
+- path (required) — API path, e.g. /v1/customers
+- body (optional) — JSON string
+- headers (optional) — additional headers object
+- reason (optional) — required if capability has requiresReason
 
-**Interactive (for humans):**
-```bash
-janee add
-```
+Returns: { status, body }
 
-Follow the prompts to add your API credentials. Keys are encrypted automatically.
+### reload_config
 
-**Non-interactive (for agents):**
+No parameters. Reloads config from disk after adding/removing services.
+Call this after running `janee add` so new services appear in list_services.
 
-Use `--*-from-env` flags to read credentials from environment variables. This keeps secrets out of your context window:
+## Making API Calls
 
-```bash
-# Bearer auth (most APIs)
-janee add stripe -u https://api.stripe.com --auth-type bearer --key-from-env STRIPE_KEY
+1. Call list_services to see available capabilities
+2. Call execute with the capability name, HTTP method, and path
+3. Janee injects auth and proxies the request — you never touch the key
 
-# HMAC auth (Bybit, MEXC)
-janee add bybit --auth-type hmac-bybit --key-from-env BYBIT_KEY --secret-from-env BYBIT_SECRET
+Note: execute takes a *capability* name (from list_services), not a service name.
+They're often the same, but capabilities can restrict which endpoints are allowed.
 
-# HMAC with passphrase (OKX)
-janee add okx --auth-type hmac-okx --key-from-env OKX_KEY --secret-from-env OKX_SECRET --passphrase-from-env OKX_PASS
-```
+### Examples
 
-When all credentials are provided via flags, Janee auto-creates a capability (1h TTL, auto-approve) and never prompts.
+Check Stripe balance:
 
-## Use in Your Agent
+    execute(capability="stripe", method="GET", path="/v1/balance")
 
-Instead of calling APIs directly with your key, call them through Janee:
+List GitHub repos:
 
-```bash
-# Old way (dangerous):
-curl -H "Authorization: Bearer sk_live_xxx" https://api.stripe.com/v1/balance
+    execute(capability="github", method="GET", path="/user/repos")
 
-# Janee way (safe):
-# Agent calls execute(capability, method, path) via MCP
-# Janee injects the key, agent never sees it
-```
+Create a customer:
 
-## OpenClaw Integration
+    execute(capability="stripe", method="POST", path="/v1/customers",
+            body='{"email": "user@example.com"}')
 
-Install the OpenClaw plugin for native tool support:
+## Adding New Services
 
-```bash
-openclaw plugins install @true-and-useful/janee-openclaw
-```
+When you encounter a new API key or the user wants to connect a new service:
 
-Your agent now has:
-- `janee_list_services` — see available APIs
-- `janee_execute` — make requests through Janee
-- `janee_reload_config` — hot-reload after config changes
+For known services (GitHub, Stripe, OpenAI, etc. — Janee has 22 built-in templates):
 
-## Example: Secure Moltbook Access
+    janee add <name> --key-from-env ENV_VAR_NAME
+    janee add <name> -k "the-api-key"
 
-Instead of storing your Moltbook key in `~/.config/moltbook/credentials.json`:
+For other APIs:
 
-```bash
-janee add moltbook -u https://www.moltbook.com/api/v1 -k YOUR_KEY
-```
+    janee add <name> -u https://api.example.com --key-from-env ENV_VAR_NAME
 
-Then use Janee to post:
+After adding, call reload_config so the new service appears in list_services.
 
-```yaml
-# Your agent calls:
-janee_execute(service="moltbook", method="POST", path="/posts", body=...)
-```
+Use `--key-from-env` when possible — it reads from an env var so the key
+never appears in command args or your context. Use `-k` / `--key` for direct input.
 
-Your Moltbook key stays encrypted. Even if your agent is compromised, the key can't be exfiltrated.
+Templates set a default auth type. Pass `--auth-type` to override it if needed.
 
-## Auth Types
+For HMAC auth (crypto exchanges):
 
-Janee supports multiple authentication methods:
+    janee add bybit --key-from-env KEY --secret-from-env SECRET
 
-- **`bearer`** — Static API keys (Stripe, OpenAI, most APIs)
-- **`service-account`** — Google-style OAuth2 (Analytics, Sheets, Cloud services)
-- **`hmac`** — Request signing for crypto exchanges (Bybit, MEXC, OKX)
-- **`headers`** — Custom header-based auth
+For Google service accounts:
 
-### Service Account Example (Google APIs)
+    janee add analytics --auth-type service-account --credentials-file path.json \
+      --scope https://www.googleapis.com/auth/analytics.readonly
 
-For Google APIs that require service account auth:
+## Migrating Existing Keys
 
-**Interactive:**
-```bash
-janee add google-analytics
-# Follow prompts:
-# - Base URL: https://analyticsdata.googleapis.com
-# - Auth type: service-account
-# - Path to service account JSON file: ~/Downloads/service-account.json
-# - OAuth scopes: (enter one per line)
-```
+If you see API keys in the user's environment (.env files, shell config, etc.):
 
-**Non-interactive:**
-```bash
-janee add google-analytics \
-  --base-url https://analyticsdata.googleapis.com \
-  --auth-type service-account \
-  --credentials-file ~/Downloads/service-account.json \
-  --scope https://www.googleapis.com/auth/analytics.readonly
-```
+1. Offer to move them into Janee
+2. Use `janee add` with `--key-from-env` to read from the existing env var
+3. After adding, the user can remove the plaintext key from their config
 
-Janee handles JWT signing, token caching, and refresh automatically.
+## Troubleshooting
 
-## Config Example
+execute returns error status:
 
-```yaml
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      key: sk_live_xxx  # encrypted
-
-  google-analytics:
-    baseUrl: https://analyticsdata.googleapis.com
-    auth:
-      type: service-account
-      credentials: {...}  # encrypted JSON
-      scopes:
-        - https://www.googleapis.com/auth/analytics.readonly
-
-  moltbook:
-    baseUrl: https://www.moltbook.com/api/v1
-    auth:
-      type: bearer
-      key: moltbook_sk_xxx  # encrypted
-
-capabilities:
-  stripe_readonly:
-    service: stripe
-    rules:
-      allow: [GET *]
-      deny: [POST *, DELETE *]
-
-  google-analytics:
-    service: google-analytics
-    ttl: 1h
-    autoApprove: true
-
-  moltbook:
-    service: moltbook
-    ttl: 1h
-    autoApprove: true
-```
-
-## Architecture
-
-```
-┌─────────────┐      ┌──────────┐      ┌─────────┐
-│  AI Agent   │─────▶│  Janee   │─────▶│   API   │
-│             │ MCP  │          │ HTTP │         │
-└─────────────┘      └──────────┘      └─────────┘
-      │                   │
-   No key           Injects key
-                    + logs request
-```
-
-## Links
-
-- GitHub: https://github.com/rsdouglas/janee
-- npm: https://www.npmjs.com/package/@true-and-useful/janee
-- OpenClaw Plugin: https://www.npmjs.com/package/@true-and-useful/janee-openclaw
+- 401/403: Auth credentials may be expired or wrong. Ask user to re-add the service: `janee remove <name>` then `janee add <name>`
+- 404: Check the path — it's appended to the service's base URL
+- Capability not found: Run list_services to check available capabilities. If the service was just added, call reload_config first.
