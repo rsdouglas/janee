@@ -139,7 +139,9 @@ export async function addCommand(
       console.log('');
 
       baseUrl = template.baseUrl;
-      authType = template.auth.type;
+      authType = options.authType
+        ? (options.authType.toLowerCase() as typeof authType)
+        : template.auth.type;
 
       // Handle services with placeholder URLs (like Supabase)
       if (baseUrl.includes('<')) {
@@ -365,6 +367,12 @@ export async function addCommand(
         type: 'service-account',
         credentials: JSON.stringify(credentials),
         scopes
+      };
+    } else if (authType === 'headers' && template?.auth.fields.length === 1 && options.key) {
+      // Template tells us the header name, --key provides the value
+      auth = {
+        type: 'headers',
+        headers: { [template.auth.fields[0]]: options.key }
       };
     } else {
       // headers

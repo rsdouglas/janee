@@ -36,31 +36,31 @@ janee --version
 
 ## Step 2: Add a service
 
-Let's add GitHub as an example:
+Janee has built-in templates for common services (GitHub, Stripe, OpenAI, etc.) that auto-detect the base URL and auth type, so you often just need a name and a key.
+
+**Non-interactive (recommended for agents):**
+
+```bash
+# Known services — template handles the URL
+janee add github --key-from-env GITHUB_TOKEN
+janee add stripe --key-from-env STRIPE_KEY
+janee add openai --key-from-env OPENAI_API_KEY
+
+# Any REST API
+janee add myservice -u https://api.example.com --key-from-env MY_API_KEY
+```
+
+Using `--key-from-env` reads the key from an environment variable so it never appears in command args or agent context. You can also pass `--key` / `-k` directly.
+
+**Interactive:**
 
 ```bash
 janee add github
 ```
 
-You'll be prompted for:
-- **Base URL**: `https://api.github.com` (press Enter for default)
-- **Auth type**: Select `bearer` or `api-key`
-- **Token**: Paste your GitHub personal access token
+Follow the prompts for base URL, auth type, and token.
 
-Janee encrypts and stores this securely in `~/.janee/config.yaml`.
-
-### Other services
-
-```bash
-# Stripe
-janee add stripe --base-url https://api.stripe.com
-
-# OpenAI
-janee add openai --base-url https://api.openai.com
-
-# Any REST API
-janee add myservice --base-url https://api.example.com
-```
+Janee encrypts and stores credentials in `~/.janee/config.yaml`.
 
 ## Step 3: Configure Codex
 
@@ -189,8 +189,8 @@ Set up multiple services:
 
 ```bash
 janee add github
-janee add stripe --base-url https://api.stripe.com/v1
-janee add notion --base-url https://api.notion.com/v1
+janee add stripe -u https://api.stripe.com/v1
+janee add notion -u https://api.notion.com/v1
 ```
 
 Then use them all:
