@@ -4,6 +4,17 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-02-09
+
+### Fixed
+
+- **Flag handling** — `--auth-type` and `--key` flags now properly respected when service template is matched (#11)
+
+### Improved
+
+- **Documentation** — Rewrote SKILL.md as agent-facing operating manual (#12)
+- **Documentation** — Fixed README broken links, stale content, restructured sections (#13)
+
 ## [0.4.0] - 2026-02-05
 
 ### Added
