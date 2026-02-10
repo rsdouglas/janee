@@ -98,7 +98,7 @@ export async function serveMCPCommand(): Promise<void> {
         } else if (serviceConfig.auth.type === 'headers' && serviceConfig.auth.headers) {
           Object.assign(headers, serviceConfig.auth.headers);
         } else if (serviceConfig.auth.type === 'hmac' && serviceConfig.auth.apiKey && serviceConfig.auth.apiSecret) {
-          // MEXC-style HMAC - signature in URL params
+          // Generic HMAC - signs query string, adds signature as URL param (MEXC, etc.)
           const result = signMEXC({
             apiKey: serviceConfig.auth.apiKey,
             apiSecret: serviceConfig.auth.apiSecret,

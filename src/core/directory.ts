@@ -16,6 +16,11 @@ export interface ServiceTemplate {
   tags: string[];
 }
 
+// Auth type notes:
+// - 'hmac': Generic query-string signing (MEXC-style) - signs query string, adds signature as URL param
+// - 'hmac-bybit': Bybit-specific HMAC variant - signature in headers
+// - 'hmac-okx': OKX-specific HMAC variant - requires passphrase, base64 encoded
+
 /**
  * Built-in service directory
  */
@@ -113,14 +118,6 @@ export const serviceDirectory: ServiceTemplate[] = [
     baseUrl: 'https://api.mexc.com',
     auth: { type: 'hmac', fields: ['apiKey', 'apiSecret'] },
     docs: 'https://mexcdevelop.github.io/apidocs',
-    tags: ['crypto', 'exchange', 'trading']
-  },
-  {
-    name: 'binance',
-    description: 'Largest cryptocurrency exchange',
-    baseUrl: 'https://api.binance.com',
-    auth: { type: 'hmac', fields: ['apiKey', 'apiSecret'] },
-    docs: 'https://binance-docs.github.io/apidocs',
     tags: ['crypto', 'exchange', 'trading']
   },
   {

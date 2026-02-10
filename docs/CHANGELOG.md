@@ -4,6 +4,14 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Service Directory** — Remove Binance from directory (incompatible auth scheme)
+  - Binance was listed with `hmac` auth type but requires different signing than MEXC
+  - Generic `hmac` type is for MEXC-style query-string signing (signature as URL param)
+  - Clarified auth type documentation in code comments
+  - MEXC remains in directory with correct `hmac` auth type
+
 ## [0.5.0] - 2026-02-10
 
 ### Added
