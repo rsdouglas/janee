@@ -7,7 +7,9 @@
     "janee": "dist/cli/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "SKILL.md",
+    "scripts/postinstall.js"
   ],
   "repository": {
     "type": "git",
@@ -17,6 +19,7 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/postinstall.js",
     "build": "tsc && npm run build --workspaces",
     "build:cli": "tsc",
     "build:plugin": "npm run build --workspace=packages/openclaw-plugin",
