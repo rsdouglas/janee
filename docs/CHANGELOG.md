@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-10
+
 ### Changed
 
 - **Auth Types** — Rename `hmac` to `hmac-mexc` for clarity
