@@ -5,11 +5,18 @@ export async function logsCommand(options: {
   follow?: boolean;
   lines?: string;
   service?: string;
+  json?: boolean;
 }): Promise<void> {
   try {
     const auditLogger = new AuditLogger(getAuditDir());
 
     if (options.follow) {
+      // JSON mode not supported for follow (streaming)
+      if (options.json) {
+        console.log(JSON.stringify({ error: '--json not supported with --follow' }, null, 2));
+        process.exit(1);
+      }
+
       // Tail logs in real-time
       console.log('Following logs (Ctrl+C to stop)...\n');
 
@@ -30,6 +37,27 @@ export async function logsCommand(options: {
         service: options.service
       });
 
+      if (options.json) {
+        // JSON output
+        const output = events.reverse().map(event => ({
+          id: event.id,
+          timestamp: event.timestamp,
+          method: event.method,
+          service: event.service,
+          path: event.path,
+          statusCode: event.statusCode,
+          duration: event.duration,
+          agentId: event.agentId,
+          denied: event.denied,
+          denyReason: event.denyReason,
+          reason: event.reason
+        }));
+        
+        console.log(JSON.stringify({ logs: output }, null, 2));
+        return;
+      }
+
+      // Human-readable output
       if (events.length === 0) {
         console.log('No logs found.');
         console.log('');
@@ -57,9 +85,17 @@ export async function logsCommand(options: {
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ error: error.message }, null, 2));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }

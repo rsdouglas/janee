@@ -304,10 +304,13 @@ janee add              # Add a service (interactive)
 janee add stripe -u https://api.stripe.com -k sk_xxx  # Add with args
 janee remove <service> # Remove a service
 janee list             # List configured services
+janee list --json      # Output as JSON (for integrations)
 janee serve            # Start MCP server
 janee logs             # View audit log
 janee logs -f          # Tail audit log
+janee logs --json      # Output as JSON
 janee sessions         # List active sessions
+janee sessions --json  # Output as JSON
 janee revoke <id>      # Kill a session
 ```
 

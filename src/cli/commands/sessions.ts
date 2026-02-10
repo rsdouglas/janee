@@ -13,14 +13,18 @@ interface Session {
   revoked: boolean;
 }
 
-export async function sessionsCommand(): Promise<void> {
+export async function sessionsCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
     const sessionsFile = path.join(getConfigDir(), 'sessions.json');
 
     if (!fs.existsSync(sessionsFile)) {
-      console.log('No active sessions');
-      console.log('');
-      console.log('Sessions will appear when agents access APIs via MCP.');
+      if (options.json) {
+        console.log(JSON.stringify({ sessions: [] }, null, 2));
+      } else {
+        console.log('No active sessions');
+        console.log('');
+        console.log('Sessions will appear when agents access APIs via MCP.');
+      }
       return;
     }
 
@@ -33,6 +37,29 @@ export async function sessionsCommand(): Promise<void> {
       return !s.revoked && new Date(s.expiresAt) > now;
     });
 
+    if (options.json) {
+      // JSON output
+      const output = active.map(session => {
+        const expires = new Date(session.expiresAt);
+        const ttl = Math.floor((expires.getTime() - now.getTime()) / 1000);
+        
+        return {
+          id: session.id,
+          capability: session.capability,
+          service: session.service,
+          agentId: session.agentId,
+          reason: session.reason,
+          createdAt: session.createdAt,
+          expiresAt: session.expiresAt,
+          ttlSeconds: ttl
+        };
+      });
+      
+      console.log(JSON.stringify({ sessions: output }, null, 2));
+      return;
+    }
+
+    // Human-readable output
     if (active.length === 0) {
       console.log('No active sessions');
       return;
@@ -65,9 +92,17 @@ export async function sessionsCommand(): Promise<void> {
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ error: error.message }, null, 2));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }
