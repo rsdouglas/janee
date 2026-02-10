@@ -7,7 +7,7 @@
 
 ## Summary
 
-Add HTTP/SSE network transport support to `janee serve` and the OpenClaw plugin, enabling containerized agents to connect to a host-side Janee instance over the network instead of requiring Janee to be installed inside the container.
+Add HTTP/SSE network transport support to Janee's MCP server implementation (the `janee serve` command) and the OpenClaw plugin, enabling containerized agents to connect to a host-side Janee instance over the network instead of requiring Janee to be installed inside the container.
 
 ## Motivation
 
@@ -112,6 +112,20 @@ The MCP SDK (v1.26.0) already includes multiple transport implementations:
 - ✅ No websocket infrastructure required
 - ✅ Unidirectional (server → client) with HTTP POST for requests
 
+### Protocol Wire Format
+
+**⚠️ Note:** Verify current MCP SDK recommendation before implementation—SSE transport may have been superseded by StreamableHTTP in newer versions.
+
+MCP SSE transport uses:
+- **Server→Client**: SSE event stream for server-initiated messages
+- **Client→Server**: HTTP POST for client requests
+- **Message Format**: JSON-RPC 2.0 messages
+- **Endpoint**: Single endpoint (shown as `/mcp` in examples, but SDK-specific path needs confirmation)
+
+The SDK's `SSEServerTransport` constructor typically takes an endpoint path and Express app instance. Implementation details should be verified against current SDK documentation.
+
+**Decision needed before implementation:** Confirm actual endpoint paths and message format used by `SSEServerTransport` in MCP SDK v1.26.0+.
+
 ---
 
 ## Implementation
@@ -124,9 +138,11 @@ Add `--transport` and `--port` flags:
 
 ```bash
 janee serve                                # stdio (default, unchanged)
-janee serve --transport sse --port 9100    # SSE listener on :9100
+janee serve --transport sse --port 9101    # SSE listener on :9101
 janee serve --transport stdio              # explicit stdio
 ```
+
+**Note:** Port 9101 is used as an example. Choose any available port for your deployment.
 
 #### Code Changes
 
@@ -213,6 +229,13 @@ Add optional `url` field:
 }
 ```
 
+**Configuration Validation:**
+- `url` and `command` are mutually exclusive (if both present, `url` takes precedence)
+- Supported URL schemes: `http://`, `https://` (Phase 1)
+- Connection timeout: 30 seconds (configurable)
+- Retry behavior: Exponential backoff with max 3 attempts
+- If connection fails after retries, error is propagated to agent (no silent fallback to stdio)
+
 #### Plugin Code Changes
 
 **In `packages/openclaw-plugin/src/index.ts`:**
@@ -262,22 +285,56 @@ npm install -g @true-and-useful/janee
 janee init
 janee add stripe --auth-type bearer --key sk_live_...
 
-# Start Janee in network mode
-janee serve --transport sse --port 9100 --host 0.0.0.0
-# Janee MCP server listening on http://0.0.0.0:9100/mcp
+# Start Janee in network mode (see security note below before using 0.0.0.0)
+janee serve --transport sse --port 9101 --host localhost
+# Janee MCP server listening on http://localhost:9101/mcp
 ```
 
 ### Setup: Containerized Agent
 
-**Docker network:** Container can reach host on `172.30.0.1` (Docker bridge IP)
+**Docker network discovery varies by platform:**
 
-**OpenClaw config:**
+**Linux (Docker bridge network):**
+```bash
+# Discover bridge gateway IP (often 172.17.0.1)
+docker network inspect bridge | grep Gateway
+
+# Start Janee bound to bridge IP or 0.0.0.0 (see security warning)
+janee serve --transport sse --port 9101 --host 0.0.0.0
+
+# Container config
+url: "http://172.17.0.1:9101/mcp"
+```
+
+**macOS (Docker Desktop):**
+```bash
+# macOS uses VM networking; direct bridge IPs often aren't reachable
+# Use special DNS name instead
+janee serve --transport sse --port 9101 --host localhost
+
+# Container config
+url: "http://host.docker.internal:9101/mcp"
+```
+
+**Docker Compose:**
+```yaml
+# docker-compose.yml
+services:
+  agent:
+    image: my-agent
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - JANEE_URL=http://host.docker.internal:9101/mcp
+```
+
+**OpenClaw config example (Linux):**
 ```yaml
 extensions:
   - id: janee-openclaw
     enabled: true
     config:
-      url: "http://172.30.0.1:9100/mcp"
+      url: "http://172.17.0.1:9101/mcp"
 ```
 
 **Agent workflow:**
@@ -307,8 +364,31 @@ janee serve --transport sse  # binds to 127.0.0.1 only
 
 **Trust model:**
 - Same as current stdio: anyone who can connect is trusted
-- Suitable for local Docker bridge networks (container → host)
+- Suitable for trusted local connections (container → host on same machine)
 - Not suitable for public networks (no auth yet)
+
+**⚠️ WARNING: Network Exposure Risk**
+
+Binding to `0.0.0.0` (via `--host 0.0.0.0`) exposes Janee to **all containers** sharing the Docker bridge network and potentially other machines on your network. Any container can connect and access configured API credentials.
+
+**Only use non-localhost binding when:**
+- All containers on the network are trusted, OR
+- Docker network ACLs restrict access to specific containers, OR
+- Host firewall rules limit connections to specific IPs
+
+**Recommended configuration:**
+```bash
+# Safe: localhost only (requires platform-specific host access like host.docker.internal)
+janee serve --transport sse --port 9101 --host localhost
+
+# Docker Linux: bind to bridge IP only (more restrictive than 0.0.0.0)
+janee serve --transport sse --port 9101 --host 172.17.0.1
+
+# Unsafe: all interfaces (only if network is isolated)
+janee serve --transport sse --port 9101 --host 0.0.0.0
+```
+
+For most use cases, keep `--host localhost` and use platform-specific host access (`host.docker.internal` on macOS, bridge gateway IP on Linux).
 
 ### Phase 2: Authentication (Future)
 
@@ -342,7 +422,7 @@ No changes needed — existing audit logger (`AuditLogger`) logs every request r
 
 ---
 
-## Migration Path
+## Adoption Path
 
 ### For Local Users (No Change Required)
 
@@ -411,6 +491,43 @@ extensions:
 - Defeats the purpose (no secrets in container)
 
 **Decision:** Use network transports (HTTP/SSE).
+
+---
+
+## Drawbacks
+
+1. **Increased attack surface**: Network listening exposes Janee to any process that can connect, unlike stdio which only exposes to spawned child processes. Misconfiguration (binding to `0.0.0.0`) can expose API keys to untrusted containers.
+
+2. **Operational complexity**: Users must manage `janee serve` process lifecycle (systemd, Docker Compose health checks, process supervision). Stdio subprocess model handled this automatically.
+
+3. **Network configuration burden**: Docker networking varies significantly by platform (Linux bridge IPs vs macOS `host.docker.internal`), requiring platform-specific documentation and troubleshooting.
+
+4. **Error handling complexity**: Network failures (timeouts, connection drops, DNS issues) are harder to diagnose than stdio pipe failures. Adds retry logic, timeouts, and connection pooling concerns.
+
+---
+
+## Unresolved Questions
+
+1. **Multiple concurrent clients**: Should one `janee serve` instance support multiple concurrent agent connections, or one client at a time?
+   - **Impact**: Connection pooling, API rate limiting, session isolation
+   - **Proposed**: Start with single-client for simplicity, add multi-client in v0.6.0 if there's demand
+
+2. **Protocol version negotiation**: What happens if client and server have mismatched MCP protocol versions?
+   - **Proposed**: Return HTTP 400 with version error on handshake mismatch
+
+3. **Observability**: How do users monitor connection health and debug network issues?
+   - **Proposed**: Add `--log-level debug` flag showing connection events, request counts, error details
+
+4. **Graceful shutdown**: How does server notify connected clients it's shutting down?
+   - **Proposed**: Send SSE event `{"type": "shutdown"}` before closing connections
+
+5. **Multi-client support details**: If supporting multiple clients, how to handle:
+   - Conflicting API rate limits across clients
+   - Session isolation (one client shouldn't see another's session state)
+   - Fair queuing for slow API endpoints
+
+6. **MCP SDK transport evolution**: When/if MCP SDK deprecates SSE in favor of StreamableHTTP:
+   - **Proposed**: Add StreamableHTTP in v0.7.0, deprecate SSE in v1.0.0, remove SSE in v2.0.0
 
 ---
 
