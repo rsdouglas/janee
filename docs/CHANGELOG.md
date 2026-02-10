@@ -4,6 +4,20 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **SSRF Protection** — Validate URL origin before injecting auth credentials (#16)
+  - Prevents agents from exfiltrating secrets by passing absolute URLs as paths
+  - Request blocked if target origin doesn't match service baseUrl
+- **CI Hardening** — Remove `rm -f package-lock.json` from CI workflow (#17)
+  - Switch to `npm ci` for reproducible builds
+  - Prevents supply-chain attacks via unpinned dependencies
+- **Crypto Improvements** — Use `crypto.randomUUID()` for audit log IDs instead of Math.random() (#19)
+
+### Fixed
+
+- **Dependencies** — Move `@types/js-yaml` to devDependencies (#18)
+
 ## [0.4.1] - 2026-02-09
 
 ### Fixed
