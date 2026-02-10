@@ -15,13 +15,20 @@ import { logsCommand } from './commands/logs';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
 import { searchCommand } from './commands/search';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// Read version from package.json
+const packageJsonPath = join(__dirname, '../../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const version = packageJson.version || '0.0.0';
 
 const program = new Command();
 
 program
   .name('janee')
   .description('Secrets management for AI agents')
-  .version('0.2.1');
+  .version(version);
 
 // Commands
 program

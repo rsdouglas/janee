@@ -4,6 +4,12 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI Version Command** — `janee --version` now reports actual installed version instead of hardcoded 0.2.1 (#32)
+  - Reads version dynamically from package.json at runtime
+  - Previously version string was hardcoded and not updated with releases
+
 ## [0.4.3] - 2026-02-10
 
 ### Added
