@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-10
+
 ### Added
 
 - **JSON Output for Write Commands** — Add `--json` flag to all write commands (#43)
