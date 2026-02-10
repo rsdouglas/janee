@@ -1,6 +1,6 @@
 {
   "name": "@true-and-useful/janee",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Secrets management for AI agents via MCP",
   "main": "dist/index.js",
   "bin": {

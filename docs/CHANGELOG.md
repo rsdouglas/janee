@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-02-10
+
 ### Added
 
 - **JSON Output for CLI Commands** — Add `--json` flag to `janee list`, `janee sessions`, and `janee logs` for programmatic integrations (#34)
