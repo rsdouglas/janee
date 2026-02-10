@@ -10,7 +10,7 @@ import yaml from 'js-yaml';
 import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
 
 export interface AuthConfig {
-  type: 'bearer' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+  type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
   key?: string;
   apiKey?: string;
   apiSecret?: string;
@@ -146,7 +146,7 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
         strictDecryption,
         `bearer token for service "${name}"`
       );
-    } else if (svc.auth.type === 'hmac' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
+    } else if (svc.auth.type === 'hmac-mexc' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
       if (svc.auth.apiKey) {
         svc.auth.apiKey = tryDecrypt(
           svc.auth.apiKey,
@@ -205,7 +205,7 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
     const svc = service as ServiceConfig;
     if (svc.auth.type === 'bearer' && svc.auth.key) {
       svc.auth.key = encryptSecret(svc.auth.key, config.masterKey);
-    } else if (svc.auth.type === 'hmac' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
+    } else if (svc.auth.type === 'hmac-mexc' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
       if (svc.auth.apiKey) {
         svc.auth.apiKey = encryptSecret(svc.auth.apiKey, config.masterKey);
       }

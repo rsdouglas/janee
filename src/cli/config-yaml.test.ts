@@ -300,7 +300,7 @@ describe('Config YAML', () => {
           hmacService: {
             baseUrl: 'https://api2.com',
             auth: { 
-              type: 'hmac', 
+              type: 'hmac-mexc', 
               apiKey: 'hmac-key',
               apiSecret: 'hmac-secret'
             }

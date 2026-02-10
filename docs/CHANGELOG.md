@@ -4,15 +4,21 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Auth Types** — Rename `hmac` to `hmac-mexc` for clarity
+  - MEXC now explicitly uses `hmac-mexc` auth type
+  - Removes ambiguity about which HMAC scheme is used
+  - Each exchange has explicit auth type: `hmac-mexc`, `hmac-bybit`, `hmac-okx`
+  - **Breaking change**: Existing configs with `type: 'hmac'` need to be updated to `type: 'hmac-mexc'`
+
 ## [0.5.1] - 2026-02-10
 
 ### Fixed
 
 - **Service Directory** — Remove Binance from directory (incompatible auth scheme)
   - Binance was listed with `hmac` auth type but requires different signing than MEXC
-  - Generic `hmac` type is for MEXC-style query-string signing (signature as URL param)
   - Clarified auth type documentation in code comments
-  - MEXC remains in directory with correct `hmac` auth type
 
 ## [0.5.0] - 2026-02-10
 

@@ -36,9 +36,6 @@ export interface MEXCSigningParams {
   timestamp?: string;
 }
 
-// Note: MEXCSigningParams is used for generic 'hmac' auth type
-// (query-string signing pattern used by MEXC and similar exchanges)
-
 /**
  * Bybit HMAC signing
  * - GET/DELETE: sign timestamp + apiKey + recvWindow + queryString
@@ -95,10 +92,9 @@ export function signOKX(params: OKXSigningParams): SigningResult {
 }
 
 /**
- * Generic HMAC signing (MEXC-style)
+ * MEXC HMAC signing
  * - Signs query string with timestamp
- * - Returns signature as URL param and API key as header
- * - Used by MEXC and other exchanges with similar auth schemes
+ * - Returns signature as URL param and API key as header (X-MEXC-APIKEY)
  */
 export function signMEXC(params: MEXCSigningParams): SigningResult {
   const timestamp = params.timestamp || Date.now().toString();

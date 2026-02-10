@@ -127,7 +127,7 @@ export async function addCommand(
     }
 
     let baseUrl: string;
-    let authType: 'bearer' | 'basic' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+    let authType: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
 
     if (template) {
       // Use template from directory
@@ -183,7 +183,7 @@ export async function addCommand(
             },
             {
               name: 'hmac — Request signing (generic)',
-              value: 'hmac',
+              value: 'hmac-mexc',
               description: 'HMAC-based request signing with API key + secret'
             },
             {
@@ -246,7 +246,7 @@ export async function addCommand(
         type: 'bearer',
         key: `Basic ${encoded}`
       };
-    } else if (authType === 'hmac' || authType === 'hmac-bybit') {
+    } else if (authType === 'hmac-mexc' || authType === 'hmac-bybit') {
       let apiKey = options.key;
       let apiSecret = options.apiSecret;
 

@@ -29,7 +29,7 @@ export interface Capability {
 export interface ServiceConfig {
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+    type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
     key?: string;
     apiKey?: string;
     apiSecret?: string;

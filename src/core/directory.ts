@@ -9,7 +9,7 @@ export interface ServiceTemplate {
   description: string;
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'basic' | 'hmac' | 'hmac-bybit' | 'hmac-okx' | 'headers';
+    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers';
     fields: string[];  // Required fields to prompt for
   };
   docs?: string;
@@ -17,9 +17,9 @@ export interface ServiceTemplate {
 }
 
 // Auth type notes:
-// - 'hmac': Generic query-string signing (MEXC-style) - signs query string, adds signature as URL param
-// - 'hmac-bybit': Bybit-specific HMAC variant - signature in headers
-// - 'hmac-okx': OKX-specific HMAC variant - requires passphrase, base64 encoded
+// - 'hmac-mexc': MEXC-specific HMAC - signs query string, adds signature as URL param
+// - 'hmac-bybit': Bybit-specific HMAC - signature in headers
+// - 'hmac-okx': OKX-specific HMAC - requires passphrase, base64 encoded
 
 /**
  * Built-in service directory
@@ -116,7 +116,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     name: 'mexc',
     description: 'Cryptocurrency exchange',
     baseUrl: 'https://api.mexc.com',
-    auth: { type: 'hmac', fields: ['apiKey', 'apiSecret'] },
+    auth: { type: 'hmac-mexc', fields: ['apiKey', 'apiSecret'] },
     docs: 'https://mexcdevelop.github.io/apidocs',
     tags: ['crypto', 'exchange', 'trading']
   },
