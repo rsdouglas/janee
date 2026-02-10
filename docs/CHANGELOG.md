@@ -15,9 +15,6 @@ All notable changes to Janee will be documented in this file.
   - All values in `auth.type: headers` are now encrypted in config.yaml
   - Previously stored in plaintext while other auth types were encrypted
   - Existing configs automatically encrypt on next save
-
-### Security
-
 - **SSRF Protection** — Validate URL origin before injecting auth credentials (#16)
   - Prevents agents from exfiltrating secrets by passing absolute URLs as paths
   - Request blocked if target origin doesn't match service baseUrl
