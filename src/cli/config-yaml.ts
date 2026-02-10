@@ -46,6 +46,7 @@ export interface ServerConfig {
   port: number;
   host: string;
   logBodies?: boolean;  // Log request bodies in audit trail (default: true)
+  strictDecryption?: boolean;  // Fail hard on decryption errors (default: true)
 }
 
 export interface JaneeYAMLConfig {
@@ -57,78 +58,136 @@ export interface JaneeYAMLConfig {
   capabilities: Record<string, CapabilityConfig>;
 }
 
-const CONFIG_DIR = path.join(os.homedir(), '.janee');
-const CONFIG_FILE_YAML = path.join(CONFIG_DIR, 'config.yaml');
-const CONFIG_FILE_JSON = path.join(CONFIG_DIR, 'config.json');
-const AUDIT_DIR = path.join(CONFIG_DIR, 'logs');
-
-export function getAuditDir(): string {
-  return AUDIT_DIR;
+/**
+ * Get config directory path (dynamically computed for testability)
+ */
+export function getConfigDir(): string {
+  return path.join(os.homedir(), '.janee');
 }
 
-export function getConfigDir(): string {
-  return CONFIG_DIR;
+/**
+ * Get YAML config file path
+ */
+function getConfigFileYAML(): string {
+  return path.join(getConfigDir(), 'config.yaml');
+}
+
+/**
+ * Get JSON config file path
+ */
+function getConfigFileJSON(): string {
+  return path.join(getConfigDir(), 'config.json');
+}
+
+/**
+ * Get audit directory path
+ */
+export function getAuditDir(): string {
+  return path.join(getConfigDir(), 'logs');
 }
 
 /**
  * Check if using YAML config
  */
 export function hasYAMLConfig(): boolean {
-  return fs.existsSync(CONFIG_FILE_YAML);
+  return fs.existsSync(getConfigFileYAML());
+}
+
+/**
+ * Helper to decrypt a secret with strict/lenient mode
+ */
+function tryDecrypt(
+  encrypted: string,
+  masterKey: string,
+  strictMode: boolean,
+  fieldDescription: string
+): string {
+  try {
+    return decryptSecret(encrypted, masterKey);
+  } catch (error) {
+    if (strictMode) {
+      throw new Error(
+        `Failed to decrypt ${fieldDescription}. ` +
+        `This usually means the value is corrupted or the master key is wrong. ` +
+        `To allow plaintext values (not recommended), set server.strictDecryption: false in config.yaml`
+      );
+    }
+    // Lenient mode: assume plaintext
+    return encrypted;
+  }
 }
 
 /**
  * Load YAML configuration
  */
 export function loadYAMLConfig(): JaneeYAMLConfig {
-  if (!fs.existsSync(CONFIG_FILE_YAML)) {
+  if (!fs.existsSync(getConfigFileYAML())) {
     throw new Error('No YAML config found. Run migration or init.');
   }
 
-  const content = fs.readFileSync(CONFIG_FILE_YAML, 'utf8');
+  const content = fs.readFileSync(getConfigFileYAML(), 'utf8');
   const config = yaml.load(content) as JaneeYAMLConfig;
 
   // Ensure services and capabilities are objects (YAML parses empty sections as null)
   config.services = config.services || {};
   config.capabilities = config.capabilities || {};
 
-  // Decrypt service auth keys (or use as-is if not encrypted)
+  // Strict decryption mode (default: true)
+  const strictDecryption = config.server?.strictDecryption ?? true;
+
+  // Decrypt service auth keys
   for (const [name, service] of Object.entries(config.services)) {
     const svc = service as ServiceConfig;
+    
     if (svc.auth.type === 'bearer' && svc.auth.key) {
-      try {
-        svc.auth.key = decryptSecret(svc.auth.key, config.masterKey);
-      } catch {
-        // Key is plaintext, use as-is
-      }
+      svc.auth.key = tryDecrypt(
+        svc.auth.key,
+        config.masterKey,
+        strictDecryption,
+        `bearer token for service "${name}"`
+      );
     } else if (svc.auth.type === 'hmac' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
       if (svc.auth.apiKey) {
-        try {
-          svc.auth.apiKey = decryptSecret(svc.auth.apiKey, config.masterKey);
-        } catch {
-          // Key is plaintext, use as-is
-        }
+        svc.auth.apiKey = tryDecrypt(
+          svc.auth.apiKey,
+          config.masterKey,
+          strictDecryption,
+          `API key for service "${name}"`
+        );
       }
       if (svc.auth.apiSecret) {
-        try {
-          svc.auth.apiSecret = decryptSecret(svc.auth.apiSecret, config.masterKey);
-        } catch {
-          // Key is plaintext, use as-is
-        }
+        svc.auth.apiSecret = tryDecrypt(
+          svc.auth.apiSecret,
+          config.masterKey,
+          strictDecryption,
+          `API secret for service "${name}"`
+        );
       }
       if (svc.auth.passphrase) {
-        try {
-          svc.auth.passphrase = decryptSecret(svc.auth.passphrase, config.masterKey);
-        } catch {
-          // Passphrase is plaintext, use as-is
-        }
+        svc.auth.passphrase = tryDecrypt(
+          svc.auth.passphrase,
+          config.masterKey,
+          strictDecryption,
+          `passphrase for service "${name}"`
+        );
+      }
+    } else if (svc.auth.type === 'headers' && svc.auth.headers) {
+      // Decrypt each header value
+      for (const [headerName, headerValue] of Object.entries(svc.auth.headers)) {
+        svc.auth.headers[headerName] = tryDecrypt(
+          headerValue,
+          config.masterKey,
+          strictDecryption,
+          `header "${headerName}" for service "${name}"`
+        );
       }
     } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
-      try {
-        svc.auth.credentials = decryptSecret(svc.auth.credentials, config.masterKey);
-      } catch {
-        // Credentials are plaintext, use as-is
-      }
+      svc.auth.credentials = tryDecrypt(
+        svc.auth.credentials,
+        config.masterKey,
+        strictDecryption,
+        `service account credentials for service "${name}"`
+      );
     }
   }
 
@@ -156,6 +215,11 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
       if (svc.auth.passphrase) {
         svc.auth.passphrase = encryptSecret(svc.auth.passphrase, config.masterKey);
       }
+    } else if (svc.auth.type === 'headers' && svc.auth.headers) {
+      // Encrypt each header value
+      for (const headerName of Object.keys(svc.auth.headers)) {
+        svc.auth.headers[headerName] = encryptSecret(svc.auth.headers[headerName], config.masterKey);
+      }
     } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
       svc.auth.credentials = encryptSecret(svc.auth.credentials, config.masterKey);
     }
@@ -166,18 +230,18 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
     lineWidth: 120
   });
 
-  fs.writeFileSync(CONFIG_FILE_YAML, yamlContent, { mode: 0o600 });
+  fs.writeFileSync(getConfigFileYAML(), yamlContent, { mode: 0o600 });
 }
 
 /**
  * Initialize new YAML config
  */
 export function initYAMLConfig(): JaneeYAMLConfig {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { mode: 0o700, recursive: true });
+  if (!fs.existsSync(getConfigDir())) {
+    fs.mkdirSync(getConfigDir(), { mode: 0o700, recursive: true });
   }
 
-  if (fs.existsSync(CONFIG_FILE_YAML)) {
+  if (fs.existsSync(getConfigFileYAML())) {
     throw new Error('Config already exists');
   }
 
@@ -186,7 +250,8 @@ export function initYAMLConfig(): JaneeYAMLConfig {
     masterKey: generateMasterKey(),
     server: {
       port: 9119,
-      host: 'localhost'
+      host: 'localhost',
+      strictDecryption: true  // Fail hard on decryption errors (recommended)
     },
     services: {},
     capabilities: {}
@@ -243,16 +308,16 @@ export function addCapabilityYAML(
  * Migrate from JSON to YAML config
  */
 export function migrateToYAML(): void {
-  if (!fs.existsSync(CONFIG_FILE_JSON)) {
+  if (!fs.existsSync(getConfigFileJSON())) {
     throw new Error('No JSON config to migrate');
   }
 
-  if (fs.existsSync(CONFIG_FILE_YAML)) {
+  if (fs.existsSync(getConfigFileYAML())) {
     throw new Error('YAML config already exists');
   }
 
   // Load old JSON config
-  const oldConfig = JSON.parse(fs.readFileSync(CONFIG_FILE_JSON, 'utf8'));
+  const oldConfig = JSON.parse(fs.readFileSync(getConfigFileJSON(), 'utf8'));
 
   // Create new YAML config
   const newConfig: JaneeYAMLConfig = {
@@ -292,11 +357,11 @@ export function migrateToYAML(): void {
     lineWidth: 120
   });
 
-  fs.writeFileSync(CONFIG_FILE_YAML, yamlContent, { mode: 0o600 });
+  fs.writeFileSync(getConfigFileYAML(), yamlContent, { mode: 0o600 });
 
   console.log('✅ Migrated to YAML config');
-  console.log(`Old config backed up at: ${CONFIG_FILE_JSON}.bak`);
+  console.log(`Old config backed up at: ${getConfigFileJSON()}.bak`);
   
   // Backup old config
-  fs.renameSync(CONFIG_FILE_JSON, `${CONFIG_FILE_JSON}.bak`);
+  fs.renameSync(getConfigFileJSON(), `${getConfigFileJSON()}.bak`);
 }

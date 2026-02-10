@@ -6,6 +6,18 @@ All notable changes to Janee will be documented in this file.
 
 ### Security
 
+- **Strict Decryption Mode** — Fail hard on decryption errors by default (#22)
+  - New `server.strictDecryption` config option (default: `true`)
+  - When enabled, corrupted encrypted values or wrong master key cause immediate failure
+  - When disabled, falls back to plaintext (not recommended, for backwards compatibility only)
+  - Prevents silent use of corrupted encrypted data as API credentials
+- **Encrypt `auth.headers` Values** — Header-based auth now encrypted at rest (#20)
+  - All values in `auth.type: headers` are now encrypted in config.yaml
+  - Previously stored in plaintext while other auth types were encrypted
+  - Existing configs automatically encrypt on next save
+
+### Security
+
 - **SSRF Protection** — Validate URL origin before injecting auth credentials (#16)
   - Prevents agents from exfiltrating secrets by passing absolute URLs as paths
   - Request blocked if target origin doesn't match service baseUrl
