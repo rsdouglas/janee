@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-02-10
+
 ### Added
 
 - **Google Analytics Directory Template** — Add built-in template for Google Analytics Data API (#46)
