@@ -4,6 +4,20 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-02-10
+
+### Added
+
+- **Auto-install SKILL.md for coding agents** — Postinstall script automatically installs SKILL.md to `~/.claude/`, `~/.codex/`, and `~/.cursor/` skill directories on npm install (#27)
+  - Zero-config skill discovery for Claude Code, Codex, and Cursor
+  - Silent failure handling for permissions/CI environments
+  - Idempotent installation
+- **OpenClaw plugin skill** — SKILL.md now bundled with OpenClaw plugin for agent behavioral guidance (#30)
+  - Agents proactively offer to store API keys in Janee
+  - Agents route API calls through `janee_execute()`
+  - Agents suggest migrating keys from .env files
+  - Skill auto-injected into system prompt when plugin is enabled
+
 ## [0.4.2] - 2026-02-10
 
 ### Security
