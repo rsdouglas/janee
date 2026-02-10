@@ -9,9 +9,12 @@ All notable changes to Janee will be documented in this file.
 - **SSRF Protection** — Validate URL origin before injecting auth credentials (#16)
   - Prevents agents from exfiltrating secrets by passing absolute URLs as paths
   - Request blocked if target origin doesn't match service baseUrl
-- **CI Hardening** — Remove `rm -f package-lock.json` from CI workflow (#17)
-  - Switch to `npm ci` for reproducible builds
-  - Prevents supply-chain attacks via unpinned dependencies
+- **CI Security Trade-off Documented** — CI continues to use `rm -f package-lock.json && npm install` (#17)
+  - npm bug (https://github.com/npm/cli/issues/4828) prevents cross-platform lock files
+  - Mac-generated lock files lack Linux optional deps, breaking `npm ci` on Linux
+  - Trade-off: CI dependencies unpinned, but package-lock.json still provides local reproducibility
+  - Compensating control: small dep tree, local review with pinned versions
+  - Full rationale documented in CI workflow comments
 - **Crypto Improvements** — Use `crypto.randomUUID()` for audit log IDs instead of Math.random() (#19)
 
 ### Fixed
