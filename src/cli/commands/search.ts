@@ -22,13 +22,41 @@ function formatService(service: ServiceTemplate, verbose = false): string {
   return lines.join('\n');
 }
 
-export function searchCommand(query?: string, verbose = false): void {
+function serviceToJSON(service: ServiceTemplate) {
+  return {
+    name: service.name,
+    description: service.description,
+    baseUrl: service.baseUrl,
+    authType: service.auth.type,
+    authFields: service.auth.fields,
+    category: service.tags[0] || 'other',
+    tags: service.tags,
+    docs: service.docs
+  };
+}
+
+export function searchCommand(query?: string, options: { verbose?: boolean; json?: boolean } = {}): void {
+  const verbose = options.verbose || false;
+  const json = options.json || false;
+
   if (!query) {
-    // List all by category
+    // List all services
+    const categories = listByCategory();
+    const allServices: ServiceTemplate[] = [];
+    
+    for (const [_, services] of categories) {
+      allServices.push(...services);
+    }
+
+    if (json) {
+      console.log(JSON.stringify(allServices.map(serviceToJSON), null, 2));
+      return;
+    }
+
+    // Human-readable output
     console.log('📚 Janee Service Directory\n');
     console.log('Usage: janee search <query>\n');
     
-    const categories = listByCategory();
     for (const [category, services] of categories) {
       console.log(`\n${category.toUpperCase()}`);
       console.log('─'.repeat(40));
@@ -42,7 +70,13 @@ export function searchCommand(query?: string, verbose = false): void {
   }
 
   const results = searchDirectory(query);
-  
+
+  if (json) {
+    console.log(JSON.stringify(results.map(serviceToJSON), null, 2));
+    return;
+  }
+
+  // Human-readable output
   if (results.length === 0) {
     console.log(`No services found matching "${query}"`);
     console.log('\nRun "janee search" to see all available services');
