@@ -14,6 +14,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm ci
+      # Note: Using `npm install` instead of `npm ci` due to npm bug with optional dependencies
+      # across platforms (https://github.com/npm/cli/issues/4828). package-lock.json is still
+      # committed for local reproducibility, but CI regenerates it on Linux to include correct
+      # platform-specific optional deps (e.g., @rollup/rollup-linux-x64-gnu).
+      # Security trade-off documented in #17.
+      - run: npm install
       - run: npm run build
       - run: npm test
