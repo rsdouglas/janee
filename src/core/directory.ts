@@ -9,7 +9,7 @@ export interface ServiceTemplate {
   description: string;
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers';
+    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
     fields: string[];  // Required fields to prompt for
   };
   docs?: string;
@@ -20,6 +20,7 @@ export interface ServiceTemplate {
 // - 'hmac-mexc': MEXC-specific HMAC - signs query string, adds signature as URL param
 // - 'hmac-bybit': Bybit-specific HMAC - signature in headers
 // - 'hmac-okx': OKX-specific HMAC - requires passphrase, base64 encoded
+// - 'service-account': Google Cloud service account OAuth2 - requires credentialsFile and scope(s)
 
 /**
  * Built-in service directory
@@ -172,6 +173,14 @@ export const serviceDirectory: ServiceTemplate[] = [
   },
   
   // Analytics & Data
+  {
+    name: 'google-analytics',
+    description: 'Google Analytics Data API',
+    baseUrl: 'https://analyticsdata.googleapis.com',
+    auth: { type: 'service-account', fields: ['credentialsFile', 'scope'] },
+    docs: 'https://developers.google.com/analytics/devguides/reporting/data/v1',
+    tags: ['analytics', 'data', 'google']
+  },
   {
     name: 'posthog',
     description: 'Product analytics platform',
