@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-10
+
 ### Added
 
 - **Capability Management Commands** — New `janee cap` subcommand group for managing capabilities independently (#39)
