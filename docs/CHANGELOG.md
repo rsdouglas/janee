@@ -4,6 +4,8 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-02-10
+
 ### Added
 
 - **JSON Output for Search Command** — Add `--json` flag to `janee search` for programmatic directory access (#37)
