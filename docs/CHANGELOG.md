@@ -4,6 +4,18 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **JSON Output for Search Command** — Add `--json` flag to `janee search` for programmatic directory access (#37)
+  - `janee search <query> --json` outputs matching services as JSON array
+  - `janee search --json` outputs entire service directory
+  - Includes service metadata: name, description, baseUrl, authType, authFields, category, tags, docs
+  - Enables building service directory UIs in external applications
+- **Non-interactive Remove Command** — Add `--yes` flag to `janee remove` to skip confirmation prompt (#36)
+  - `janee remove <service> --yes` removes service without interactive confirmation
+  - Useful for programmatic integrations and backend adapters
+  - Follows convention of tools like npm, apt, rm -f
+
 ## [0.4.4] - 2026-02-10
 
 ### Added

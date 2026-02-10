@@ -54,6 +54,7 @@ program
 program
   .command('remove <service>')
   .description('Remove a service from Janee')
+  .option('-y, --yes', 'Skip confirmation prompt')
   .action(removeCommand);
 
 program
@@ -91,6 +92,7 @@ program
   .command('search [query]')
   .description('Search the service directory')
   .option('-v, --verbose', 'Show full details for each service')
-  .action((query, options) => searchCommand(query, options.verbose));
+  .option('--json', 'Output as JSON')
+  .action((query, options) => searchCommand(query, options));
 
 program.parse();

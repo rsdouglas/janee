@@ -2,7 +2,7 @@ import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 
-export async function removeCommand(serviceName: string): Promise<void> {
+export async function removeCommand(serviceName: string, options: { yes?: boolean } = {}): Promise<void> {
   try {
     // Check for YAML config
     if (!hasYAMLConfig()) {
@@ -18,8 +18,6 @@ export async function removeCommand(serviceName: string): Promise<void> {
       process.exit(1);
     }
 
-    const rl = readline.createInterface({ input, output });
-
     // Check for capabilities using this service
     const dependentCaps = Object.entries(config.capabilities)
       .filter(([_, cap]) => cap.service === serviceName)
@@ -31,16 +29,20 @@ export async function removeCommand(serviceName: string): Promise<void> {
       console.log();
     }
 
-    // Confirm deletion
-    const answer = await rl.question(
-      `Are you sure you want to remove service "${serviceName}"? This cannot be undone. (y/N): `
-    );
+    // Confirm deletion (skip if --yes flag is set)
+    if (!options.yes) {
+      const rl = readline.createInterface({ input, output });
 
-    rl.close();
+      const answer = await rl.question(
+        `Are you sure you want to remove service "${serviceName}"? This cannot be undone. (y/N): `
+      );
 
-    if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
-      console.log('❌ Cancelled');
-      return;
+      rl.close();
+
+      if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+        console.log('❌ Cancelled');
+        return;
+      }
     }
 
     // Remove service
