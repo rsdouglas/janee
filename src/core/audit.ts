@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 export interface APIRequest {
   service: string;
@@ -230,6 +231,6 @@ export class AuditLogger {
    * Generate unique ID for event
    */
   private generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+    return randomUUID();
   }
 }

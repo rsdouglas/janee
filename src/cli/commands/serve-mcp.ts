@@ -83,6 +83,12 @@ export async function serveMCPCommand(): Promise<void> {
         if (reqPath.startsWith('/')) reqPath = reqPath.slice(1);
         const targetUrl = new URL(reqPath, baseUrl);
 
+        // SSRF protection: validate origin matches service baseUrl (issue #16)
+        const serviceOrigin = new URL(serviceConfig.baseUrl).origin;
+        if (targetUrl.origin !== serviceOrigin) {
+          throw new Error(`Request blocked: URL origin ${targetUrl.origin} does not match service origin ${serviceOrigin}`);
+        }
+
         // Build headers
         const headers: Record<string, string> = { ...request.headers };
 
