@@ -15,6 +15,12 @@ import { logsCommand } from './commands/logs';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
 import { searchCommand } from './commands/search';
+import {
+  capabilityListCommand,
+  capabilityAddCommand,
+  capabilityEditCommand,
+  capabilityRemoveCommand
+} from './commands/capability';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -94,5 +100,46 @@ program
   .option('-v, --verbose', 'Show full details for each service')
   .option('--json', 'Output as JSON')
   .action((query, options) => searchCommand(query, options));
+
+// Capability management subcommands
+const cap = program.command('cap').description('Manage capabilities');
+
+cap
+  .command('list')
+  .description('List all capabilities')
+  .option('--json', 'Output as JSON')
+  .action(capabilityListCommand);
+
+cap
+  .command('add <name>')
+  .description('Add a new capability')
+  .requiredOption('-s, --service <service>', 'Service to use')
+  .option('-t, --ttl <duration>', 'TTL (e.g., 1h, 30m)', '1h')
+  .option('--auto-approve', 'Auto-approve requests')
+  .option('--no-auto-approve', 'Require manual approval')
+  .option('--requires-reason', 'Require reason for requests')
+  .option('--no-requires-reason', 'Do not require reason')
+  .option('--allow <pattern...>', 'Allow rules (e.g., "GET /v1/*")')
+  .option('--deny <pattern...>', 'Deny rules (e.g., "DELETE *")')
+  .action(capabilityAddCommand);
+
+cap
+  .command('edit <name>')
+  .description('Edit an existing capability')
+  .option('-t, --ttl <duration>', 'Update TTL (e.g., 1h, 30m)')
+  .option('--auto-approve', 'Enable auto-approve')
+  .option('--no-auto-approve', 'Disable auto-approve')
+  .option('--requires-reason', 'Require reason for requests')
+  .option('--no-requires-reason', 'Do not require reason')
+  .option('--allow <pattern...>', 'Replace allow rules')
+  .option('--deny <pattern...>', 'Replace deny rules')
+  .option('--clear-rules', 'Clear all rules')
+  .action(capabilityEditCommand);
+
+cap
+  .command('remove <name>')
+  .description('Remove a capability')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .action(capabilityRemoveCommand);
 
 program.parse();

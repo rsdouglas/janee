@@ -4,6 +4,17 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Capability Management Commands** — New `janee cap` subcommand group for managing capabilities independently (#39)
+  - `janee cap list` — List all capabilities (supports `--json`)
+  - `janee cap add <name> --service <service>` — Add capability with TTL, auto-approve, rules
+  - `janee cap edit <name>` — Edit existing capability (TTL, auto-approve, rules)
+  - `janee cap remove <name>` — Remove capability without removing parent service (supports `--yes`)
+  - Enables creating multiple capabilities per service (e.g., read-only, admin)
+  - Allows fine-grained control of TTL and allow/deny rules per capability
+  - Supports programmatic management via JSON output
+
 ## [0.4.5] - 2026-02-10
 
 ### Added
