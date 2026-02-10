@@ -14,11 +14,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      # Note: Using `npm install` instead of `npm ci` due to npm bug with optional dependencies
-      # across platforms (https://github.com/npm/cli/issues/4828). package-lock.json is still
-      # committed for local reproducibility, but CI regenerates it on Linux to include correct
-      # platform-specific optional deps (e.g., @rollup/rollup-linux-x64-gnu).
-      # Security trade-off documented in #17.
-      - run: npm install
+      # Note: CI deletes package-lock.json before install due to npm bug with optional dependencies
+      # across platforms (https://github.com/npm/cli/issues/4828). Mac-generated lock file lacks
+      # Linux optional deps (@rollup/rollup-linux-x64-gnu), causing CI failures even with npm install.
+      # 
+      # Security trade-off: Dependencies not pinned in CI (supply-chain risk), but package-lock.json
+      # is still committed for local dev reproducibility. This is a known limitation until npm fixes
+      # the upstream bug. For Janee's threat model, the risk is acceptable:
+      # - Small project with manageable dependencies
+      # - Dependencies reviewed locally (where lock file works)
+      # - Alternative would be no CI testing, which is worse
+      #
+      # Documented in #17.
+      - run: rm -f package-lock.json && npm install
       - run: npm run build
       - run: npm test
