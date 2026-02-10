@@ -2,11 +2,15 @@ import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
 import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 
-export async function removeCommand(serviceName: string, options: { yes?: boolean } = {}): Promise<void> {
+export async function removeCommand(serviceName: string, options: { yes?: boolean; json?: boolean } = {}): Promise<void> {
   try {
     // Check for YAML config
     if (!hasYAMLConfig()) {
-      console.error('❌ No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
+      } else {
+        console.error('❌ No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -14,7 +18,11 @@ export async function removeCommand(serviceName: string, options: { yes?: boolea
 
     // Check if service exists
     if (!config.services[serviceName]) {
-      console.error(`❌ Service "${serviceName}" not found`);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: `Service "${serviceName}" not found` }));
+      } else {
+        console.error(`❌ Service "${serviceName}" not found`);
+      }
       process.exit(1);
     }
 
@@ -23,14 +31,14 @@ export async function removeCommand(serviceName: string, options: { yes?: boolea
       .filter(([_, cap]) => cap.service === serviceName)
       .map(([name, _]) => name);
 
-    if (dependentCaps.length > 0) {
+    if (!options.json && dependentCaps.length > 0) {
       console.log(`⚠️  The following capabilities depend on this service:`);
       dependentCaps.forEach(cap => console.log(`   - ${cap}`));
       console.log();
     }
 
-    // Confirm deletion (skip if --yes flag is set)
-    if (!options.yes) {
+    // Confirm deletion (skip if --yes flag is set or --json)
+    if (!options.yes && !options.json) {
       const rl = readline.createInterface({ input, output });
 
       const answer = await rl.question(
@@ -55,17 +63,33 @@ export async function removeCommand(serviceName: string, options: { yes?: boolea
 
     saveYAMLConfig(config);
 
-    console.log(`✅ Service "${serviceName}" removed successfully!`);
-
-    if (dependentCaps.length > 0) {
-      console.log(`✅ Removed ${dependentCaps.length} dependent capability(ies)`);
+    if (options.json) {
+      console.log(JSON.stringify({
+        ok: true,
+        service: serviceName,
+        dependentCapabilities: dependentCaps,
+        message: `Service "${serviceName}" removed successfully`
+      }));
+    } else {
+      console.log(`✅ Service "${serviceName}" removed successfully!`);
+      if (dependentCaps.length > 0) {
+        console.log(`✅ Removed ${dependentCaps.length} dependent capability(ies)`);
+      }
     }
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: error.message }));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }

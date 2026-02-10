@@ -47,7 +47,7 @@ program
   .description('Add a service to Janee (interactive if no args)')
   .option('-u, --url <url>', 'Base URL of the service')
   .option('-k, --key <key>', 'API key for the service')
-  .option('--auth-type <type>', 'Authentication type (bearer/basic/hmac/hmac-bybit/hmac-okx/headers/service-account)')
+  .option('--auth-type <type>', 'Authentication type (bearer/basic/hmac-mexc/hmac-bybit/hmac-okx/headers/service-account)')
   .option('--api-secret <secret>', 'API secret (for hmac auth types)')
   .option('--passphrase <passphrase>', 'Passphrase (for hmac-okx)')
   .option('--key-from-env <var>', 'Read API key from environment variable')
@@ -55,12 +55,14 @@ program
   .option('--passphrase-from-env <var>', 'Read passphrase from environment variable')
   .option('--credentials-file <path>', 'Path to service account JSON file (for service-account auth type)')
   .option('--scope <scope...>', 'OAuth scope(s) for service-account auth type')
+  .option('--json', 'Output as JSON')
   .action(addCommand);
 
 program
   .command('remove <service>')
   .description('Remove a service from Janee')
   .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--json', 'Output as JSON')
   .action(removeCommand);
 
 program
@@ -121,6 +123,7 @@ cap
   .option('--no-requires-reason', 'Do not require reason')
   .option('--allow <pattern...>', 'Allow rules (e.g., "GET /v1/*")')
   .option('--deny <pattern...>', 'Deny rules (e.g., "DELETE *")')
+  .option('--json', 'Output as JSON')
   .action(capabilityAddCommand);
 
 cap
@@ -134,12 +137,14 @@ cap
   .option('--allow <pattern...>', 'Replace allow rules')
   .option('--deny <pattern...>', 'Replace deny rules')
   .option('--clear-rules', 'Clear all rules')
+  .option('--json', 'Output as JSON')
   .action(capabilityEditCommand);
 
 cap
   .command('remove <name>')
   .description('Remove a capability')
   .option('-y, --yes', 'Skip confirmation prompt')
+  .option('--json', 'Output as JSON')
   .action(capabilityRemoveCommand);
 
 program.parse();

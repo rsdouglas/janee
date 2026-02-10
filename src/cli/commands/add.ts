@@ -32,12 +32,17 @@ export async function addCommand(
     passphraseFromEnv?: string;
     credentialsFile?: string;
     scope?: string | string[];
+    json?: boolean;
   } = {}
 ): Promise<void> {
   try {
     // Check for YAML config
     if (!hasYAMLConfig()) {
-      console.error('❌ No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
+      } else {
+        console.error('❌ No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -82,12 +87,20 @@ export async function addCommand(
 
     // Service name
     if (!serviceName) {
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Service name is required' }));
+        process.exit(1);
+      }
       serviceName = await getRL().question('Service name (or search term): ');
       serviceName = serviceName.trim();
     }
 
     if (!serviceName) {
-      console.error('❌ Service name is required');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Service name is required' }));
+      } else {
+        console.error('❌ Service name is required');
+      }
       process.exit(1);
     }
 
@@ -131,12 +144,14 @@ export async function addCommand(
 
     if (template) {
       // Use template from directory
-      console.log(`\n📦 Using template for ${template.name}`);
-      console.log(`   ${template.description}`);
-      if (template.docs) {
-        console.log(`   Docs: ${template.docs}`);
+      if (!options.json) {
+        console.log(`\n📦 Using template for ${template.name}`);
+        console.log(`   ${template.description}`);
+        if (template.docs) {
+          console.log(`   Docs: ${template.docs}`);
+        }
+        console.log('');
       }
-      console.log('');
 
       baseUrl = template.baseUrl;
       authType = options.authType
@@ -150,7 +165,9 @@ export async function addCommand(
       }
     } else {
       // Manual configuration
-      console.log('\n📝 Manual service configuration');
+      if (!options.json) {
+        console.log('\n📝 Manual service configuration');
+      }
 
       // Base URL
       baseUrl = options.url || '';
@@ -294,7 +311,7 @@ export async function addCommand(
         passphrase: passphrase.trim()
       };
     } else if (authType === 'service-account') {
-      console.log('\n📋 Service Account Setup');
+      if (!options.json) console.log('\n📋 Service Account Setup');
 
       // Get credentials file path
       let credentialsPath = options.credentialsFile;
@@ -339,7 +356,7 @@ export async function addCommand(
         scopes = Array.isArray(options.scope) ? options.scope : [options.scope];
       } else {
         // Interactive: ask for scopes
-        console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
+        if (!options.json) console.log('\nEnter OAuth scopes (one per line, empty line to finish):');
 
         while (true) {
           const scope = await getRL().question('  ');
@@ -354,7 +371,7 @@ export async function addCommand(
       }
 
       // Test authentication
-      console.log('\n🔐 Testing authentication...');
+      if (!options.json) console.log('\n🔐 Testing authentication...');
       try {
         await testServiceAccountAuth(credentials, scopes);
         console.log('✅ Authentication successful');
@@ -376,7 +393,7 @@ export async function addCommand(
       };
     } else {
       // headers
-      console.log('Enter headers as key:value pairs (empty line to finish):');
+      if (!options.json) console.log('Enter headers as key:value pairs (empty line to finish):');
       const headers: Record<string, string> = {};
 
       while (true) {
@@ -409,6 +426,31 @@ export async function addCommand(
     };
 
     saveYAMLConfig(config);
+
+    if (options.json) {
+      // JSON output for non-interactive/json mode
+      const result: any = {
+        ok: true,
+        service: serviceName,
+        message: `Added service "${serviceName}"`
+      };
+      
+      // If readline was never opened, we're fully non-interactive.
+      // Auto-create a capability with sensible defaults.
+      if (!prompted && !config.capabilities[serviceName]) {
+        config.capabilities[serviceName] = {
+          service: serviceName,
+          ttl: '1h',
+          autoApprove: true,
+        };
+        saveYAMLConfig(config);
+        result.capability = serviceName;
+        result.capabilityMessage = `Added capability "${serviceName}" (1h TTL, auto-approve)`;
+      }
+      
+      console.log(JSON.stringify(result));
+      return;
+    }
 
     console.log(`✅ Added service "${serviceName}"`);
     console.log();
@@ -474,9 +516,17 @@ export async function addCommand(
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: error.message }));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }

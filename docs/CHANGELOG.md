@@ -4,6 +4,18 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **JSON Output for Write Commands** — Add `--json` flag to all write commands (#43)
+  - `janee add` — Returns `{ok, service, message, capability?, capabilityMessage?}`
+  - `janee remove` — Returns `{ok, service, dependentCapabilities, message}`
+  - `janee cap add` — Returns `{ok, capability, service, ttl, message}`
+  - `janee cap edit` — Returns `{ok, capability, message}`
+  - `janee cap remove` — Returns `{ok, capability, message}`
+  - Errors return `{ok: false, error: "..."}`
+  - Enables programmatic CLI usage from backend integrations (The Office plugin)
+  - `--json` automatically skips interactive prompts and confirmation dialogs
+
 ## [0.6.0] - 2026-02-10
 
 ### Changed

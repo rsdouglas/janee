@@ -95,11 +95,16 @@ export async function capabilityAddCommand(
     requiresReason?: boolean;
     allow?: string[];
     deny?: string[];
+    json?: boolean;
   }
 ): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
-      console.error('❌ No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
+      } else {
+        console.error('❌ No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -107,19 +112,31 @@ export async function capabilityAddCommand(
 
     // Check if capability already exists
     if (config.capabilities[name]) {
-      console.error(`❌ Capability "${name}" already exists. Use 'janee cap edit' to modify it.`);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" already exists. Use 'janee cap edit' to modify it.` }));
+      } else {
+        console.error(`❌ Capability "${name}" already exists. Use 'janee cap edit' to modify it.`);
+      }
       process.exit(1);
     }
 
     // Service is required
     if (!options.service) {
-      console.error('❌ --service is required');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: '--service is required' }));
+      } else {
+        console.error('❌ --service is required');
+      }
       process.exit(1);
     }
 
     // Check if service exists
     if (!config.services[options.service]) {
-      console.error(`❌ Service "${options.service}" not found. Add it first with 'janee add'.`);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: `Service "${options.service}" not found. Add it first with 'janee add'.` }));
+      } else {
+        console.error(`❌ Service "${options.service}" not found. Add it first with 'janee add'.`);
+      }
       process.exit(1);
     }
 
@@ -145,15 +162,33 @@ export async function capabilityAddCommand(
     config.capabilities[name] = capability;
     saveYAMLConfig(config);
 
-    console.log(`✅ Added capability "${name}"`);
-    console.log(`   Service: ${capability.service}`);
-    console.log(`   TTL: ${capability.ttl}`);
+    if (options.json) {
+      console.log(JSON.stringify({
+        ok: true,
+        capability: name,
+        service: capability.service,
+        ttl: capability.ttl,
+        message: `Added capability "${name}"`
+      }));
+    } else {
+      console.log(`✅ Added capability "${name}"`);
+      console.log(`   Service: ${capability.service}`);
+      console.log(`   TTL: ${capability.ttl}`);
+    }
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: error.message }));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }
@@ -168,11 +203,16 @@ export async function capabilityEditCommand(
     allow?: string[];
     deny?: string[];
     clearRules?: boolean;
+    json?: boolean;
   }
 ): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
-      console.error('❌ No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
+      } else {
+        console.error('❌ No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -180,7 +220,11 @@ export async function capabilityEditCommand(
 
     // Check if capability exists
     if (!config.capabilities[name]) {
-      console.error(`❌ Capability "${name}" not found`);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" not found` }));
+      } else {
+        console.error(`❌ Capability "${name}" not found`);
+      }
       process.exit(1);
     }
 
@@ -214,13 +258,29 @@ export async function capabilityEditCommand(
 
     saveYAMLConfig(config);
 
-    console.log(`✅ Updated capability "${name}"`);
+    if (options.json) {
+      console.log(JSON.stringify({
+        ok: true,
+        capability: name,
+        message: `Updated capability "${name}"`
+      }));
+    } else {
+      console.log(`✅ Updated capability "${name}"`);
+    }
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: error.message }));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }
@@ -228,11 +288,15 @@ export async function capabilityEditCommand(
 
 export async function capabilityRemoveCommand(
   name: string,
-  options: { yes?: boolean } = {}
+  options: { yes?: boolean; json?: boolean } = {}
 ): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
-      console.error('❌ No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
+      } else {
+        console.error('❌ No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -240,12 +304,16 @@ export async function capabilityRemoveCommand(
 
     // Check if capability exists
     if (!config.capabilities[name]) {
-      console.error(`❌ Capability "${name}" not found`);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" not found` }));
+      } else {
+        console.error(`❌ Capability "${name}" not found`);
+      }
       process.exit(1);
     }
 
-    // Confirm deletion (skip if --yes flag is set)
-    if (!options.yes) {
+    // Confirm deletion (skip if --yes flag is set or --json)
+    if (!options.yes && !options.json) {
       const readline = await import('readline/promises');
       const { stdin: input, stdout: output } = await import('process');
       const rl = readline.createInterface({ input, output });
@@ -266,13 +334,29 @@ export async function capabilityRemoveCommand(
     delete config.capabilities[name];
     saveYAMLConfig(config);
 
-    console.log(`✅ Capability "${name}" removed successfully!`);
+    if (options.json) {
+      console.log(JSON.stringify({
+        ok: true,
+        capability: name,
+        message: `Capability "${name}" removed successfully`
+      }));
+    } else {
+      console.log(`✅ Capability "${name}" removed successfully!`);
+    }
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: error.message }));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }
