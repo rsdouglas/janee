@@ -4,6 +4,15 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Google Analytics Directory Template** — Add built-in template for Google Analytics Data API (#46)
+  - Service name: `google-analytics`
+  - Base URL: `https://analyticsdata.googleapis.com`
+  - Auth type: `service-account` (OAuth2 with service account credentials)
+  - Default scope: `https://www.googleapis.com/auth/analytics.readonly`
+  - Enables `janee add google-analytics` for quick setup
+
 ## [0.7.1] - 2026-02-10
 
 ### Fixed
