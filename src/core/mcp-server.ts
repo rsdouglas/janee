@@ -328,11 +328,14 @@ export function makeAPIRequest(
     const client = targetUrl.protocol === 'https:' ? https : http;
 
     const options = {
+      hostname: targetUrl.hostname,
+      port: targetUrl.port,
+      path: targetUrl.pathname + targetUrl.search,
       method: request.method,
       headers: request.headers
     };
 
-    const req = client.request(targetUrl, options, (res) => {
+    const req = client.request(options, (res) => {
       let body = '';
 
       res.on('data', (chunk) => {
