@@ -3,6 +3,7 @@
   "name": "Janee",
   "description": "Secrets management for AI agents - secure API access with audit logging",
   "version": "0.1.5",
+  "skills": ["skills"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

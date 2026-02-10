@@ -12,6 +12,7 @@
   "files": [
     "dist",
     "openclaw.plugin.json",
+    "skills",
     "README.md"
   ],
   "scripts": {
