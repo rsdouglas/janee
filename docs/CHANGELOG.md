@@ -4,6 +4,14 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **JSON Output for CLI Commands** — Add `--json` flag to `janee list`, `janee sessions`, and `janee logs` for programmatic integrations (#34)
+  - `janee list --json` outputs structured service/capability data (no secrets)
+  - `janee sessions --json` outputs active session details with TTL in seconds
+  - `janee logs --json` outputs audit log entries (not supported with `--follow`)
+  - Enables integration with RPC brokers and backend systems (e.g., The Office plugin system)
+
 ### Fixed
 
 - **CLI Version Command** — `janee --version` now reports actual installed version instead of hardcoded 0.2.1 (#32)

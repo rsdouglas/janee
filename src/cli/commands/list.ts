@@ -1,9 +1,13 @@
 import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
 
-export async function listCommand(): Promise<void> {
+export async function listCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
-      console.log('No config found. Run `janee init` first.');
+      if (options.json) {
+        console.log(JSON.stringify({ error: 'No config found' }, null, 2));
+      } else {
+        console.log('No config found. Run `janee init` first.');
+      }
       process.exit(1);
     }
 
@@ -11,6 +15,33 @@ export async function listCommand(): Promise<void> {
     const serviceNames = Object.keys(config.services);
     const capabilityNames = Object.keys(config.capabilities);
 
+    if (options.json) {
+      // JSON output - no secrets
+      const services = serviceNames.map(name => {
+        const service = config.services[name];
+        return {
+          name,
+          baseUrl: service.baseUrl,
+          authType: service.auth.type
+        };
+      });
+
+      const capabilities = capabilityNames.map(name => {
+        const cap = config.capabilities[name];
+        return {
+          name,
+          service: cap.service,
+          ttl: cap.ttl,
+          allowRules: cap.rules?.allow?.length || 0,
+          denyRules: cap.rules?.deny?.length || 0
+        };
+      });
+
+      console.log(JSON.stringify({ services, capabilities }, null, 2));
+      return;
+    }
+
+    // Human-readable output
     if (serviceNames.length === 0) {
       console.log('No services configured yet.');
       console.log('');
@@ -44,9 +75,17 @@ export async function listCommand(): Promise<void> {
 
   } catch (error) {
     if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
+      if (options.json) {
+        console.log(JSON.stringify({ error: error.message }, null, 2));
+      } else {
+        console.error('❌ Error:', error.message);
+      }
     } else {
-      console.error('❌ Unknown error occurred');
+      if (options.json) {
+        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
+      } else {
+        console.error('❌ Unknown error occurred');
+      }
     }
     process.exit(1);
   }

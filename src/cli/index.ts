@@ -64,6 +64,7 @@ program
 program
   .command('list')
   .description('List configured services')
+  .option('--json', 'Output as JSON')
   .action(listCommand);
 
 program
@@ -72,11 +73,13 @@ program
   .option('-f, --follow', 'Follow logs in real-time')
   .option('-n, --lines <count>', 'Number of recent logs to show', '20')
   .option('-s, --service <name>', 'Filter by service')
+  .option('--json', 'Output as JSON (not supported with --follow)')
   .action(logsCommand);
 
 program
   .command('sessions')
   .description('List active sessions')
+  .option('--json', 'Output as JSON')
   .action(sessionsCommand);
 
 program
