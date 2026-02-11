@@ -44,6 +44,37 @@ Enable the plugin in your agent config:
 }
 ```
 
+### Containerized Deployments
+
+For running OpenClaw in a Docker container while keeping Janee (and your secrets) on the host:
+
+```json5
+{
+  agents: {
+    list: [{
+      id: "main",
+      tools: { 
+        allow: ["janee"]
+      },
+      extensions: {
+        janee: {
+          url: "http://host.docker.internal:9100/mcp"  // macOS/Windows
+          // or "http://172.17.0.1:9100/mcp" for Linux
+        }
+      }
+    }]
+  }
+}
+```
+
+Then start Janee with HTTP transport on the host:
+
+```bash
+janee serve --transport http --port 9100
+```
+
+See [docs/container-openclaw.md](../../docs/container-openclaw.md) for full setup instructions.
+
 ## Usage
 
 The plugin exposes two tools to your agent:
