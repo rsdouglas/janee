@@ -260,14 +260,6 @@ janee serve            # Start MCP server
 - **GitHub:** https://github.com/rsdouglas/janee
 - **npm:** https://www.npmjs.com/package/@true-and-useful/janee
 
-## Coordination
-
-- **#janee** on Slack (C0ACA483B4N) — Team coordination
-- **Ross** — Maintainer, review significant PRs
-- **Jan** — DevRel, handles announcements and social media
-
-When you ship a release, tell Jan so they can announce it.
-
 ## Commit Message Format
 
 Keep it short and descriptive:
