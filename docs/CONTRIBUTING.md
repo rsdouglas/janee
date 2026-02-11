@@ -1,5 +1,15 @@
 # Contributing to Janee
 
+## Pull Request Workflow
+
+When you're ready to contribute changes:
+
+1. Commit your changes to a feature branch
+2. Push the branch to GitHub
+3. Open a pull request against the `main` branch
+4. Review the PR Checklist below to ensure your PR is ready
+5. Wait for review and address any feedback
+
 ## PR Checklist
 
 Before submitting a PR, review this checklist. Not everything applies to every PR — use judgment.
