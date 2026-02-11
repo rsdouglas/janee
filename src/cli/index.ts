@@ -68,6 +68,9 @@ program
 program
   .command('serve')
   .description('Start Janee MCP server')
+  .option('-t, --transport <type>', 'Transport type (stdio|http)', 'stdio')
+  .option('-p, --port <number>', 'Port for network transport (default: 9100)', '9100')
+  .option('--host <host>', 'Host to bind to (default: localhost)', 'localhost')
   .action(serveCommand);
 
 program

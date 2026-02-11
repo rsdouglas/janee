@@ -7,6 +7,11 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "url": {
+        "type": "string",
+        "description": "Janee server URL (e.g., http://172.30.0.1:9100/mcp or http://host.docker.internal:9100/mcp). Omit to use local stdio."
+      }
+    }
   }
 }

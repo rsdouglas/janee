@@ -1,5 +1,5 @@
 import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import { createMCPServer, startMCPServer, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
+import { createMCPServer, startMCPServer, startMCPServerHTTP, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
 import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
@@ -32,8 +32,26 @@ function loadConfigForMCP(): ReloadResult {
   return { capabilities, services };
 }
 
-export async function serveMCPCommand(): Promise<void> {
+export interface ServeMCPOptions {
+  transport?: 'stdio' | 'http';
+  port?: string;
+  host?: string;
+}
+
+export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<void> {
   try {
+    // Default options
+    const transport = options.transport || 'stdio';
+    const port = parseInt(options.port || '9100');
+    const host = options.host || 'localhost';
+
+    // Validate transport type
+    if (transport !== 'stdio' && transport !== 'http') {
+      console.error(`❌ Invalid transport type: ${transport}`);
+      console.error('Valid options: stdio, http');
+      process.exit(1);
+    }
+
     // Check for YAML config
     if (!hasYAMLConfig()) {
       console.error('❌ YAML config required for MCP mode');
@@ -51,7 +69,7 @@ export async function serveMCPCommand(): Promise<void> {
 
     // Load initial config
     const { capabilities, services } = loadConfigForMCP();
-    
+
     // Keep a mutable reference to services for the onExecute closure
     let currentServices = services;
 
@@ -61,14 +79,14 @@ export async function serveMCPCommand(): Promise<void> {
       services,
       sessionManager,
       auditLogger,
-      
+
       onReloadConfig: () => {
         const result = loadConfigForMCP();
         // Update our local reference for onExecute
         currentServices = result.services;
         return result;
       },
-      
+
       onExecute: async (session, request) => {
         // Get service config (use currentServices for hot-reload support)
         const serviceConfig = currentServices.get(request.service);
@@ -136,13 +154,13 @@ export async function serveMCPCommand(): Promise<void> {
           try {
             const credentials = JSON.parse(serviceConfig.auth.credentials) as ServiceAccountCredentials;
             validateServiceAccountCredentials(credentials);
-            
+
             const accessToken = await getAccessToken(
               request.service,
               credentials,
               serviceConfig.auth.scopes
             );
-            
+
             headers['Authorization'] = `Bearer ${accessToken}`;
           } catch (error) {
             // If we get a 401, clear cache and retry once
@@ -179,8 +197,12 @@ export async function serveMCPCommand(): Promise<void> {
       }
     });
 
-    // Start server
-    await startMCPServer(mcpServer);
+    // Start server with selected transport
+    if (transport === 'http') {
+      await startMCPServerHTTP(mcpServer, { host, port });
+    } else {
+      await startMCPServer(mcpServer);
+    }
 
   } catch (error) {
     if (error instanceof Error) {

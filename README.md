@@ -313,7 +313,8 @@ janee cap list --json         # List capabilities as JSON
 janee cap add <name> --service <service>  # Add capability
 janee cap edit <name>         # Edit capability
 janee cap remove <name>       # Remove capability
-janee serve                   # Start MCP server
+janee serve                   # Start MCP server (stdio, default)
+janee serve --transport http --port 9100  # Start with HTTP transport (for containers)
 janee logs                    # View audit log
 janee logs -f                 # Tail audit log
 janee logs --json             # Output as JSON

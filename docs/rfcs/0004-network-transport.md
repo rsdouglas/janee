@@ -1,13 +1,36 @@
 # RFC-0004: Network Transport for Containerized Agent Deployments
 
-**Status:** Draft  
-**Author:** Janus  
-**Created:** 2026-02-10  
+**Status:** Implemented
+**Author:** Janus
+**Created:** 2026-02-10
+**Implemented:** 2026-02-11
 **Tracking Issue:** #28
+
+## Implementation Note
+
+This RFC originally specified SSE (Server-Sent Events) transport. During implementation (2026-02-11), we discovered that `SSEServerTransport` was deprecated in MCP SDK v1.25.3 with the following guidance:
+
+> "@deprecated SSEServerTransport is deprecated. Use StreamableHTTPServerTransport instead."
+
+**What changed:**
+- **Server**: Uses `StreamableHTTPServerTransport` (not `SSEServerTransport`)
+- **Client**: Uses `StreamableHTTPClientTransport` (not `SSEClientTransport`)
+- **CLI flag**: `--transport http` (not `--transport sse`)
+- **Protocol**: Streamable HTTP with SSE as one transport method (more flexible)
+
+**Why StreamableHTTP is better:**
+- Supports both SSE streaming AND direct HTTP responses
+- Better standards compliance and future-proofing
+- Recommended by MCP SDK maintainers as the current standard
+- Functionally equivalent for our use case (containerized deployments)
+
+The core functionality described in this RFC remains unchanged - agents can connect to Janee over HTTP instead of requiring local installation.
 
 ## Summary
 
-Add HTTP/SSE network transport support to Janee's MCP server implementation (the `janee serve` command) and the OpenClaw plugin, enabling containerized agents to connect to a host-side Janee instance over the network instead of requiring Janee to be installed inside the container.
+Add HTTP network transport support to Janee's MCP server implementation (the `janee serve` command) and the OpenClaw plugin, enabling containerized agents to connect to a host-side Janee instance over the network instead of requiring Janee to be installed inside the container.
+
+**Note:** Original RFC specified SSE transport. Implementation uses StreamableHTTP (see Implementation Note above). Sections below preserve original SSE terminology for historical context.
 
 ## Motivation
 

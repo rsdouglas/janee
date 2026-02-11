@@ -5,6 +5,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -16,6 +17,7 @@ import { AuditLogger } from './audit.js';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
+import express from 'express';
 
 export interface Capability {
   name: string;
@@ -364,11 +366,49 @@ export function makeAPIRequest(
 }
 
 /**
- * Start MCP server with stdio transport
+ * Start MCP server with stdio transport (default)
  */
 export async function startMCPServer(server: Server): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
-  console.error('Janee MCP server started');
+
+  console.error('Janee MCP server started (stdio)');
+}
+
+/**
+ * Start MCP server with StreamableHTTP transport over HTTP
+ *
+ * Note: Express is used for convenience (routing + body parsing).
+ * StreamableHTTP only requires Node.js IncomingMessage/ServerResponse,
+ * so you could use native http.createServer() if you prefer.
+ */
+export async function startMCPServerHTTP(
+  server: Server,
+  options: { host: string; port: number }
+): Promise<void> {
+  const app = express();
+
+  // Parse JSON bodies (StreamableHTTP accepts pre-parsed body as third parameter)
+  // This middleware runs globally but doesn't break streaming since we pass the parsed body
+  app.use(express.json());
+
+  // Create StreamableHTTP transport (replaces deprecated SSE transport)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => crypto.randomUUID()
+  });
+
+  await server.connect(transport);
+
+  // Handle GET and POST requests to /mcp endpoint
+  // StreamableHTTP protocol uses GET for streaming responses and POST for requests
+  app.all('/mcp', async (req, res) => {
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  return new Promise((resolve) => {
+    app.listen(options.port, options.host, () => {
+      console.error(`Janee MCP server listening on http://${options.host}:${options.port}/mcp (StreamableHTTP)`);
+      resolve();
+    });
+  });
 }

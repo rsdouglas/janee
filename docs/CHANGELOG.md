@@ -4,6 +4,19 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Network Transport for Containerized Deployments** — Support for HTTP transport to enable containerized agent deployments (RFC-0004, #28)
+  - New CLI flags for `janee serve`: `--transport <type>` (stdio|http), `--port <number>` (default: 9100), `--host <host>` (default: localhost)
+  - Server-side implementation uses `StreamableHTTPServerTransport` from MCP SDK (RFC originally specified SSE, but SSE transport is deprecated in favor of StreamableHTTP)
+  - Client-side support in `janee-openclaw` plugin via optional `url` config field using `StreamableHTTPClientTransport`
+  - When `url` is provided, plugin connects to remote Janee instance over HTTP instead of spawning local subprocess
+  - Enables running Janee on host while agent runs in Docker container (no secrets in container)
+  - Server exposes `/mcp` endpoint for MCP protocol over HTTP
+  - Default stdio transport preserved for backward compatibility
+  - Localhost-only binding by default for security
+  - Example: `janee serve --transport http --port 9100` and configure plugin with `url: "http://host.docker.internal:9100/mcp"`
+
 ## [0.7.2] - 2026-02-10
 
 ### Added

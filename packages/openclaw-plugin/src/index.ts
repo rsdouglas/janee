@@ -1,21 +1,48 @@
 import { Type } from "@sinclair/typebox";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 let mcpClient: Client | null = null;
 let isConnecting = false;
+let pluginConfig: { url?: string } = {};
 
 async function connect(api: any): Promise<Client> {
-  const transport = new StdioClientTransport({
-    command: "janee",
-    args: ["serve"]
-  });
-  
+  let transport;
+
+  if (pluginConfig.url) {
+    // Network transport: connect to remote Janee instance via StreamableHTTP
+    try {
+      const url = new URL(pluginConfig.url);
+      // Validate protocol
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error(`Invalid protocol: ${url.protocol} (expected http: or https:)`);
+      }
+      // Warn if missing /mcp endpoint (check normalized pathname, ignoring trailing slash)
+      const normalizedPath = url.pathname.replace(/\/$/, '') || '/';
+      if (normalizedPath === '/') {
+        api.log?.warn?.(`URL missing /mcp endpoint - connection may fail. Expected: ${url.origin}/mcp`);
+      }
+      api.log?.info?.(`Connecting to Janee at ${pluginConfig.url}`);
+      transport = new StreamableHTTPClientTransport(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid URL';
+      throw new Error(`Failed to parse Janee URL "${pluginConfig.url}": ${message}`);
+    }
+  } else {
+    // Local transport: spawn janee serve as subprocess (current behavior)
+    api.log?.info?.("Starting local Janee MCP server");
+    transport = new StdioClientTransport({
+      command: "janee",
+      args: ["serve"]
+    });
+  }
+
   const client = new Client(
     { name: "openclaw-janee", version: "0.1.0" },
     { capabilities: {} }
   );
-  
+
   await client.connect(transport);
   api.log?.info?.("Connected to Janee MCP server");
   return client;
@@ -64,8 +91,10 @@ async function callWithReconnect(api: any, fn: (client: Client) => Promise<any>)
   }
 }
 
-export default function(api: any) {
-  
+export default function(api: any, config?: { url?: string }) {
+  // Store config for use in connect function
+  pluginConfig = config || {};
+
   api.registerTool({
     name: "janee_list_services",
     description: "List available API services managed by Janee. Shows which services have stored credentials.",
