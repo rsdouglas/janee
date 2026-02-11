@@ -153,6 +153,7 @@ Janee decrypts the key, makes the request, logs everything, and returns the resp
 Works with any agent that speaks MCP:
 
 - **OpenClaw** — Native plugin (`@true-and-useful/janee-openclaw`)
+  - **Containerized agents?** See [Container setup guide](docs/container-openclaw.md)
 - **Cursor** — [Setup guide](docs/cursor.md)
 - **Claude Code** — [Setup guide](docs/claude-code.md)
 - **Codex CLI** — [Setup guide](docs/codex.md)
