@@ -169,13 +169,6 @@ npm view @true-and-useful/janee version
 # Should show the new version
 ```
 
-### 6. Announce
-
-Coordinate with Jan (DevRel) to announce the release:
-```
-Tell Jan in #janee: "🚀 Janee v0.7.3 published - <brief description>"
-```
-
 ## Common Tasks
 
 ### Add a New CLI Command
