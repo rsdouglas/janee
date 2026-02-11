@@ -26,3 +26,4 @@ coverage/
 
 # Janee config (for testing)
 .janee/
+.envrc
