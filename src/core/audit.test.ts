@@ -290,4 +290,134 @@ describe('AuditLogger', () => {
       expect(logEntry.timestamp).toBeDefined();
     });
   });
+
+  describe('Header Extraction', () => {
+    it('should extract reason from X-Janee-Reason header', () => {
+      const request: APIRequest = {
+        service: 'stripe',
+        method: 'POST',
+        path: '/v1/charges',
+        headers: {
+          'X-Janee-Reason': 'Processing payment for order #12345'
+        }
+      };
+
+      const response: APIResponse = {
+        statusCode: 200,
+        headers: {},
+        body: '{}'
+      };
+
+      logger.log(request, response);
+
+      const logFiles = fs.readdirSync(tempDir);
+      const logContent = fs.readFileSync(path.join(tempDir, logFiles[0]), 'utf8');
+      const logEntry = JSON.parse(logContent.trim());
+
+      expect(logEntry.reason).toBe('Processing payment for order #12345');
+    });
+
+    it('should extract agentId from X-Janee-Agent-Id header', () => {
+      const request: APIRequest = {
+        service: 'github',
+        method: 'GET',
+        path: '/user',
+        headers: {
+          'X-Janee-Agent-Id': 'claude-desktop-v1.2.3'
+        }
+      };
+
+      const response: APIResponse = {
+        statusCode: 200,
+        headers: {},
+        body: '{}'
+      };
+
+      logger.log(request, response);
+
+      const logFiles = fs.readdirSync(tempDir);
+      const logContent = fs.readFileSync(path.join(tempDir, logFiles[0]), 'utf8');
+      const logEntry = JSON.parse(logContent.trim());
+
+      expect(logEntry.agentId).toBe('claude-desktop-v1.2.3');
+    });
+
+    it('should extract both reason and agentId from headers', () => {
+      const request: APIRequest = {
+        service: 'openai',
+        method: 'POST',
+        path: '/v1/chat/completions',
+        headers: {
+          'X-Janee-Reason': 'Generate summary for user report',
+          'X-Janee-Agent-Id': 'cursor-ide-v0.40.0'
+        }
+      };
+
+      const response: APIResponse = {
+        statusCode: 200,
+        headers: {},
+        body: '{}'
+      };
+
+      logger.log(request, response);
+
+      const logFiles = fs.readdirSync(tempDir);
+      const logContent = fs.readFileSync(path.join(tempDir, logFiles[0]), 'utf8');
+      const logEntry = JSON.parse(logContent.trim());
+
+      expect(logEntry.reason).toBe('Generate summary for user report');
+      expect(logEntry.agentId).toBe('cursor-ide-v0.40.0');
+    });
+
+    it('should handle lowercase header names', () => {
+      const request: APIRequest = {
+        service: 'test',
+        method: 'GET',
+        path: '/test',
+        headers: {
+          'x-janee-reason': 'Test with lowercase headers',
+          'x-janee-agent-id': 'test-agent'
+        }
+      };
+
+      const response: APIResponse = {
+        statusCode: 200,
+        headers: {},
+        body: '{}'
+      };
+
+      logger.log(request, response);
+
+      const logFiles = fs.readdirSync(tempDir);
+      const logContent = fs.readFileSync(path.join(tempDir, logFiles[0]), 'utf8');
+      const logEntry = JSON.parse(logContent.trim());
+
+      expect(logEntry.reason).toBe('Test with lowercase headers');
+      expect(logEntry.agentId).toBe('test-agent');
+    });
+
+    it('should not include reason/agentId fields when headers are missing', () => {
+      const request: APIRequest = {
+        service: 'test',
+        method: 'GET',
+        path: '/test',
+        headers: {}
+      };
+
+      const response: APIResponse = {
+        statusCode: 200,
+        headers: {},
+        body: '{}'
+      };
+
+      logger.log(request, response);
+
+      const logFiles = fs.readdirSync(tempDir);
+      const logContent = fs.readFileSync(path.join(tempDir, logFiles[0]), 'utf8');
+      const logEntry = JSON.parse(logContent.trim());
+
+      expect(logEntry.reason).toBeUndefined();
+      expect(logEntry.agentId).toBeUndefined();
+    });
+  });
 });
