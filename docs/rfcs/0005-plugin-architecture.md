@@ -569,548 +569,78 @@ services:
 ```
 
 
-## Implementation Plan
+## Implementation Approach
 
-### Phase 1: Core Abstraction (Week 1)
+### Build It Incrementally
 
-**Goals:**
+**Step 1: Core Abstraction**
 - Define `SecretsProvider` interface
 - Extract current filesystem logic into `LocalProvider`
-- Implement provider registry and initialization
-- Add URI parsing and validation
+- Implement provider registry and URI parsing
+- **Result:** Existing behavior preserved, new architecture in place
 
-**Deliverables:**
-```typescript
-// src/secrets/providers/interface.ts
-export interface SecretsProvider {
-  readonly name: string;
-  readonly type: string;
-  initialize(): Promise<void>;
-  getSecret(path: string): Promise<string | null>;
-  dispose(): Promise<void>;
-  healthCheck(): Promise<{ healthy: boolean; error?: string }>;
-}
+**Step 2: Add Vault Provider**
+- Implement HashiCorp Vault provider with KV v2 support
+- Support token, AppRole, and Kubernetes auth
+- Token renewal and lease management
+- **Result:** Users can `janee://vault/path/to/secret`
 
-// src/secrets/manager.ts
-export class SecretsManager {
-  private providers = new Map<string, SecretsProvider>();
-  
-  registerProvider(name: string, provider: SecretsProvider): void;
-  async getSecret(uri: string): Promise<string>;
-  parseURI(uri: string): { provider: string; path: string };
-}
+**Step 3: Add AWS Secrets Manager**
+- Implement AWS provider with IAM auth
+- Support cross-region secrets
+- **Result:** Users can `janee://aws/path/to/secret`
 
-// src/secrets/providers/local.ts
-export class LocalFilesystemProvider implements SecretsProvider {
-  // Refactor existing code
-}
-```
+**Step 4: Add More Providers** (as needed)
+- Azure Key Vault
+- GCP Secret Manager
+- 1Password
+- Custom providers via plugin system
 
-**Tests:**
-- URI parsing (valid/invalid cases)
-- Provider registration and lookup
-- Error taxonomy validation
-- Local provider functionality (existing tests adapted)
+### Configuration
 
-### Phase 2: HashiCorp Vault Provider (Week 2)
+Simple, declarative config in `~/.janee/config.json`:
 
-**Goals:**
-- Implement Vault provider with KV v2 support
-- Support multiple auth methods (token, AppRole, Kubernetes)
-- Token renewal and automatic refresh
-- Comprehensive error handling
-
-**Dependencies:**
-```bash
-npm install node-vault
-```
-
-**Implementation:**
-```typescript
-// src/secrets/providers/vault.ts
-export class VaultProvider implements SecretsProvider {
-  private client: any;
-  private renewalTimer?: NodeJS.Timeout;
-  
-  async initialize(): Promise<void> {
-    // Authenticate and start token renewal
-  }
-  
-  async getSecret(path: string): Promise<string | null> {
-    // Fetch from KV v2: /v1/{mountPath}/data/{path}
-  }
-  
-  private async renewToken(): Promise<void> {
-    // Automatic token renewal at 80% lifetime
+```json
+{
+  "providers": {
+    "vault": {
+      "type": "hashicorp-vault",
+      "address": "https://vault.company.com",
+      "auth": {
+        "method": "token",
+        "token": "${VAULT_TOKEN}"
+      }
+    },
+    "aws": {
+      "type": "aws-secrets-manager",
+      "region": "us-east-1",
+      "auth": {
+        "method": "iam"
+      }
+    }
   }
 }
 ```
 
-**Tests:**
-- Vault integration tests (use testcontainers)
-- Auth method variations
-- Token renewal logic
-- Error scenarios (connection failure, auth expired, not found)
+### Backward Compatibility
 
-### Phase 3: AWS Secrets Manager Provider (Week 3)
-
-**Goals:**
-- Implement AWS provider using AWS SDK v3
-- Support IAM role and access key auth
-- Handle AWS-specific errors (throttling, regions)
-
-**Dependencies:**
-```bash
-npm install @aws-sdk/client-secrets-manager
-```
-
-**Implementation:**
-```typescript
-// src/secrets/providers/aws.ts
-export class AwsSecretsManagerProvider implements SecretsProvider {
-  private client: SecretsManagerClient;
-  
-  async getSecret(path: string): Promise<string | null> {
-    const command = new GetSecretValueCommand({ SecretId: path });
-    const response = await this.client.send(command);
-    return response.SecretString || null;
-  }
-}
-```
-
-**Tests:**
-- AWS integration tests (use LocalStack)
-- IAM role auth (mock STS)
-- Rate limiting and retry logic
-- Cross-region scenarios
-
-### Phase 4: Azure Key Vault Provider (Week 4)
-
-**Goals:**
-- Implement Azure provider using Azure SDK
-- Support managed identity and service principal auth
-- Handle Azure-specific pagination and errors
-
-**Dependencies:**
-```bash
-npm install @azure/keyvault-secrets @azure/identity
-```
-
-**Implementation:**
-```typescript
-// src/secrets/providers/azure.ts
-export class AzureKeyVaultProvider implements SecretsProvider {
-  private client: SecretClient;
-  
-  async getSecret(path: string): Promise<string | null> {
-    const secret = await this.client.getSecret(path);
-    return secret.value || null;
-  }
-}
-```
-
-**Tests:**
-- Azure integration tests (use Azurite or mock)
-- Managed identity simulation
-- Error scenarios specific to Azure
-
-### Phase 5: Documentation and Migration (Week 5)
-
-**Goals:**
-- Comprehensive documentation
-- Migration guide from filesystem-only
-- Security best practices guide
-- Example configurations for common scenarios
-
-**Deliverables:**
-- `docs/providers/README.md` - Overview and concepts
-- `docs/providers/vault.md` - Vault setup and auth
-- `docs/providers/aws.md` - AWS setup and IAM policies
-- `docs/providers/azure.md` - Azure setup and RBAC
-- `docs/migration/provider-migration.md` - Step-by-step migration
-- Example configs in `examples/providers/`
+No breaking changes. Current users continue working exactly as before:
+- Existing filesystem-based secrets work unchanged
+- New URI format is opt-in
+- Local provider is default fallback
 
 ### Testing Strategy
 
-**Unit Tests:**
-- URI parsing and validation (100% coverage)
-- Error handling and taxonomy
-- Provider configuration validation
-- Retry and backoff logic
-
-**Integration Tests:**
-```typescript
-describe('VaultProvider Integration', () => {
-  let vault: StartedTestContainer;
-  let provider: VaultProvider;
-  
-  beforeAll(async () => {
-    vault = await new GenericContainer('vault:1.15')
-      .withExposedPorts(8200)
-      .withEnvironment({ VAULT_DEV_ROOT_TOKEN_ID: 'test-token' })
-      .start();
-    
-    provider = new VaultProvider({
-      type: 'hashicorp-vault',
-      address: `http://localhost:${vault.getMappedPort(8200)}`,
-      auth: { method: 'token', token: 'test-token' }
-    });
-    
-    await provider.initialize();
-  });
-  
-  it('should fetch existing secret', async () => {
-    // Setup test secret in Vault
-    // Verify getSecret returns correct value
-  });
-  
-  it('should return null for non-existent secret', async () => {
-    const result = await provider.getSecret('nonexistent/path');
-    expect(result).toBeNull();
-  });
-});
-```
-
-**E2E Tests:**
-- Full Janee server with different provider configurations
-- Multi-service, multi-provider scenarios
-- Error recovery and retry behavior
-- Performance under load
-
-### Rollout Plan
-
-**Phase 1: Alpha (Internal Testing)**
-- Feature flag: `JANEE_PROVIDERS_ALPHA=true`
-- Limited to development environments
-- Gather feedback on API ergonomics
-
-**Phase 2: Beta (Early Adopters)**
-- Documented in changelog as beta feature
-- Opt-in via config: `features: { providers: true }`
-- Community testing with Vault/AWS/Azure
-- Bug fixes and API refinements
-
-**Phase 3: GA (General Availability)**
-- Remove feature flag
-- Enabled by default
-- Backward compatibility: No `providers` block = filesystem provider
-- Announce in release notes and community channels
-
-## Backward Compatibility
-
-### Seamless Migration Path
-
-**Current config (filesystem only):**
-```yaml
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      key: stripe-api-key  # Implicit: stored in ~/.janee/credentials
-```
-
-**Behavior after plugin architecture:**
-- If NO `providers` block exists: Use implicit filesystem provider
-- Secret key without `://` → Resolve from default filesystem provider
-- Existing installations continue to work without changes
-
-**Explicit filesystem provider:**
-```yaml
-providers:
-  default:
-    type: filesystem
-    path: ~/.janee/credentials
-
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      key: default://stripe-api-key  # Explicit provider reference
-```
-
-### Migration Steps
-
-**Step 1: Validate current setup**
-```bash
-janee config validate
-# Output: Using default filesystem provider for all services
-```
-
-**Step 2: Add provider config (no behavior change yet)**
-```yaml
-providers:
-  local:
-    type: filesystem
-    path: ~/.janee/credentials
-  
-  prodVault:
-    type: hashicorp-vault
-    address: https://vault.company.com
-    auth:
-      method: token
-      token: ${VAULT_TOKEN}
-
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      key: stripe-api-key  # Still uses filesystem (no :// syntax)
-```
-
-**Step 3: Migrate secrets one service at a time**
-```bash
-# Copy secret to Vault
-vault kv put secret/mcp/agents/stripe api-key=<value>
-
-# Update config
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      key: prodVault://mcp/agents/stripe/api-key  # Now uses Vault
-```
-
-**Step 4: Verify and cleanup**
-```bash
-# Test service access
-janee service test stripe
-
-# Once confirmed, remove from filesystem
-janee secret delete stripe-api-key --provider local
-```
-
-## Open Questions
-
-1. **Caching strategy**: Should providers cache secrets in memory? 
-   - Pro: Reduces latency and provider load
-   - Con: Secrets may become stale, longer exposure window
-   - **Proposal**: Optional TTL-based cache (default: no cache)
-
-2. **Secret versioning**: Should we support version/pinning?
-   ```yaml
-   key: vault://path/to/secret@v5  # Specific version
-   ```
-   - Pro: Reproducibility, rollback capability
-   - Con: Complexity, not all providers support versions
-   - **Proposal**: Defer to v2, always fetch latest in v1
-
-3. **Dynamic configuration reload**: Should provider config changes reload without restart?
-   - Pro: Zero-downtime config updates
-   - Con: Complex state management, auth token lifecycle
-   - **Proposal**: Require restart for provider config changes in v1
-
-4. **Observability**: Metrics for provider operations?
-   - Request count, latency, error rate per provider
-   - Secret access patterns (what gets accessed, how often)
-   - **Proposal**: Add Prometheus metrics in v1
-
-## Alternatives Considered
-
-### Alternative 1: Single Multi-Backend Provider
-
-Instead of multiple provider plugins, one universal provider with backend parameter:
-
-```yaml
-secrets:
-  backend: vault
-  config:
-    address: https://vault.company.com
-```
-
-**Rejected because:**
-- Doesn't support mixing providers (some services use Vault, others AWS)
-- Configuration becomes deeply nested and hard to validate
-- Can't easily add new backends without core changes
-
-### Alternative 2: Sidecar Pattern
-
-Run separate secrets-provider sidecar processes that Janee talks to via gRPC:
-
-```yaml
-providers:
-  vault:
-    type: grpc
-    address: localhost:9000  # Vault provider sidecar
-```
-
-**Rejected because:**
-- Added operational complexity (deploy/manage multiple processes)
-- Network boundary adds latency
-- Over-engineering for current needs
-- Can revisit if we need language-agnostic providers
-
-### Alternative 3: Environment Variable Only
-
-Force all secrets to come from environment variables, no direct provider integration:
-
-```yaml
-services:
-  stripe:
-    auth:
-      key: ${STRIPE_API_KEY}  # Must be in env
-```
-
-**Rejected because:**
-- Shifts secret management burden entirely to user
-- Doesn't solve enterprise integration problem
-- Environment variables have size limits and poor lifecycle management
-- Can't leverage provider features (rotation, audit trails)
-
-## Success Metrics
-
-**Adoption:**
-- % of Janee installations using non-filesystem providers (target: 30% within 6 months)
-- Number of community-contributed provider plugins (target: 2+ within 1 year)
-
-**Reliability:**
-- Provider error rate < 0.1%
-- Auth renewal success rate > 99.9%
-- Zero secret leaks via logs or errors
-
-**Performance:**
-- Secret fetch latency p95 < 100ms (Vault), < 200ms (AWS/Azure)
-- Startup time with providers < 5s
-- Memory overhead per provider < 10MB
-
-## References
-
-- [HashiCorp Vault API Docs](https://developer.hashicorp.com/vault/api-docs)
-- [AWS Secrets Manager API](https://docs.aws.amazon.com/secretsmanager/latest/apireference/)
-- [Azure Key Vault REST API](https://learn.microsoft.com/en-us/rest/api/keyvault/)
-- [OpenBao](https://openbao.org/) - Open source Vault fork (future consideration)
-- [External Secrets Operator](https://external-secrets.io/) - K8s reference architecture
-
----
-
-**Document Status:** Ready for review  
-**Next Steps:**
-1. Review by @rsdouglas and core maintainers
-2. Community feedback period (2 weeks)
-3. Finalize specification
-4. Begin Phase 1 implementation
-
-: prodVault://mcp/agents/stripe/api-key  # Now uses Vault
-```
-
-**Step 4: Verify and cleanup**
-```bash
-# Test service access
-janee service test stripe
-
-# Once confirmed, remove from filesystem
-janee secret delete stripe-api-key --provider local
-```
-
-## Open Questions
-
-1. **Caching strategy**: Should providers cache secrets in memory? 
-   - Pro: Reduces latency and provider load
-   - Con: Secrets may become stale, longer exposure window
-   - **Proposal**: Optional TTL-based cache (default: no cache)
-
-2. **Secret versioning**: Should we support version/pinning?
-   ```yaml
-   key: vault://path/to/secret@v5  # Specific version
-   ```
-   - Pro: Reproducibility, rollback capability
-   - Con: Complexity, not all providers support versions
-   - **Proposal**: Defer to v2, always fetch latest in v1
-
-3. **Dynamic configuration reload**: Should provider config changes reload without restart?
-   - Pro: Zero-downtime config updates
-   - Con: Complex state management, auth token lifecycle
-   - **Proposal**: Require restart for provider config changes in v1
-
-4. **Observability**: Metrics for provider operations?
-   - Request count, latency, error rate per provider
-   - Secret access patterns (what gets accessed, how often)
-   - **Proposal**: Add Prometheus metrics in v1
-
-## Alternatives Considered
-
-### Alternative 1: Single Multi-Backend Provider
-
-Instead of multiple provider plugins, one universal provider with backend parameter:
-
-```yaml
-secrets:
-  backend: vault
-  config:
-    address: https://vault.company.com
-```
-
-**Rejected because:**
-- Doesn't support mixing providers (some services use Vault, others AWS)
-- Configuration becomes deeply nested and hard to validate
-- Can't easily add new backends without core changes
-
-### Alternative 2: Sidecar Pattern
-
-Run separate secrets-provider sidecar processes that Janee talks to via gRPC:
-
-```yaml
-providers:
-  vault:
-    type: grpc
-    address: localhost:9000  # Vault provider sidecar
-```
-
-**Rejected because:**
-- Added operational complexity (deploy/manage multiple processes)
-- Network boundary adds latency
-- Over-engineering for current needs
-- Can revisit if we need language-agnostic providers
-
-### Alternative 3: Environment Variable Only
-
-Force all secrets to come from environment variables, no direct provider integration:
-
-```yaml
-services:
-  stripe:
-    auth:
-      key: ${STRIPE_API_KEY}  # Must be in env
-```
-
-**Rejected because:**
-- Shifts secret management burden entirely to user
-- Doesn't solve enterprise integration problem
-- Environment variables have size limits and poor lifecycle management
-- Can't leverage provider features (rotation, audit trails)
-
-## Success Metrics
-
-**Adoption:**
-- % of Janee installations using non-filesystem providers (target: 30% within 6 months)
-- Number of community-contributed provider plugins (target: 2+ within 1 year)
-
-**Reliability:**
-- Provider error rate < 0.1%
-- Auth renewal success rate > 99.9%
-- Zero secret leaks via logs or errors
-
-**Performance:**
-- Secret fetch latency p95 < 100ms (Vault), < 200ms (AWS/Azure)
-- Startup time with providers < 5s
-- Memory overhead per provider < 10MB
-
-## References
-
-- [HashiCorp Vault API Docs](https://developer.hashicorp.com/vault/api-docs)
-- [AWS Secrets Manager API](https://docs.aws.amazon.com/secretsmanager/latest/apireference/)
-- [Azure Key Vault REST API](https://learn.microsoft.com/en-us/rest/api/keyvault/)
-- [OpenBao](https://openbao.org/) - Open source Vault fork (future consideration)
-- [External Secrets Operator](https://external-secrets.io/) - K8s reference architecture
-
----
-
-**Document Status:** Ready for review  
-**Next Steps:**
-1. Review by @rsdouglas and core maintainers
-2. Community feedback period (2 weeks)
-3. Finalize specification
-4. Begin Phase 1 implementation
+- Unit tests for each provider
+- Integration tests with real backends (using testcontainers for Vault)
+- Error handling and edge cases
+- Performance benchmarks for secret retrieval latency
+
+
+## Success Criteria
+
+- Existing users experience zero breaking changes
+- New providers are easy to add (< 500 lines per provider)
+- Secret retrieval latency < 100ms (p95)
+- Comprehensive test coverage for error scenarios
+- Clear documentation for adding custom providers
