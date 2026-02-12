@@ -65,6 +65,10 @@ export class AuditLogger {
    * Log an API request
    */
   log(req: APIRequest, res?: APIResponse, duration?: number): void {
+    // Extract reason/agentId from request headers if present
+    const reason = req.headers['x-janee-reason'] || req.headers['X-Janee-Reason'];
+    const agentId = req.headers['x-janee-agent-id'] || req.headers['X-Janee-Agent-Id'];
+
     const event: AuditEvent = {
       id: this.generateId(),
       timestamp: new Date().toISOString(),
@@ -73,7 +77,8 @@ export class AuditLogger {
       path: req.path,
       statusCode: res?.statusCode,
       duration,
-      // TODO: Extract reason/agentId from request headers if present
+      ...(reason && { reason }),
+      ...(agentId && { agentId })
     };
 
     // Log request body for POST/PUT/PATCH if enabled
