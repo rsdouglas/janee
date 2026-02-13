@@ -1,0 +1,83 @@
+# Janee Example: Claude Desktop with GitHub + OpenAI
+#
+# This config lets Claude Desktop access GitHub and OpenAI APIs
+# through Janee, without exposing raw API keys in your Claude config.
+#
+# Setup:
+#   1. npm install -g @true-and-useful/janee
+#   2. Copy this file to ~/.janee/config.yaml
+#   3. Replace the encrypted key placeholders with your actual keys:
+#      janee add github --auth bearer --key ghp_yourtoken
+#      janee add openai --auth bearer --key sk-yourkey
+#   4. Add Janee to claude_desktop_config.json (see below)
+#   5. Restart Claude Desktop
+
+version: "1"
+masterKey: "generate-with-janee-init"
+
+server:
+  port: 3456
+  host: "127.0.0.1"
+  logBodies: false  # Don't log request bodies (privacy)
+
+services:
+  github:
+    baseUrl: "https://api.github.com"
+    auth:
+      type: bearer
+      key: "encrypted:your-github-token"
+
+  openai:
+    baseUrl: "https://api.openai.com"
+    auth:
+      type: bearer
+      key: "encrypted:your-openai-key"
+
+capabilities:
+  read-github:
+    service: github
+    ttl: "10m"
+    autoApprove: false
+    rules:
+      allow:
+        - "GET /repos/**"
+        - "GET /users/**"
+        - "GET /search/**"
+      deny:
+        - "DELETE /**"
+
+  write-github:
+    service: github
+    ttl: "5m"
+    requiresReason: true
+    rules:
+      allow:
+        - "POST /repos/*/issues"
+        - "POST /repos/*/issues/*/comments"
+        - "PATCH /repos/*/issues/*"
+      deny:
+        - "DELETE /**"
+        - "PUT /repos/*/settings"
+
+  use-openai:
+    service: openai
+    ttl: "15m"
+    autoApprove: true
+    rules:
+      allow:
+        - "POST /v1/chat/completions"
+        - "POST /v1/embeddings"
+      deny:
+        - "DELETE /**"
+        - "POST /v1/fine_tuning/**"
+
+# Claude Desktop config (add to claude_desktop_config.json):
+#
+# {
+#   "mcpServers": {
+#     "janee": {
+#       "command": "janee",
+#       "args": ["serve"]
+#     }
+#   }
+# }

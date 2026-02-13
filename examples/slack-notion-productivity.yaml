@@ -1,0 +1,87 @@
+# Janee Example: Slack + Notion for Productivity Agent
+#
+# Let your AI agent manage Slack messages and Notion pages
+# with scoped, time-limited access.
+#
+# Setup:
+#   1. npm install -g @true-and-useful/janee
+#   2. Copy to ~/.janee/config.yaml
+#   3. Add your keys:
+#      janee add slack --auth bearer --key xoxb-your-slack-bot-token
+#      janee add notion --auth bearer --key secret_your-notion-key
+#   4. Run: janee serve
+
+version: "1"
+masterKey: "generate-with-janee-init"
+
+server:
+  port: 3456
+  host: "127.0.0.1"
+  logBodies: false
+
+services:
+  slack:
+    baseUrl: "https://slack.com/api"
+    auth:
+      type: bearer
+      key: "encrypted:your-slack-bot-token"
+
+  notion:
+    baseUrl: "https://api.notion.com"
+    auth:
+      type: bearer
+      key: "encrypted:your-notion-key"
+
+capabilities:
+  read-slack:
+    service: slack
+    ttl: "10m"
+    autoApprove: true
+    rules:
+      allow:
+        - "POST /conversations.history"
+        - "POST /conversations.list"
+        - "POST /users.list"
+        - "POST /search.messages"
+      deny:
+        - "POST /chat.delete"
+        - "POST /conversations.archive"
+
+  send-slack:
+    service: slack
+    ttl: "3m"
+    autoApprove: false
+    requiresReason: true
+    rules:
+      allow:
+        - "POST /chat.postMessage"
+        - "POST /reactions.add"
+      deny:
+        - "POST /chat.delete"
+        - "POST /conversations.archive"
+
+  read-notion:
+    service: notion
+    ttl: "10m"
+    autoApprove: true
+    rules:
+      allow:
+        - "POST /v1/search"
+        - "GET /v1/pages/**"
+        - "GET /v1/blocks/**"
+        - "POST /v1/databases/*/query"
+      deny:
+        - "DELETE /**"
+        - "PATCH /v1/pages/**"
+
+  write-notion:
+    service: notion
+    ttl: "5m"
+    autoApprove: false
+    rules:
+      allow:
+        - "POST /v1/pages"
+        - "PATCH /v1/pages/**"
+        - "PATCH /v1/blocks/**"
+      deny:
+        - "DELETE /**"
