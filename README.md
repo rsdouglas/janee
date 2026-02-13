@@ -401,7 +401,7 @@ Agent never touches the real key.
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please read **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** before submitting a PR — it includes the required PR checklist (tests, changelog, version bump, etc.).
 
 ---
 
