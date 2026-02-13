@@ -456,7 +456,10 @@ export function makeAPIRequest(
       port: targetUrl.port,
       path: targetUrl.pathname + targetUrl.search,
       method: request.method,
-      headers: request.headers
+      headers: {
+        'User-Agent': 'janee/' + (process.env.npm_package_version || '0.8.2'),
+        ...request.headers
+      }
     };
 
     const req = client.request(options, (res) => {
