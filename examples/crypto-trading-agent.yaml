@@ -1,0 +1,76 @@
+# Janee Example: Crypto Trading Agent
+#
+# Secure configuration for an AI agent that monitors crypto exchanges.
+# Uses HMAC authentication for exchange APIs — Janee signs requests
+# so the agent never sees your API secret.
+#
+# Setup:
+#   1. npm install -g @true-and-useful/janee
+#   2. Copy to ~/.janee/config.yaml
+#   3. Add your exchange keys:
+#      janee add mexc --auth hmac-mexc --key YOUR_KEY --secret YOUR_SECRET
+#      janee add bybit --auth hmac-bybit --key YOUR_KEY --secret YOUR_SECRET
+#   4. Run: janee serve
+
+version: "1"
+masterKey: "generate-with-janee-init"
+
+server:
+  port: 3456
+  host: "127.0.0.1"
+  logBodies: true  # Log bodies for trade audit
+
+services:
+  mexc:
+    baseUrl: "https://api.mexc.com"
+    auth:
+      type: hmac-mexc
+      apiKey: "encrypted:your-mexc-api-key"
+      apiSecret: "encrypted:your-mexc-api-secret"
+
+  bybit:
+    baseUrl: "https://api.bybit.com"
+    auth:
+      type: hmac-bybit
+      apiKey: "encrypted:your-bybit-api-key"
+      apiSecret: "encrypted:your-bybit-api-secret"
+
+capabilities:
+  read-mexc:
+    service: mexc
+    ttl: "5m"
+    autoApprove: true
+    rules:
+      allow:
+        - "GET /api/v3/ticker/**"
+        - "GET /api/v3/depth"
+        - "GET /api/v3/klines"
+        - "GET /api/v3/account"
+      deny:
+        - "POST /**"
+        - "DELETE /**"
+
+  trade-mexc:
+    service: mexc
+    ttl: "2m"
+    autoApprove: false
+    requiresReason: true
+    rules:
+      allow:
+        - "POST /api/v3/order"
+      deny:
+        - "POST /api/v3/order/batch"
+        - "DELETE /**"
+
+  read-bybit:
+    service: bybit
+    ttl: "5m"
+    autoApprove: true
+    rules:
+      allow:
+        - "GET /v5/market/**"
+        - "GET /v5/account/**"
+        - "GET /v5/position/**"
+      deny:
+        - "POST /**"
+        - "DELETE /**"
