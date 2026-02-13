@@ -18,6 +18,8 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 import express from 'express';
+import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
+
 
 export interface Capability {
   name: string;
@@ -26,6 +28,12 @@ export interface Capability {
   autoApprove?: boolean;
   requiresReason?: boolean;
   rules?: Rules;  // Optional allow/deny patterns
+  // Exec mode fields (RFC 0001)
+  mode?: 'proxy' | 'exec';
+  allowCommands?: string[];
+  env?: Record<string, string>;
+  workDir?: string;
+  timeout?: number;
 }
 
 export interface ServiceConfig {
@@ -67,6 +75,7 @@ export interface MCPServerOptions {
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
+  onExecCommand?: (session: any, capability: Capability, command: string[], stdin?: string) => Promise<ExecResult>;
   onReloadConfig?: () => ReloadResult;
 }
 
@@ -94,7 +103,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onReloadConfig } = options;
+  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -172,9 +181,43 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   };
 
+
+  // Tool: janee_exec (RFC 0001 - Secure CLI Execution)
+  const execTool: Tool = {
+    name: 'janee_exec',
+    description: 'Execute a CLI command with credentials injected via environment variables. The agent never sees the actual credential — Janee injects it and scrubs output.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        capability: {
+          type: 'string',
+          description: 'Capability name (must be exec mode, from list_services)'
+        },
+        command: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Command and arguments as array, e.g. ["gh", "issue", "list"]'
+        },
+        stdin: {
+          type: 'string',
+          description: 'Optional stdin input to pipe to the command'
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for this execution (required for some capabilities)'
+        }
+      },
+      required: ['capability', 'command']
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = [listServicesTool, executeTool];
+    // Add exec tool if handler is provided
+    if (onExecCommand) {
+      tools.push(execTool);
+    }
     // Only expose reload_config if a reload handler is provided
     if (onReloadConfig) {
       tools.push(reloadConfigTool);
@@ -196,10 +239,15 @@ export function createMCPServer(options: MCPServerOptions): Server {
                 capabilities.map(cap => ({
                   name: cap.name,
                   service: cap.service,
+                  mode: cap.mode || 'proxy',
                   ttl: cap.ttl,
                   autoApprove: cap.autoApprove,
                   requiresReason: cap.requiresReason,
-                  rules: cap.rules
+                  rules: cap.rules,
+                  ...(cap.mode === 'exec' && {
+                    allowCommands: cap.allowCommands,
+                    env: cap.env ? Object.keys(cap.env) : undefined,
+                  })
                 })),
                 null,
                 2
@@ -295,6 +343,80 @@ export function createMCPServer(options: MCPServerOptions): Server {
               text: JSON.stringify({
                 status: response.statusCode,
                 body: response.body
+              }, null, 2)
+            }]
+          };
+        }
+
+
+        case 'janee_exec': {
+          if (!onExecCommand) {
+            throw new Error('CLI execution not supported in this configuration');
+          }
+
+          const { capability: execCapName, command: execCommand, stdin: execStdin, reason: execReason } = args as any;
+
+          // Find capability
+          const execCap = capabilities.find(c => c.name === execCapName);
+          if (!execCap) {
+            throw new Error(`Unknown capability: ${execCapName}`);
+          }
+
+          // Verify this is an exec-mode capability
+          if (execCap.mode !== 'exec') {
+            throw new Error(`Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`);
+          }
+
+          // Check if reason required
+          if (execCap.requiresReason && !execReason) {
+            throw new Error(`Capability "${execCapName}" requires a reason`);
+          }
+
+          // Validate command against whitelist
+          const cmdValidation = validateCommand(execCommand, execCap.allowCommands || []);
+          if (!cmdValidation.allowed) {
+            auditLogger.logDenied(
+              execCap.service,
+              'EXEC',
+              execCommand.join(' '),
+              cmdValidation.reason || 'Command not allowed',
+              execReason
+            );
+            throw new Error(cmdValidation.reason || 'Command not allowed');
+          }
+
+          // Get or create session
+          const execTtlSeconds = parseTTL(execCap.ttl);
+          const execSession = sessionManager.createSession(
+            execCap.name,
+            execCap.service,
+            execTtlSeconds,
+            { reason: execReason }
+          );
+
+          // Execute command
+          const execResult = await onExecCommand(execSession, execCap, execCommand, execStdin);
+
+          // Log to audit
+          auditLogger.log({
+            service: execCap.service,
+            path: execCommand.join(' '),
+            method: 'EXEC',
+            headers: { 'x-janee-reason': execReason || '' },
+          }, {
+            statusCode: execResult.exitCode === 0 ? 200 : 500,
+            headers: {},
+            body: execResult.stdout,
+          }, execResult.executionTimeMs);
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                exitCode: execResult.exitCode,
+                stdout: execResult.stdout,
+                stderr: execResult.stderr,
+                executionTimeMs: execResult.executionTimeMs,
               }, null, 2)
             }]
           };
