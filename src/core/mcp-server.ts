@@ -19,7 +19,13 @@ import https from 'https';
 import { URL } from 'url';
 import express from 'express';
 import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
+
+// Read version from package.json
+const packageJsonPath = join(__dirname, '../../package.json');
+const pkgVersion = JSON.parse(readFileSync(packageJsonPath, 'utf8')).version || '0.0.0';
 
 export interface Capability {
   name: string;
@@ -112,7 +118,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
   const server = new Server(
     {
       name: 'janee',
-      version: '0.1.0'
+      version: pkgVersion
     },
     {
       capabilities: {
@@ -488,7 +494,7 @@ export function makeAPIRequest(
       path: targetUrl.pathname + targetUrl.search,
       method: request.method,
       headers: {
-        'User-Agent': 'janee/' + (process.env.npm_package_version || '0.8.2'),
+        'User-Agent': 'janee/' + pkgVersion,
         ...request.headers
       }
     };
