@@ -4,6 +4,33 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-02-13
+
+### Fixed
+
+- **User-Agent Header for Proxy Requests** — Add `User-Agent: janee/<version>` header to all proxied HTTP requests (#72)
+  - Bug: GitHub API (and other APIs) were rejecting proxied requests with 403 Forbidden
+  - Root cause: Node.js `http.request` sends no User-Agent by default; GitHub requires one
+  - Fix: Inject `User-Agent: janee/<version>` header on all outgoing proxy requests
+  - Impact: GitHub API proxy mode now works reliably
+
+## [0.8.2] - 2026-02-13
+
+### Added
+
+- **Secure CLI Execution Mode** — Allow agents to run pre-approved CLI commands with secrets injected via environment variables (RFC-0001, #69)
+  - New capability mode: `exec` — runs commands in sandboxed subprocess
+  - Secrets injected as env vars (e.g., `GH_TOKEN: '{{credential}}'`), never visible to agent
+  - `allowCommands` whitelist restricts which binaries can be executed
+  - Configurable `timeout` per capability (default: 30s)
+  - Full audit logging of command execution with sanitized output
+  - Example: `gh api /user` runs through janee with GitHub token injected
+- **Real-World Configuration Examples** — Add examples directory with production-ready config templates (#68)
+  - `claude-desktop-github-openai.yaml` — Multi-service setup for Claude Desktop
+  - `crypto-trading-agent.yaml` — Exchange API configuration with HMAC auth
+  - `slack-notion-productivity.yaml` — Productivity tool integration
+- **Service Health Check Module** — Add health check infrastructure for monitoring service connectivity (#67)
+
 ## [0.8.1] - 2026-02-13
 
 ### Added
