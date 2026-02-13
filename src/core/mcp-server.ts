@@ -291,10 +291,26 @@ export function createMCPServer(options: MCPServerOptions): Server {
         case 'execute': {
           const { capability, method, path, body, headers, reason } = args as any;
 
+          // Validate required arguments
+          if (!capability) {
+            throw new Error('Missing required argument: capability');
+          }
+          if (!method) {
+            throw new Error('Missing required argument: method (GET, POST, PUT, DELETE, etc.)');
+          }
+          if (!path) {
+            throw new Error('Missing required argument: path');
+          }
+
           // Find capability
           const cap = capabilities.find(c => c.name === capability);
           if (!cap) {
             throw new Error(`Unknown capability: ${capability}`);
+          }
+
+          // Reject exec-mode capabilities — they should use janee_exec instead
+          if (cap.mode === 'exec') {
+            throw new Error(`Capability "${capability}" is an exec-mode capability. Use the 'janee_exec' tool instead.`);
           }
 
           // Check if reason required
@@ -354,7 +370,22 @@ export function createMCPServer(options: MCPServerOptions): Server {
             throw new Error('CLI execution not supported in this configuration');
           }
 
-          const { capability: execCapName, command: execCommand, stdin: execStdin, reason: execReason } = args as any;
+          const { capability: execCapName, command: rawExecCommand, stdin: execStdin, reason: execReason } = args as any;
+
+          // Validate required arguments
+          if (!execCapName) {
+            throw new Error('Missing required argument: capability');
+          }
+          if (!rawExecCommand || (Array.isArray(rawExecCommand) && rawExecCommand.length === 0) || (typeof rawExecCommand === 'string' && rawExecCommand.trim() === '')) {
+            throw new Error('Missing required argument: command');
+          }
+
+          // Normalize command to array — accept both string and array from MCP clients
+          const execCommand: string[] = Array.isArray(rawExecCommand)
+            ? rawExecCommand
+            : typeof rawExecCommand === 'string'
+              ? rawExecCommand.trim().split(/\s+/)
+              : [];
 
           // Find capability
           const execCap = capabilities.find(c => c.name === execCapName);
