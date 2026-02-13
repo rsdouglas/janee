@@ -175,6 +175,18 @@ interface SecretsProvider {
    * Throws SecretError with PROVIDER_CONFIG_INVALID or PROVIDER_AUTH_FAILED
    */
   initialize(): Promise<void>;
+  
+  // Read operations
+  getSecret(path: string): Promise<string | null>;
+  listSecrets(prefix: string): Promise<string[]>;
+  
+  // Write operations
+  setSecret(path: string, value: string, metadata?: Record<string, string>): Promise<void>;
+  deleteSecret(path: string): Promise<void>;
+  
+  // Lifecycle
+  healthCheck(): Promise<{ healthy: boolean; error?: string }>;
+  dispose(): Promise<void>;
 }
 ```
 
@@ -260,7 +272,7 @@ interface AwsSecretsManagerConfig {
   type: 'aws-secrets-manager';
   region: string;         // Required: us-east-1, etc.
   auth: AwsAuthConfig;    // Required
-  // No endpoint override in v1 (use standard AWS endpoints)
+  // Uses standard AWS endpoints by default
 }
 
 type AwsAuthConfig =
@@ -340,33 +352,49 @@ async function getSecret(uri: string): Promise<string> {
 **If multiple providers needed:** User must explicitly configure separate services or use different URIs.
 
 
-### Scope: Read-Only Operations
+### Scope: Full CRUD Operations
 
-The initial implementation focuses on **read operations** - what MCP servers need most:
+The plugin architecture supports complete secrets lifecycle management:
 
 ```typescript
 interface SecretsProvider {
   readonly name: string;
   readonly type: string;
   
+  // Lifecycle
   initialize(): Promise<void>;
-  getSecret(path: string): Promise<string | null>;
   dispose(): Promise<void>;
   healthCheck(): Promise<{ healthy: boolean; error?: string }>;
+  
+  // Read
+  getSecret(path: string): Promise<string | null>;
+  listSecrets(prefix: string): Promise<string[]>;
+  
+  // Write
+  setSecret(path: string, value: string, metadata?: Record<string, string>): Promise<void>;
+  deleteSecret(path: string): Promise<void>;
 }
 ```
 
-**Why read-only first:**
-- 99% of MCP server use cases are reading secrets
-- Write/delete operations can use provider-native CLIs (Vault CLI, AWS CLI, etc.)
-- Keeps initial implementation focused and testable
+**Read operations (`getSecret`, `listSecrets`):**
+- `getSecret` returns the current secret value, or `null` if not found
+- `listSecrets` returns paths matching the prefix (non-recursive by default)
+- Both are safe to call frequently; providers should cache where appropriate
 
-**Future extensions** (when needed):
-- `setSecret(path, value)` - write operations
-- `deleteSecret(path)` - deletion
-- `listSecrets(prefix)` - discovery
+**Write operations (`setSecret`, `deleteSecret`):**
+- `setSecret` creates or updates a secret at the given path
+- Optional `metadata` parameter for provider-specific attributes (e.g., Vault custom metadata, AWS tags)
+- `deleteSecret` performs a soft delete where supported (Vault), hard delete otherwise
+- Write operations emit audit events with action type but **never log secret values**
+- Providers that don't support writes (e.g., read-only Vault policies) throw `PROVIDER_PERMISSION_DENIED`
 
-Build the core solid first, extend when users ask for it.
+**Discovery (`listSecrets`):**
+- Returns an array of secret paths matching the prefix
+- Empty array if no matches (never throws for "no results")
+- Respects provider-level access controls (only lists secrets the auth identity can read)
+- Max results: 1000 per call (provider should paginate internally)
+
+All operations are built together in a single feature branch — no phased rollout needed.
 
 ### Threats and Mitigations
 
