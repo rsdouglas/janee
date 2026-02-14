@@ -4,8 +4,14 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-02-14
+
 ### Fixed
 
+- **Dynamic Server Version** — Read version from package.json instead of hardcoding (#74)
+  - Bug: MCP serverInfo reported version "0.1.0" regardless of actual package version
+  - Fix: Dynamically read version from package.json at module load time
+  - Also fixes User-Agent header to always use current version
 - **Exec Command Normalization** — Handle string commands in `janee_exec` tool (#75)
   - Bug: `janee_exec` crashed with `execCommand.join is not a function` when command sent as string
   - Fix: Normalize string commands to arrays via `split(/\s+/)` before processing
