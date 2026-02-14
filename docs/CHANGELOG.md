@@ -4,6 +4,15 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Exec Command Normalization** — Handle string commands in `janee_exec` tool (#75)
+  - Bug: `janee_exec` crashed with `execCommand.join is not a function` when command sent as string
+  - Fix: Normalize string commands to arrays via `split(/\s+/)` before processing
+- **Exec-Mode Credential Leak Prevention** — Block exec-mode capabilities from proxy path (#75)
+  - Security: `execute` tool didn't check `cap.mode`, allowing exec-mode credentials to leak as Bearer tokens
+  - Fix: Filter out exec-mode capabilities in the execute handler
+
 ## [0.8.3] - 2026-02-13
 
 ### Fixed
