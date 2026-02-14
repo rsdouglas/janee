@@ -139,8 +139,8 @@ export class SessionManager {
     }
 
     session.revoked = true;
-    this.sessions.delete(sessionId);
     this.save();
+    this.sessions.delete(sessionId);
     return true;
   }
 
@@ -150,6 +150,7 @@ export class SessionManager {
   listSessions(): Session[] {
     const now = new Date();
     const active: Session[] = [];
+    let cleaned = false;
 
     for (const [id, session] of this.sessions.entries()) {
       if (!session.revoked && now <= session.expiresAt) {
@@ -157,7 +158,12 @@ export class SessionManager {
       } else {
         // Clean up expired
         this.sessions.delete(id);
+        cleaned = true;
       }
+    }
+
+    if (cleaned) {
+      this.save();
     }
 
     return active;
@@ -168,11 +174,17 @@ export class SessionManager {
    */
   cleanup(): void {
     const now = new Date();
+    let cleaned = false;
     
     for (const [id, session] of this.sessions.entries()) {
       if (session.revoked || now > session.expiresAt) {
         this.sessions.delete(id);
+        cleaned = true;
       }
+    }
+
+    if (cleaned) {
+      this.save();
     }
   }
 }
