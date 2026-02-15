@@ -92,9 +92,10 @@ describe('SessionManager', () => {
     it('should persist revocation', () => {
       const session = manager.createSession('read', 'stripe', 3600);
       manager.revokeSession(session.id);
-      // Load from file — should be empty since revoked sessions are deleted
+      // Load from file — revoked session is persisted (marked as revoked)
       const data = JSON.parse(fs.readFileSync(persistFile, 'utf8'));
-      expect(data).toHaveLength(0);
+      expect(data).toHaveLength(1);
+      expect(data[0].revoked).toBe(true);
     });
   });
 

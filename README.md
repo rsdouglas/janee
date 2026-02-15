@@ -399,6 +399,31 @@ Agent never touches the real key.
 
 ---
 
+
+## Docker
+
+Run Janee as a container — no local Node.js required:
+
+```bash
+# Build
+docker build -t janee .
+
+# Run in HTTP mode
+docker run -d -p 3000:3000 \
+  -v ~/.janee:/root/.janee:ro \
+  janee --transport http --port 3000 --host 0.0.0.0
+```
+
+Or use Docker Compose:
+
+```bash
+mkdir -p config && cp ~/.janee/config.yaml config/
+docker compose up -d
+```
+
+For Claude Desktop with Docker, see [Docker docs](docs/docker.md).
+
+---
 ## Contributing
 
 We welcome contributions! Please read **[CONTRIBUTING.md](docs/CONTRIBUTING.md)** before submitting a PR — it includes the required PR checklist (tests, changelog, version bump, etc.).
