@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.github
+*.test.ts
+*.spec.ts
+coverage
+.env
+.env.*
+*.md
+!SKILL.md
+!README.md
+docs/rfcs
+examples
+.vscode
+.idea

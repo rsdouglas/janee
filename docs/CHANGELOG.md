@@ -4,6 +4,11 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Docker support: Dockerfile, docker-compose.yml, and .dockerignore for containerized deployment
+- Docker documentation (docs/docker.md) with stdio/HTTP modes, Claude Desktop config, and security guidance
+- README Docker section with quick start examples
+
 ## [0.8.4] - 2026-02-14
 
 ### Fixed

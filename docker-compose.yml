@@ -1,0 +1,42 @@
+# Docker Compose for Janee MCP Server
+#
+# Usage:
+#   1. Copy your janee config:  cp ~/.janee/config.yaml ./config/
+#   2. Start:                   docker compose up -d
+#   3. View logs:               docker compose logs -f janee
+#   4. Stop:                    docker compose down
+#
+# Modes:
+#   - stdio (default): For MCP clients that manage the process directly
+#   - http:            For network-accessible MCP server
+#
+# To switch to HTTP mode, uncomment the http profile below.
+
+services:
+  # HTTP transport mode — accessible over the network
+  janee:
+    build: .
+    image: janee:latest
+    container_name: janee-mcp
+    ports:
+      - "${JANEE_PORT:-3000}:3000"
+    volumes:
+      # Mount your config directory
+      - ./config:/root/.janee:ro
+      # Persist audit logs and session data
+      - janee-data:/data
+    environment:
+      - JANEE_CONFIG_DIR=/root/.janee
+      - NODE_ENV=production
+    command: ["--transport", "http", "--port", "3000", "--host", "0.0.0.0"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  janee-data:
+    driver: local
