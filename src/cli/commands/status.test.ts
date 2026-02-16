@@ -40,6 +40,9 @@ vi.mock('fs', async () => {
           { id: 'sess-3', capability: 'github-read', service: 'github', createdAt: '2026-01-01T00:00:00Z', expiresAt: futureDate, revoked: true },
         ]);
       }
+      if (typeof p === 'string' && p.endsWith('.jsonl')) {
+        return '{"timestamp":"2026-01-15T10:00:00Z","action":"proxy","service":"github"}\n{"timestamp":"2026-01-15T11:00:00Z","action":"proxy","service":"stripe"}\n';
+      }
       return actual.readFileSync(p, encoding as any);
     }),
     readdirSync: vi.fn((p: string) => {
@@ -47,7 +50,7 @@ vi.mock('fs', async () => {
       return actual.readdirSync(p);
     }),
     statSync: vi.fn((p: string) => {
-      if (typeof p === 'string' && p.includes('.jsonl')) return { size: 2048 };
+      if (typeof p === 'string' && p.endsWith('.jsonl')) return { size: 2048 };
       return actual.statSync(p);
     }),
   };
@@ -55,15 +58,18 @@ vi.mock('fs', async () => {
 
 describe('status command', () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
   });
 
   afterEach(() => {
     consoleSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     processExitSpy.mockRestore();
     vi.clearAllMocks();
   });
@@ -105,10 +111,7 @@ describe('status command', () => {
   });
 
   it('should show not initialized when no config', async () => {
-    const configYaml = await import('../config-yaml');
-    vi.mocked(configYaml.hasYAMLConfig).mockReturnValue(false);
-
-    // Re-import to pick up mock changes
+    // Re-import with modified mocks
     vi.resetModules();
     vi.doMock('../config-yaml', () => ({
       getConfigDir: vi.fn(() => '/home/testuser/.janee'),
@@ -116,6 +119,25 @@ describe('status command', () => {
       hasYAMLConfig: vi.fn(() => false),
       loadYAMLConfig: vi.fn(),
     }));
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      return {
+        ...actual,
+        existsSync: vi.fn((p: string) => {
+          if (typeof p === 'string' && p.includes('package.json')) return actual.existsSync(p);
+          return false;
+        }),
+        readFileSync: vi.fn((p: string, encoding?: string) => {
+          return actual.readFileSync(p, encoding as any);
+        }),
+        readdirSync: vi.fn((p: string) => {
+          return actual.readdirSync(p);
+        }),
+        statSync: vi.fn((p: string) => {
+          return actual.statSync(p);
+        }),
+      };
+    });
 
     const { statusCommand: freshStatusCommand } = await import('./status');
     await freshStatusCommand();
