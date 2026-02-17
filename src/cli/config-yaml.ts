@@ -8,7 +8,7 @@ import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
 import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
-import { CredentialOwnership, agentCreatedOwnership } from '../core/agent-scope';
+import { CredentialOwnership, agentCreatedOwnership, cliCreatedOwnership } from '../core/agent-scope';
 
 export interface AuthConfig {
   type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
@@ -316,7 +316,8 @@ export function addServiceYAML(
 
   config.services[name] = {
     baseUrl,
-    auth
+    auth,
+    ownership: cliCreatedOwnership()
   };
 
   saveYAMLConfig(config);

@@ -277,13 +277,16 @@ export function createMCPServer(options: MCPServerOptions): Server {
   });
 
   // Handle tool calls
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
 
     try {
       switch (name) {
         case 'list_services': {
-          const listAgentId = resolveAgentIdentity(undefined, (args as any)?.agentId);
+          const listAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any)?.agentId
+          );
           return {
             content: [{
               type: 'text',
@@ -391,7 +394,10 @@ export function createMCPServer(options: MCPServerOptions): Server {
           }
 
           // Check agent-scoped access (transport-bound identity preferred over client-asserted)
-          const executeAgentId = resolveAgentIdentity(undefined, (args as any).agentId);
+          const executeAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any).agentId
+          );
           const executeSvc = services.get(cap.service);
           if (!canAgentAccess(executeAgentId, executeSvc?.ownership)) {
             auditLogger.logDenied(
@@ -527,7 +533,10 @@ export function createMCPServer(options: MCPServerOptions): Server {
 
         case 'manage_credential': {
           const { action: credAction, service: credService, targetAgentId: credTarget } = args as any;
-          const credAgentId = resolveAgentIdentity(undefined, (args as any).agentId);
+          const credAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any).agentId
+          );
 
           if (!credService) {
             throw new Error('Missing required argument: service');
