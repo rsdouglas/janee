@@ -20,7 +20,7 @@ import { URL } from 'url';
 import express from 'express';
 import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
 import { readFileSync } from 'fs';
-import { canAgentAccess, CredentialOwnership } from './agent-scope.js';
+import { canAgentAccess, resolveAgentIdentity, CredentialOwnership } from './agent-scope.js';
 import { join } from 'path';
 
 
@@ -87,6 +87,8 @@ export interface MCPServerOptions {
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
   onExecCommand?: (session: any, capability: Capability, command: string[], stdin?: string) => Promise<ExecResult>;
   onReloadConfig?: () => ReloadResult;
+  /** Persist ownership changes to config storage (called after grant/revoke) */
+  onPersistOwnership?: (serviceName: string, ownership: CredentialOwnership) => void;
 }
 
 /**
@@ -113,7 +115,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig } = options;
+  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig, onPersistOwnership } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -281,7 +283,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
     try {
       switch (name) {
         case 'list_services': {
-          const listAgentId = (args as any)?.agentId;
+          const listAgentId = resolveAgentIdentity(undefined, (args as any)?.agentId);
           return {
             content: [{
               type: 'text',
@@ -388,8 +390,8 @@ export function createMCPServer(options: MCPServerOptions): Server {
             throw new Error(ruleCheck.reason || 'Request denied by policy');
           }
 
-          // Check agent-scoped access
-          const executeAgentId = (args as any).agentId;
+          // Check agent-scoped access (transport-bound identity preferred over client-asserted)
+          const executeAgentId = resolveAgentIdentity(undefined, (args as any).agentId);
           const executeSvc = services.get(cap.service);
           if (!canAgentAccess(executeAgentId, executeSvc?.ownership)) {
             auditLogger.logDenied(
@@ -524,7 +526,8 @@ export function createMCPServer(options: MCPServerOptions): Server {
         }
 
         case 'manage_credential': {
-          const { action: credAction, service: credService, targetAgentId: credTarget, agentId: credAgentId } = args as any;
+          const { action: credAction, service: credService, targetAgentId: credTarget } = args as any;
+          const credAgentId = resolveAgentIdentity(undefined, (args as any).agentId);
 
           if (!credService) {
             throw new Error('Missing required argument: service');
@@ -567,13 +570,20 @@ export function createMCPServer(options: MCPServerOptions): Server {
             }
             const { grantAccess } = await import('./agent-scope.js');
             svc.ownership = grantAccess(svc.ownership, credTarget);
+
+            // Persist ownership change to config storage
+            if (onPersistOwnership) {
+              onPersistOwnership(credService, svc.ownership);
+            }
+
             return {
               content: [{
                 type: 'text',
                 text: JSON.stringify({
                   success: true,
                   message: `Granted access to ${credTarget}`,
-                  ownership: svc.ownership
+                  ownership: svc.ownership,
+                  persisted: !!onPersistOwnership
                 }, null, 2)
               }]
             };
@@ -585,13 +595,20 @@ export function createMCPServer(options: MCPServerOptions): Server {
             }
             const { revokeAccess } = await import('./agent-scope.js');
             svc.ownership = revokeAccess(svc.ownership, credTarget);
+
+            // Persist ownership change to config storage
+            if (onPersistOwnership) {
+              onPersistOwnership(credService, svc.ownership);
+            }
+
             return {
               content: [{
                 type: 'text',
                 text: JSON.stringify({
                   success: true,
                   message: `Revoked access from ${credTarget}`,
-                  ownership: svc.ownership
+                  ownership: svc.ownership,
+                  persisted: !!onPersistOwnership
                 }, null, 2)
               }]
             };

@@ -8,7 +8,7 @@ import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
 import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
-import { CredentialOwnership } from '../core/agent-scope';
+import { CredentialOwnership, agentCreatedOwnership } from '../core/agent-scope';
 
 export interface AuthConfig {
   type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
@@ -240,6 +240,36 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
   });
 
   fs.writeFileSync(getConfigFileYAML(), yamlContent, { mode: 0o600 });
+}
+
+/**
+ * Persist a single service's ownership metadata to the YAML config file.
+ * Called after grant/revoke operations to ensure changes survive restarts.
+ */
+export function persistServiceOwnership(serviceName: string, ownership: CredentialOwnership): void {
+  const config = loadYAMLConfig();
+  if (!config.services[serviceName]) {
+    throw new Error(`Service "${serviceName}" not found in config`);
+  }
+  config.services[serviceName].ownership = ownership;
+  saveYAMLConfig(config);
+}
+
+/**
+ * Auto-assign ownership when a service is created via MCP (agent-initiated).
+ * This ensures agent-created credentials default to "agent-only" access.
+ */
+export function createServiceWithOwnership(
+  config: JaneeYAMLConfig,
+  serviceName: string,
+  service: ServiceConfig,
+  creatingAgentId?: string
+): JaneeYAMLConfig {
+  if (creatingAgentId) {
+    service.ownership = agentCreatedOwnership(creatingAgentId);
+  }
+  config.services[serviceName] = service;
+  return config;
 }
 
 /**

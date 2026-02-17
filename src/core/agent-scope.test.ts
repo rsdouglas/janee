@@ -185,3 +185,38 @@ describe('agent-scope', () => {
     });
   });
 });
+
+import { resolveAgentIdentity } from './agent-scope';
+
+describe('resolveAgentIdentity', () => {
+  it('should prefer transport-bound identity from session metadata', () => {
+    const session = {
+      agentId: 'session-agent',
+      metadata: { verifiedAgentId: 'verified-agent' }
+    };
+    expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('verified-agent');
+  });
+
+  it('should fallback to session agentId when no verified identity', () => {
+    const session = { agentId: 'session-agent', metadata: {} };
+    expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('session-agent');
+  });
+
+  it('should fallback to client-asserted identity when no session', () => {
+    expect(resolveAgentIdentity(undefined, 'asserted-agent')).toBe('asserted-agent');
+  });
+
+  it('should return undefined when no identity available', () => {
+    expect(resolveAgentIdentity(undefined, undefined)).toBeUndefined();
+  });
+
+  it('should prefer session.agentId over client assertion', () => {
+    const session = { agentId: 'session-agent' };
+    expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('session-agent');
+  });
+
+  it('should handle session with empty metadata', () => {
+    const session = { metadata: {} };
+    expect(resolveAgentIdentity(session, 'fallback')).toBe('fallback');
+  });
+});
