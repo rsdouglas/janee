@@ -1,5 +1,7 @@
 # Contributing to Janee
 
+Thanks for contributing to Janee! Please read this guide before submitting a PR.
+
 ## Pull Request Workflow
 
 When you're ready to contribute changes:
@@ -7,17 +9,19 @@ When you're ready to contribute changes:
 1. Commit your changes to a feature branch
 2. Push the branch to GitHub
 3. Open a pull request against the `main` branch
-4. Review the PR Checklist below to ensure your PR is ready
+4. Copy the **PR Checklist** below into your PR description and check off completed items
 5. Wait for review and address any feedback
 
 ## PR Checklist
 
-Before submitting a PR, review this checklist. Not everything applies to every PR — use judgment.
+Copy this into your PR description:
 
-### Always
+```markdown
+## PR Checklist
 
 - [ ] **Tests** — New features need tests. Bug fixes need regression tests.
 - [ ] **CHANGELOG.md** — Update `docs/CHANGELOG.md` for user-facing changes.
+- [ ] **Version bump** — Bump version in `package.json` if this PR should trigger a release.
 
 ### When Applicable
 
@@ -34,6 +38,18 @@ Before submitting a PR, review this checklist. Not everything applies to every P
 - [ ] Build succeeds (`npm run build`)
 - [ ] PR description explains *what* and *why*
 - [ ] Breaking changes are clearly noted
+```
+
+### Version Bumping
+
+When your PR includes user-facing changes that should be published to npm:
+
+1. Bump the version in `package.json` following [semver](https://semver.org/):
+   - **patch** (0.8.x → 0.8.y) for bug fixes
+   - **minor** (0.x.0 → 0.y.0) for new features
+   - **major** (x.0.0 → y.0.0) for breaking changes
+2. Add a corresponding entry in `docs/CHANGELOG.md` under the new version heading
+3. If unsure whether to bump, ask in the PR — the maintainer will advise
 
 ## Commit Messages
 

@@ -15,6 +15,7 @@ import { logsCommand } from './commands/logs';
 import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
 import { searchCommand } from './commands/search';
+import { statusCommand } from './commands/status';
 import {
   capabilityListCommand,
   capabilityAddCommand,
@@ -98,6 +99,12 @@ program
   .command('revoke <session>')
   .description('Revoke a session immediately')
   .action(revokeCommand);
+
+program
+  .command('status')
+  .description('Show Janee configuration and health status')
+  .option('--json', 'Output as JSON')
+  .action(statusCommand);
 
 program
   .command('search [query]')

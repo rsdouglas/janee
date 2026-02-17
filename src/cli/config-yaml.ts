@@ -34,6 +34,12 @@ export interface CapabilityConfig {
     allow?: string[];
     deny?: string[];
   };
+  // Exec mode fields (RFC 0001)
+  mode?: 'proxy' | 'exec';  // Default: 'proxy' (HTTP proxy mode)
+  allowCommands?: string[];  // Whitelist of allowed executables
+  env?: Record<string, string>;  // Env var mapping with {{credential}} placeholders
+  workDir?: string;  // Working directory for command execution
+  timeout?: number;  // Max execution time in ms (default: 30000)
 }
 
 export interface LLMConfig {

@@ -6,6 +6,7 @@ import { getAuditDir } from '../config-yaml';
 import { signBybit, signOKX, signMEXC } from '../../core/signing';
 import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCredentials, clearCachedToken } from '../../core/service-account';
 import { URL } from 'url';
+import { buildExecEnv, executeCommand } from '../../core/exec.js';
 
 /**
  * Load config and convert to MCP format
@@ -20,7 +21,13 @@ function loadConfigForMCP(): ReloadResult {
       ttl: cap.ttl,
       autoApprove: cap.autoApprove,
       requiresReason: cap.requiresReason,
-      rules: cap.rules
+      rules: cap.rules,
+      // Exec mode fields (RFC 0001)
+      mode: cap.mode || 'proxy',
+      allowCommands: cap.allowCommands,
+      env: cap.env,
+      workDir: cap.workDir,
+      timeout: cap.timeout,
     })
   );
 
@@ -79,6 +86,49 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       services,
       sessionManager,
       auditLogger,
+
+      // RFC 0001: Secure CLI execution handler
+      onExecCommand: async (session, capability, command, stdin) => {
+        // Get service config for credentials
+        const serviceConfig = currentServices.get(capability.service);
+        if (!serviceConfig) {
+          throw new Error(`Service not found: ${capability.service}`);
+        }
+
+        // Determine credential from service auth
+        let credential = '';
+        let extraCredentials: { apiKey?: string; apiSecret?: string; passphrase?: string } | undefined;
+
+        if (serviceConfig.auth.type === 'bearer' && serviceConfig.auth.key) {
+          credential = serviceConfig.auth.key;
+        } else if (
+          serviceConfig.auth.type === 'hmac-mexc' ||
+          serviceConfig.auth.type === 'hmac-bybit' ||
+          serviceConfig.auth.type === 'hmac-okx'
+        ) {
+          extraCredentials = {
+            apiKey: serviceConfig.auth.apiKey,
+            apiSecret: serviceConfig.auth.apiSecret,
+            passphrase: serviceConfig.auth.passphrase,
+          };
+        }
+
+        // Build environment with injected credentials
+        const injectedEnv = buildExecEnv(
+          capability.env || {},
+          credential,
+          extraCredentials
+        );
+
+        // Execute command
+        return executeCommand(command, injectedEnv, {
+          workDir: capability.workDir,
+          timeout: capability.timeout || 30000,
+          stdin,
+          credential,
+          extraCredentials,
+        });
+      },
 
       onReloadConfig: () => {
         const result = loadConfigForMCP();

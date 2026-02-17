@@ -4,6 +4,63 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Docker support: Dockerfile, docker-compose.yml, and .dockerignore for containerized deployment
+- Docker documentation (docs/docker.md) with stdio/HTTP modes, Claude Desktop config, and security guidance
+- README Docker section with quick start examples
+
+## [0.8.4] - 2026-02-14
+
+### Fixed
+
+- **Dynamic Server Version** — Read version from package.json instead of hardcoding (#74)
+  - Bug: MCP serverInfo reported version "0.1.0" regardless of actual package version
+  - Fix: Dynamically read version from package.json at module load time
+  - Also fixes User-Agent header to always use current version
+- **Exec Command Normalization** — Handle string commands in `janee_exec` tool (#75)
+  - Bug: `janee_exec` crashed with `execCommand.join is not a function` when command sent as string
+  - Fix: Normalize string commands to arrays via `split(/\s+/)` before processing
+- **Exec-Mode Credential Leak Prevention** — Block exec-mode capabilities from proxy path (#75)
+  - Security: `execute` tool didn't check `cap.mode`, allowing exec-mode credentials to leak as Bearer tokens
+  - Fix: Filter out exec-mode capabilities in the execute handler
+
+## [0.8.3] - 2026-02-13
+
+### Fixed
+
+- **User-Agent Header for Proxy Requests** — Add `User-Agent: janee/<version>` header to all proxied HTTP requests (#72)
+  - Bug: GitHub API (and other APIs) were rejecting proxied requests with 403 Forbidden
+  - Root cause: Node.js `http.request` sends no User-Agent by default; GitHub requires one
+  - Fix: Inject `User-Agent: janee/<version>` header on all outgoing proxy requests
+  - Impact: GitHub API proxy mode now works reliably
+
+## [0.8.2] - 2026-02-13
+
+### Added
+
+- **Secure CLI Execution Mode** — Allow agents to run pre-approved CLI commands with secrets injected via environment variables (RFC-0001, #69)
+  - New capability mode: `exec` — runs commands in sandboxed subprocess
+  - Secrets injected as env vars (e.g., `GH_TOKEN: '{{credential}}'`), never visible to agent
+  - `allowCommands` whitelist restricts which binaries can be executed
+  - Configurable `timeout` per capability (default: 30s)
+  - Full audit logging of command execution with sanitized output
+  - Example: `gh api /user` runs through janee with GitHub token injected
+- **Real-World Configuration Examples** — Add examples directory with production-ready config templates (#68)
+  - `claude-desktop-github-openai.yaml` — Multi-service setup for Claude Desktop
+  - `crypto-trading-agent.yaml` — Exchange API configuration with HMAC auth
+  - `slack-notion-productivity.yaml` — Productivity tool integration
+- **Service Health Check Module** — Add health check infrastructure for monitoring service connectivity (#67)
+
+## [0.8.1] - 2026-02-13
+
+### Added
+
+- **MCP Registry Support** — Add metadata for official MCP Registry listing (#60)
+  - Add `server.json` with MCP Registry schema compliance
+  - Add `mcpName` field to `package.json` (`io.github.rsdouglas/janee`)
+  - Enables publication to [official MCP Registry](https://registry.modelcontextprotocol.io)
+  - Will appear on PulseMCP, Glama.ai, and other MCP aggregators
+
 ## [0.8.0] - 2026-02-11
 
 ### Added

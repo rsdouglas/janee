@@ -18,6 +18,14 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 import express from 'express';
+import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+
+// Read version from package.json
+const packageJsonPath = join(__dirname, '../../package.json');
+const pkgVersion = JSON.parse(readFileSync(packageJsonPath, 'utf8')).version || '0.0.0';
 
 export interface Capability {
   name: string;
@@ -26,6 +34,12 @@ export interface Capability {
   autoApprove?: boolean;
   requiresReason?: boolean;
   rules?: Rules;  // Optional allow/deny patterns
+  // Exec mode fields (RFC 0001)
+  mode?: 'proxy' | 'exec';
+  allowCommands?: string[];
+  env?: Record<string, string>;
+  workDir?: string;
+  timeout?: number;
 }
 
 export interface ServiceConfig {
@@ -67,6 +81,7 @@ export interface MCPServerOptions {
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
+  onExecCommand?: (session: any, capability: Capability, command: string[], stdin?: string) => Promise<ExecResult>;
   onReloadConfig?: () => ReloadResult;
 }
 
@@ -94,7 +109,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onReloadConfig } = options;
+  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -103,7 +118,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
   const server = new Server(
     {
       name: 'janee',
-      version: '0.1.0'
+      version: pkgVersion
     },
     {
       capabilities: {
@@ -172,9 +187,43 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   };
 
+
+  // Tool: janee_exec (RFC 0001 - Secure CLI Execution)
+  const execTool: Tool = {
+    name: 'janee_exec',
+    description: 'Execute a CLI command with credentials injected via environment variables. The agent never sees the actual credential — Janee injects it and scrubs output.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        capability: {
+          type: 'string',
+          description: 'Capability name (must be exec mode, from list_services)'
+        },
+        command: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Command and arguments as array, e.g. ["gh", "issue", "list"]'
+        },
+        stdin: {
+          type: 'string',
+          description: 'Optional stdin input to pipe to the command'
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for this execution (required for some capabilities)'
+        }
+      },
+      required: ['capability', 'command']
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools = [listServicesTool, executeTool];
+    // Add exec tool if handler is provided
+    if (onExecCommand) {
+      tools.push(execTool);
+    }
     // Only expose reload_config if a reload handler is provided
     if (onReloadConfig) {
       tools.push(reloadConfigTool);
@@ -196,10 +245,15 @@ export function createMCPServer(options: MCPServerOptions): Server {
                 capabilities.map(cap => ({
                   name: cap.name,
                   service: cap.service,
+                  mode: cap.mode || 'proxy',
                   ttl: cap.ttl,
                   autoApprove: cap.autoApprove,
                   requiresReason: cap.requiresReason,
-                  rules: cap.rules
+                  rules: cap.rules,
+                  ...(cap.mode === 'exec' && {
+                    allowCommands: cap.allowCommands,
+                    env: cap.env ? Object.keys(cap.env) : undefined,
+                  })
                 })),
                 null,
                 2
@@ -243,10 +297,26 @@ export function createMCPServer(options: MCPServerOptions): Server {
         case 'execute': {
           const { capability, method, path, body, headers, reason } = args as any;
 
+          // Validate required arguments
+          if (!capability) {
+            throw new Error('Missing required argument: capability');
+          }
+          if (!method) {
+            throw new Error('Missing required argument: method (GET, POST, PUT, DELETE, etc.)');
+          }
+          if (!path) {
+            throw new Error('Missing required argument: path');
+          }
+
           // Find capability
           const cap = capabilities.find(c => c.name === capability);
           if (!cap) {
             throw new Error(`Unknown capability: ${capability}`);
+          }
+
+          // Reject exec-mode capabilities — they should use janee_exec instead
+          if (cap.mode === 'exec') {
+            throw new Error(`Capability "${capability}" is an exec-mode capability. Use the 'janee_exec' tool instead.`);
           }
 
           // Check if reason required
@@ -300,6 +370,95 @@ export function createMCPServer(options: MCPServerOptions): Server {
           };
         }
 
+
+        case 'janee_exec': {
+          if (!onExecCommand) {
+            throw new Error('CLI execution not supported in this configuration');
+          }
+
+          const { capability: execCapName, command: rawExecCommand, stdin: execStdin, reason: execReason } = args as any;
+
+          // Validate required arguments
+          if (!execCapName) {
+            throw new Error('Missing required argument: capability');
+          }
+          if (!rawExecCommand || (Array.isArray(rawExecCommand) && rawExecCommand.length === 0) || (typeof rawExecCommand === 'string' && rawExecCommand.trim() === '')) {
+            throw new Error('Missing required argument: command');
+          }
+
+          // Normalize command to array — accept both string and array from MCP clients
+          const execCommand: string[] = Array.isArray(rawExecCommand)
+            ? rawExecCommand
+            : typeof rawExecCommand === 'string'
+              ? rawExecCommand.trim().split(/\s+/)
+              : [];
+
+          // Find capability
+          const execCap = capabilities.find(c => c.name === execCapName);
+          if (!execCap) {
+            throw new Error(`Unknown capability: ${execCapName}`);
+          }
+
+          // Verify this is an exec-mode capability
+          if (execCap.mode !== 'exec') {
+            throw new Error(`Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`);
+          }
+
+          // Check if reason required
+          if (execCap.requiresReason && !execReason) {
+            throw new Error(`Capability "${execCapName}" requires a reason`);
+          }
+
+          // Validate command against whitelist
+          const cmdValidation = validateCommand(execCommand, execCap.allowCommands || []);
+          if (!cmdValidation.allowed) {
+            auditLogger.logDenied(
+              execCap.service,
+              'EXEC',
+              execCommand.join(' '),
+              cmdValidation.reason || 'Command not allowed',
+              execReason
+            );
+            throw new Error(cmdValidation.reason || 'Command not allowed');
+          }
+
+          // Get or create session
+          const execTtlSeconds = parseTTL(execCap.ttl);
+          const execSession = sessionManager.createSession(
+            execCap.name,
+            execCap.service,
+            execTtlSeconds,
+            { reason: execReason }
+          );
+
+          // Execute command
+          const execResult = await onExecCommand(execSession, execCap, execCommand, execStdin);
+
+          // Log to audit
+          auditLogger.log({
+            service: execCap.service,
+            path: execCommand.join(' '),
+            method: 'EXEC',
+            headers: { 'x-janee-reason': execReason || '' },
+          }, {
+            statusCode: execResult.exitCode === 0 ? 200 : 500,
+            headers: {},
+            body: execResult.stdout,
+          }, execResult.executionTimeMs);
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                exitCode: execResult.exitCode,
+                stdout: execResult.stdout,
+                stderr: execResult.stderr,
+                executionTimeMs: execResult.executionTimeMs,
+              }, null, 2)
+            }]
+          };
+        }
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -334,7 +493,10 @@ export function makeAPIRequest(
       port: targetUrl.port,
       path: targetUrl.pathname + targetUrl.search,
       method: request.method,
-      headers: request.headers
+      headers: {
+        'User-Agent': 'janee/' + pkgVersion,
+        ...request.headers
+      }
     };
 
     const req = client.request(options, (res) => {

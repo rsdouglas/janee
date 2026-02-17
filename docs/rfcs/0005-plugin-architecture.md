@@ -3,6 +3,7 @@
 **Status:** Proposed  
 **Author:** Luca Moretti (@lucamorettibuilds)  
 **Date:** 2026-02-12  
+**Updated:** 2026-02-12 (Specification Refinement)  
 **Related Issue:** [#54](https://github.com/rsdouglas/janee/issues/54)
 
 ## Summary
@@ -55,372 +56,604 @@ Janee currently stores encrypted secrets on the local filesystem. This works wel
 └──────────┘ └──────────┘ └──────────┘     └──────────┘
 ```
 
-### Configuration Example
+## Normative Behavior
+
+This section defines mandatory implementation requirements.
+
+### URI Format and Parsing
+
+**Grammar:**
+
+```
+secret-uri     = provider-ref "://" secret-path
+provider-ref   = ALPHA *(ALPHA / DIGIT / "-" / "_")
+secret-path    = path-segment *("/" path-segment)
+path-segment   = 1*(unreserved / pct-encoded)
+unreserved     = ALPHA / DIGIT / "-" / "." / "_" / "~"
+pct-encoded    = "%" HEXDIG HEXDIG
+```
+
+**Validation Rules:**
+
+1. **Provider reference**: 
+   - Must start with letter
+   - 1-64 characters
+   - Only alphanumeric, hyphen, underscore
+   - Case-insensitive (normalized to lowercase)
+   - Reserved names: `local`, `filesystem` (alias for default provider)
+
+2. **Secret path**:
+   - Must not be empty
+   - Max length: 1024 characters (after URL decoding)
+   - Must not contain `..` segments (path traversal prevention)
+   - Leading slash is optional and normalized away
+   - Trailing slash is stripped
+
+3. **URL encoding**:
+   - Special characters must be percent-encoded
+   - Decode before passing to provider
+   - Invalid encoding → `InvalidSecretURI` error
+
+**Examples:**
 
 ```yaml
-# Define available secrets providers
-providers:
-  local:
-    type: filesystem
-    path: ~/.janee/credentials
-    # This is the current default behavior
+# Valid
+key: vault://mcp/agents/stripe/api-key
+key: aws://prod/payment/stripe
+key: vault://my-app/config%2Fspecial  # Decodes to "my-app/config/special"
+
+# Invalid
+key: vault://                 # Error: empty path
+key: vault://../etc/passwd   # Error: path traversal
+key: 9vault://path           # Error: provider must start with letter
+key: vault://very/long/...   # Error: path > 1024 chars
+```
+
+### Error Taxonomy
+
+All provider operations must use this error taxonomy:
+
+```typescript
+enum SecretErrorCode {
+  // Configuration errors (fail fast at startup)
+  PROVIDER_NOT_FOUND = 'PROVIDER_NOT_FOUND',           // Unknown provider name
+  PROVIDER_CONFIG_INVALID = 'PROVIDER_CONFIG_INVALID', // Bad provider config
+  INVALID_SECRET_URI = 'INVALID_SECRET_URI',           // Malformed URI
   
+  // Runtime errors (per-request)
+  SECRET_NOT_FOUND = 'SECRET_NOT_FOUND',               // Secret doesn't exist
+  PROVIDER_AUTH_FAILED = 'PROVIDER_AUTH_FAILED',       // Auth credentials invalid/expired
+  PROVIDER_UNAVAILABLE = 'PROVIDER_UNAVAILABLE',       // Network/connection error
+  PROVIDER_PERMISSION_DENIED = 'PROVIDER_PERMISSION_DENIED', // Insufficient permissions
+  PROVIDER_RATE_LIMITED = 'PROVIDER_RATE_LIMITED',     // Too many requests
+  
+  // Internal errors
+  PROVIDER_INTERNAL_ERROR = 'PROVIDER_INTERNAL_ERROR', // Provider-specific failure
+}
+
+class SecretError extends Error {
+  constructor(
+    public code: SecretErrorCode,
+    message: string,
+    public provider?: string,
+    public path?: string,
+    public cause?: Error
+  ) {
+    super(message);
+    this.name = 'SecretError';
+  }
+}
+```
+
+**Error Handling Requirements:**
+
+1. **Fail fast**: Configuration errors (PROVIDER_NOT_FOUND, INVALID_SECRET_URI) must be detected at startup
+2. **No fallback**: Never silently fall back to another provider on error
+3. **Clear messages**: Include provider name and sanitized path (no secret values)
+4. **Categorization**: Distinguish transient (UNAVAILABLE, RATE_LIMITED) from permanent (AUTH_FAILED, NOT_FOUND) errors
+5. **Logging**: Log errors with full context, but redact secret values
+
+
+### Authentication Lifecycle
+
+**Initialization:**
+
+```typescript
+interface ProviderAuthConfig {
+  method: string;  // Provider-specific auth method
+  // Additional fields depend on method (see strict schema below)
+}
+
+interface SecretsProvider {
+  /**
+   * Initialize must:
+   * 1. Validate configuration
+   * 2. Establish connection
+   * 3. Authenticate
+   * 4. Verify permissions (optional health check)
+   * 
+   * Throws SecretError with PROVIDER_CONFIG_INVALID or PROVIDER_AUTH_FAILED
+   */
+  initialize(): Promise<void>;
+  
+  // Read operations
+  getSecret(path: string): Promise<string | null>;
+  listSecrets(prefix: string): Promise<string[]>;
+  
+  // Write operations
+  setSecret(path: string, value: string, metadata?: Record<string, string>): Promise<void>;
+  deleteSecret(path: string): Promise<void>;
+  
+  // Lifecycle
+  healthCheck(): Promise<{ healthy: boolean; error?: string }>;
+  dispose(): Promise<void>;
+}
+```
+
+**Token Refresh and Renewal:**
+
+1. **Automatic renewal**: Providers with expiring tokens (Vault, AWS STS) must handle renewal transparently
+2. **Renewal timing**: Refresh at 80% of token lifetime (e.g., 48min for 1hr token)
+3. **Renewal failure**: Log warning, attempt retry with exponential backoff
+4. **Hard expiration**: If renewal fails and token expires, subsequent requests fail with `PROVIDER_AUTH_FAILED`
+
+**Retry and Backoff Strategy:**
+
+```typescript
+interface RetryPolicy {
+  maxAttempts: number;      // Default: 3
+  initialDelayMs: number;   // Default: 100ms
+  maxDelayMs: number;       // Default: 5000ms
+  backoffMultiplier: number; // Default: 2.0
+  retryableErrors: SecretErrorCode[]; // Default: [PROVIDER_UNAVAILABLE, PROVIDER_RATE_LIMITED]
+}
+```
+
+**Retry behavior:**
+
+1. **Transient errors** (UNAVAILABLE, RATE_LIMITED): Retry with exponential backoff
+2. **Permanent errors** (AUTH_FAILED, NOT_FOUND, PERMISSION_DENIED): Fail immediately, no retry
+3. **Rate limiting**: Honor `Retry-After` header if provided by backend
+4. **Circuit breaker**: After 5 consecutive failures, pause requests for 30s
+5. **Timeout**: Per-request timeout of 10s (configurable)
+
+**Auth failure propagation:**
+
+```typescript
+// When auth fails during initialization
+throw new SecretError(
+  SecretErrorCode.PROVIDER_AUTH_FAILED,
+  `Failed to authenticate with Vault: token expired`,
+  'prodVault'
+);
+
+// When auth fails during request
+throw new SecretError(
+  SecretErrorCode.PROVIDER_AUTH_FAILED,
+  `Vault token expired mid-request`,
+  'prodVault',
+  'mcp/agents/stripe/api-key'
+);
+```
+
+### Configuration Schema
+
+**Strict provider configuration with discriminated unions:**
+
+```typescript
+type ProviderConfig = 
+  | LocalFilesystemConfig
+  | HashicorpVaultConfig
+  | AwsSecretsManagerConfig
+  | AzureKeyVaultConfig;
+
+interface LocalFilesystemConfig {
+  type: 'filesystem';
+  path: string;  // Required: absolute or ~ path
+  // No additional fields allowed
+}
+
+interface HashicorpVaultConfig {
+  type: 'hashicorp-vault';
+  address: string;        // Required: https://vault.example.com
+  namespace?: string;     // Optional: for Vault Enterprise
+  auth: VaultAuthConfig;  // Required: see below
+  mountPath?: string;     // Optional: KV mount path, default: "secret"
+  // Forbidden fields will cause PROVIDER_CONFIG_INVALID error
+}
+
+type VaultAuthConfig =
+  | { method: 'token'; token: string }
+  | { method: 'approle'; roleId: string; secretId: string }
+  | { method: 'kubernetes'; role: string; serviceAccountPath?: string }
+  | { method: 'aws'; role: string; region?: string };
+
+interface AwsSecretsManagerConfig {
+  type: 'aws-secrets-manager';
+  region: string;         // Required: us-east-1, etc.
+  auth: AwsAuthConfig;    // Required
+  // Uses standard AWS endpoints by default
+}
+
+type AwsAuthConfig =
+  | { method: 'iam-role' }  // Use instance/pod IAM role
+  | { method: 'access-key'; accessKeyId: string; secretAccessKey: string };
+
+interface AzureKeyVaultConfig {
+  type: 'azure-key-vault';
+  vaultUrl: string;       // Required: https://<vault-name>.vault.azure.net
+  auth: AzureAuthConfig;  // Required
+}
+
+type AzureAuthConfig =
+  | { method: 'managed-identity'; clientId?: string }
+  | { method: 'service-principal'; tenantId: string; clientId: string; clientSecret: string };
+```
+
+**Configuration validation:**
+
+1. **Strict mode**: Unknown fields → `PROVIDER_CONFIG_INVALID` error
+2. **Required fields**: Missing required field → error at startup
+3. **Type checking**: Wrong type (e.g., number instead of string) → error at startup
+4. **Secret substitution**: Support `${ENV_VAR}` and `${file:/path}` in auth fields
+
+**Example with strict validation:**
+
+```yaml
+providers:
   prodVault:
     type: hashicorp-vault
     address: https://vault.company.com
     namespace: mcp-agents
     auth:
-      method: token
-      token: ${VAULT_TOKEN}  # From environment
-    # Alternative auth methods: approle, kubernetes, aws, etc.
-  
-  awsSecrets:
-    type: aws-secrets-manager
-    region: us-east-1
-    auth:
-      method: iam-role  # Use instance/pod IAM role
-      # Alternative: access-key with key/secret
-  
-  devVault:
-    type: hashicorp-vault
-    address: http://localhost:8200
-    auth:
-      method: docker
-      # Starts vault in Docker for local development
-      image: hashicorp/vault:latest
-      network: host
-      volumes:
-        - ./vault-data:/vault/data
-
-# Services reference providers using URI syntax
-services:
-  stripe:
-    baseUrl: https://api.stripe.com
-    auth:
-      type: bearer
-      # New URI syntax: provider://path
-      key: prodVault://mcp/agents/stripe/api-key
-  
-  github:
-    baseUrl: https://api.github.com
-    auth:
-      type: bearer
-      # Can still use local filesystem (backward compatible)
-      key: local://github-token
-      # Or omit provider to use default: github-token
-  
-  openai-dev:
-    baseUrl: https://api.openai.com
-    auth:
-      type: bearer
-      key: devVault://dev/openai-key
-
-capabilities:
-  stripe_payments:
-    service: stripe
-    ttl: 1h
-    autoApprove: false
-  
-  github_repos:
-    service: github
-    ttl: 30m
-    autoApprove: true
+      method: approle
+      roleId: ${VAULT_ROLE_ID}
+      secretId: ${file:~/.vault-secret-id}
+    mountPath: secret
+    # unknownField: value  # This would cause PROVIDER_CONFIG_INVALID error
 ```
 
-### Provider Interface
+### Provider Fallback Policy
 
-All providers must implement this interface:
+**Hard requirement: NO FALLBACK**
+
+```typescript
+// ❌ FORBIDDEN: Attempting fallback on error
+async function getSecret(uri: string): Promise<string> {
+  try {
+    return await primaryProvider.getSecret(path);
+  } catch (error) {
+    // NEVER DO THIS - security risk
+    return await fallbackProvider.getSecret(path);
+  }
+}
+
+// ✅ CORRECT: Fail fast with clear error
+async function getSecret(uri: string): Promise<string> {
+  const result = await provider.getSecret(path);
+  if (result === null) {
+    throw new SecretError(
+      SecretErrorCode.SECRET_NOT_FOUND,
+      `Secret not found: ${uri}`,
+      providerName,
+      path
+    );
+  }
+  return result;
+}
+```
+
+**Rationale:**
+- Fallback creates ambiguity about which provider is authoritative
+- Security policies may differ between providers
+- Audit trail becomes unclear
+- Makes debugging harder
+
+**If multiple providers needed:** User must explicitly configure separate services or use different URIs.
+
+
+### Scope: Full CRUD Operations
+
+The plugin architecture supports complete secrets lifecycle management:
 
 ```typescript
 interface SecretsProvider {
   readonly name: string;
   readonly type: string;
   
-  /**
-   * Initialize the provider (connect, authenticate, etc.)
-   */
+  // Lifecycle
   initialize(): Promise<void>;
-  
-  /**
-   * Retrieve a secret by path
-   * @param path - Provider-specific path (e.g., "mcp/agents/stripe/api-key")
-   * @returns The secret value, or null if not found
-   */
-  getSecret(path: string): Promise<string | null>;
-  
-  /**
-   * Optional: Store a secret (not all providers support this)
-   * @param path - Provider-specific path
-   * @param value - Secret value to store
-   */
-  setSecret?(path: string, value: string): Promise<void>;
-  
-  /**
-   * Optional: Delete a secret
-   */
-  deleteSecret?(path: string): Promise<void>;
-  
-  /**
-   * Optional: List available secrets (for CLI tools)
-   */
-  listSecrets?(prefix?: string): Promise<string[]>;
-  
-  /**
-   * Clean up resources (disconnect, close connections)
-   */
   dispose(): Promise<void>;
-  
-  /**
-   * Health check - is the provider accessible?
-   */
   healthCheck(): Promise<{ healthy: boolean; error?: string }>;
+  
+  // Read
+  getSecret(path: string): Promise<string | null>;
+  listSecrets(prefix: string): Promise<string[]>;
+  
+  // Write
+  setSecret(path: string, value: string, metadata?: Record<string, string>): Promise<void>;
+  deleteSecret(path: string): Promise<void>;
 }
 ```
 
-### Phase 1: Core Providers
+**Read operations (`getSecret`, `listSecrets`):**
+- `getSecret` returns the current secret value, or `null` if not found
+- `listSecrets` returns paths matching the prefix (non-recursive by default)
+- Both are safe to call frequently; providers should cache where appropriate
 
-**Local Filesystem** (current behavior, default)
-- No breaking changes
-- Services without `provider://` prefix use local storage
-- Backward compatible with existing configs
+**Write operations (`setSecret`, `deleteSecret`):**
+- `setSecret` creates or updates a secret at the given path
+- Optional `metadata` parameter for provider-specific attributes (e.g., Vault custom metadata, AWS tags)
+- `deleteSecret` performs a soft delete where supported (Vault), hard delete otherwise
+- Write operations emit audit events with action type but **never log secret values**
+- Providers that don't support writes (e.g., read-only Vault policies) throw `PROVIDER_PERMISSION_DENIED`
 
-**HashiCorp Vault**
-- Most common enterprise secrets manager
-- Support multiple auth methods (token, approle, kubernetes, AWS)
-- KV v2 secrets engine (most common)
+**Discovery (`listSecrets`):**
+- Returns an array of secret paths matching the prefix
+- Empty array if no matches (never throws for "no results")
+- Respects provider-level access controls (only lists secrets the auth identity can read)
+- Max results: 1000 per call (provider should paginate internally)
 
-**AWS Secrets Manager**
-- Native AWS integration
-- IAM-based authentication
-- Common in AWS-heavy environments
+All operations are built together in a single feature branch — no phased rollout needed.
 
-### Phase 2: Additional Providers
+### Threats and Mitigations
 
-**Azure Key Vault**
-- Managed Identity or Service Principal auth
-- Common in Azure-heavy environments
+**1. Server-Side Request Forgery (SSRF)**
 
-**GCP Secret Manager**
-- Service Account or Workload Identity auth
-- Common in GCP environments
+*Threat:* Attacker provides malicious provider address to exfiltrate data.
 
-**Environment Variables**
-- Simplest provider: reads from `process.env`
-- Useful for simple deployments and testing
-- Example: `env://STRIPE_API_KEY`
-
-**Docker Secrets**
-- For Docker Swarm / Compose deployments
-- Reads from `/run/secrets/`
-
-### Migration Path
-
-**Backward compatibility:**
-- Existing configs work unchanged
-- `key: stripe-token` → implicitly uses local filesystem provider
-- No breaking changes for v1 → v2 upgrade
-
-**Explicit local provider:**
 ```yaml
-# These are equivalent:
-key: stripe-token                    # implicit local
-key: local://stripe-token            # explicit local
-key: filesystem://stripe-token       # explicit local (alternate name)
+# Malicious config
+providers:
+  evil:
+    type: hashicorp-vault
+    address: http://169.254.169.254/latest/meta-data  # AWS metadata endpoint
 ```
 
-**Migration steps for enterprises:**
-1. Add `providers` section with external backend
-2. Test with one low-risk service
-3. Gradually migrate services to external provider
-4. Keep local provider for personal dev/testing
+*Mitigations:*
+- Validate provider address format (must be valid URL)
+- Block private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16)
+- Block localhost (127.0.0.0/8, ::1)
+- Require HTTPS for remote providers (HTTP only allowed for localhost dev mode)
+- DNS rebinding protection: resolve hostname once, cache result
+- Configuration is controlled by operator (not user input)
 
-### Security Considerations
+**2. Path Traversal / Secret Path Injection**
 
-**Provider credentials:**
-- Provider auth credentials (Vault tokens, AWS keys) are sensitive
-- Support env var substitution: `${VAULT_TOKEN}`
-- Support file references: `${file:~/.vault-token}`
-- Consider system keychain integration for local dev
+*Threat:* Attacker manipulates path to access unintended secrets.
 
-**Audit trail:**
-- Log which provider was used for each secret access
-- Include provider name and path (but NOT the secret value)
-- External providers (Vault, AWS) have their own audit logs
+```yaml
+# Malicious attempt
+key: vault://../../../etc/passwd
+key: vault://prod/../../sensitive
+```
 
-**Failure handling:**
-- If provider is unreachable, fail fast with clear error
-- Don't fall back to another provider (security risk)
-- Health checks should detect provider issues early
+*Mitigations:*
+- Strict URI parsing (see grammar above)
+- Reject `..` segments in path
+- Normalize paths (remove redundant slashes, trailing slashes)
+- Provider-specific path validation (e.g., Vault rejects relative paths)
+- Least privilege: Configure providers with minimal read permissions
 
-**Least privilege:**
-- Providers should only have read access to secrets
-- Write access (setSecret) is optional and often disabled
-- Use provider-specific RBAC (IAM policies, Vault policies)
+**3. Credential Leakage via Logs**
 
-### Implementation Phases
+*Threat:* Secret values or provider credentials appear in logs.
 
-**Phase 1: Core Architecture (week 1-2)**
+*Mitigations:*
+- **Never log secret values**
+- Redact credentials in logs (show `token=***` not actual token)
+- Log redaction for error messages (sanitize before logging)
+- Separate audit logs for secret access (structured, secure storage)
+- Log only: `{provider, path, timestamp, success/failure}`, never values
+
+**4. Token/Credential Theft from Config**
+
+*Threat:* Provider auth credentials stored in plaintext config.
+
+*Mitigations:*
+- Environment variable substitution: `${VAULT_TOKEN}`
+- File references: `${file:~/.vault-token}`
+- System keychain integration (future: macOS Keychain, Windows Credential Manager)
+- File permissions: Warn if config file is world-readable
+- Kubernetes: Use secrets/configmaps for provider credentials
+
+**5. Man-in-the-Middle (MitM)**
+
+*Threat:* Attacker intercepts traffic to secrets provider.
+
+*Mitigations:*
+- Require HTTPS/TLS for remote providers
+- Certificate validation (reject self-signed unless explicitly allowed)
+- Optional: Certificate pinning for high-security environments
+- Mutual TLS support for Vault/AWS (provider-specific)
+
+**6. Insufficient Provider Permissions**
+
+*Threat:* Provider has overly broad access, violates least privilege.
+
+*Mitigations:*
+- Documentation: Guide users to configure minimal permissions
+- Vault: Use policies to restrict path access
+- AWS: Use IAM policies with specific resource ARNs
+- Azure: Use RBAC with specific secret permissions
+- Health check: Test permissions at startup
+
+### Log Redaction Requirements
+
+**What to log:**
+```json
+{
+  "timestamp": "2026-02-12T14:25:00Z",
+  "level": "info",
+  "event": "secret_accessed",
+  "provider": "prodVault",
+  "path": "mcp/agents/stripe/api-key",
+  "success": true,
+  "latencyMs": 45
+}
+```
+
+**What NOT to log:**
+```json
+{
+  "secret_value": "sk_live_xxxx",  // ❌ NEVER
+  "vault_token": "hvs.xxxxx",      // ❌ NEVER
+  "aws_secret_access_key": "xxx"   // ❌ NEVER
+}
+```
+
+**Redaction patterns:**
+- Token values: Show `token=***`
+- URIs with credentials: Redact before logging
+- Error messages from providers: Sanitize before propagating
+
+## Configuration Examples
+
+### Production Vault Setup
+
+```yaml
+providers:
+  prodVault:
+    type: hashicorp-vault
+    address: https://vault.company.com
+    namespace: mcp-production
+    auth:
+      method: kubernetes
+      role: janee-prod
+      serviceAccountPath: /var/run/secrets/kubernetes.io/serviceaccount/token
+    mountPath: secret
+
+services:
+  stripe:
+    baseUrl: https://api.stripe.com
+    auth:
+      type: bearer
+      key: prodVault://mcp/agents/stripe/api-key
+```
+
+### AWS with IAM Role
+
+```yaml
+providers:
+  awsProd:
+    type: aws-secrets-manager
+    region: us-east-1
+    auth:
+      method: iam-role  # Uses ECS task role or EC2 instance profile
+
+services:
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: awsProd://prod/mcp-agents/github-token
+```
+
+### Multi-Environment Setup
+
+```yaml
+providers:
+  local:
+    type: filesystem
+    path: ~/.janee/credentials
+  
+  devVault:
+    type: hashicorp-vault
+    address: http://localhost:8200
+    auth:
+      method: token
+      token: ${VAULT_DEV_TOKEN}
+  
+  prodVault:
+    type: hashicorp-vault
+    address: https://vault.company.com
+    namespace: production
+    auth:
+      method: approle
+      roleId: ${VAULT_ROLE_ID}
+      secretId: ${file:/run/secrets/vault-secret-id}
+
+services:
+  stripe:
+    baseUrl: https://api.stripe.com
+    auth:
+      type: bearer
+      key: ${JANEE_ENV == 'prod' ? 'prodVault' : 'devVault'}://mcp/agents/stripe/api-key
+```
+
+
+## Implementation Approach
+
+### Build It Incrementally
+
+**Step 1: Core Abstraction**
 - Define `SecretsProvider` interface
-- Refactor current code to use interface
-- Implement `LocalFilesystemProvider` (current behavior)
-- Add provider resolution logic (`provider://path` parsing)
-- Update config schema to support `providers` block
+- Extract current filesystem logic into `LocalProvider`
+- Implement provider registry and URI parsing
+- **Result:** Existing behavior preserved, new architecture in place
 
-**Phase 2: Vault Integration (week 3)**
-- Implement `HashicorpVaultProvider`
-- Support token and approle auth methods
-- Add Vault-specific error handling
-- Documentation and examples
+**Step 2: Add Vault Provider**
+- Implement HashiCorp Vault provider with KV v2 support
+- Support token, AppRole, and Kubernetes auth
+- Token renewal and lease management
+- **Result:** Users can `janee://vault/path/to/secret`
 
-**Phase 3: AWS Integration (week 4)**
-- Implement `AwsSecretsManagerProvider`
-- Support IAM role and access key auth
-- Handle AWS-specific errors and retries
-- Documentation and examples
+**Step 3: Add AWS Secrets Manager**
+- Implement AWS provider with IAM auth
+- Support cross-region secrets
+- **Result:** Users can `janee://aws/path/to/secret`
 
-**Phase 4: Testing & Documentation (week 5)**
-- Integration tests for each provider
-- Migration guide from local to external providers
-- Security best practices documentation
-- Example configs for common scenarios
-
-**Phase 5: Additional Providers (week 6+)**
+**Step 4: Add More Providers** (as needed)
 - Azure Key Vault
 - GCP Secret Manager
-- Environment variables
-- Community-contributed providers
+- 1Password
+- Custom providers via plugin system
+
+### Configuration
+
+Simple, declarative config in `~/.janee/config.json`:
+
+```json
+{
+  "providers": {
+    "vault": {
+      "type": "hashicorp-vault",
+      "address": "https://vault.company.com",
+      "auth": {
+        "method": "token",
+        "token": "${VAULT_TOKEN}"
+      }
+    },
+    "aws": {
+      "type": "aws-secrets-manager",
+      "region": "us-east-1",
+      "auth": {
+        "method": "iam"
+      }
+    }
+  }
+}
+```
+
+### Backward Compatibility
+
+No breaking changes. Current users continue working exactly as before:
+- Existing filesystem-based secrets work unchanged
+- New URI format is opt-in
+- Local provider is default fallback
 
 ### Testing Strategy
 
-**Unit tests:**
-- Mock provider implementations
-- Test provider resolution logic
-- Test error handling for unreachable providers
+- Unit tests for each provider
+- Integration tests with real backends (using testcontainers for Vault)
+- Error handling and edge cases
+- Performance benchmarks for secret retrieval latency
 
-**Integration tests:**
-- Spin up local Vault in Docker for tests
-- Use AWS LocalStack for Secrets Manager tests
-- Test backward compatibility with current configs
 
-**Security tests:**
-- Verify secrets never logged
-- Test provider credential protection
-- Validate RBAC with different provider configurations
+## Success Criteria
 
-## API Changes
-
-### Configuration Schema
-
-Add new top-level `providers` block:
-
-```typescript
-interface Config {
-  providers?: Record<string, ProviderConfig>;
-  services: Record<string, ServiceConfig>;
-  capabilities: Record<string, CapabilityConfig>;
-}
-
-interface ProviderConfig {
-  type: 'filesystem' | 'hashicorp-vault' | 'aws-secrets-manager' | 'azure-key-vault' | 'gcp-secret-manager' | 'env';
-  // Type-specific configuration
-  [key: string]: unknown;
-}
-```
-
-### Service Key Syntax
-
-Support three formats:
-
-```yaml
-# Format 1: Implicit local (current, backward compatible)
-key: stripe-token
-
-# Format 2: Explicit provider with path
-key: prodVault://mcp/agents/stripe/api-key
-
-# Format 3: Environment variable substitution (existing feature, still works)
-key: ${STRIPE_API_KEY}
-```
-
-### CLI Commands
-
-Add provider management commands:
-
-```bash
-# List configured providers
-janee providers list
-
-# Test provider connectivity
-janee providers check prodVault
-
-# Migrate a secret from local to provider
-janee secret migrate stripe-token --to prodVault://mcp/agents/stripe/api-key
-```
-
-## Alternatives Considered
-
-### 1. Environment Variables Only
-
-**Pros:** Simple, universal, no new code
-**Cons:** 
-- No centralized management
-- Secrets in environment are easy to leak
-- No rotation or audit trail
-- Doesn't solve the enterprise integration problem
-
-### 2. Wrapper Scripts
-
-Let users write scripts that fetch from Vault and inject into Janee.
-
-**Pros:** No code changes needed
-**Cons:**
-- Every user reinvents the wheel
-- No standard approach
-- Hard to audit
-- Doesn't leverage Janee's security model
-
-### 3. External Secrets Operator Pattern
-
-Use Kubernetes External Secrets Operator or similar to sync secrets into local storage.
-
-**Pros:** Leverages existing tools
-**Cons:**
-- Requires Kubernetes
-- Adds deployment complexity
-- Secrets still copied/duplicated
-- Audit trail split between systems
-
-## Open Questions
-
-1. **Provider priority:** If a service doesn't specify a provider, should there be a default provider order? (e.g., check Vault, then local, then env?)
-   - **Proposal:** Require explicit provider or use single configured default. Implicit fallback is confusing.
-
-2. **Provider-specific features:** Vault supports versioned secrets, AWS supports rotation. Should we expose these?
-   - **Proposal:** Start simple (just getSecret), add advanced features later based on demand.
-
-3. **Write operations:** Should providers support writing secrets via Janee? Or read-only?
-   - **Proposal:** Read-only for v1. Writing secrets is risky and most enterprises manage this separately.
-
-4. **Provider caching:** Should Janee cache secrets from providers to reduce API calls?
-   - **Proposal:** No caching in v1. Let providers handle this (Vault has built-in caching).
-
-5. **Multiple providers per service:** Can a service use multiple providers for different keys?
-   - **Proposal:** No, one provider per service key. Keep it simple.
-
-## Success Metrics
-
-- Zero breaking changes for existing users
-- At least 3 providers implemented (local, Vault, AWS)
-- 10+ enterprise users adopt external provider integration
-- Provider API is clean enough for community contributions
-- Performance impact < 10ms per request (provider lookup overhead)
-
-## References
-
-- [HashiCorp Vault API](https://developer.hashicorp.com/vault/api-docs)
-- [AWS Secrets Manager API](https://docs.aws.amazon.com/secretsmanager/latest/apireference/)
-- [Azure Key Vault API](https://learn.microsoft.com/en-us/rest/api/keyvault/)
-- [GCP Secret Manager API](https://cloud.google.com/secret-manager/docs/reference/rest)
-- [Kubernetes External Secrets Operator](https://external-secrets.io/)
-- [12-Factor App: Config](https://12factor.net/config)
-
+- Existing users experience zero breaking changes
+- New providers are easy to add (< 500 lines per provider)
+- Secret retrieval latency < 100ms (p95)
+- Comprehensive test coverage for error scenarios
+- Clear documentation for adding custom providers
