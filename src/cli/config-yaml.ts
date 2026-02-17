@@ -8,6 +8,7 @@ import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
 import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
+import { CredentialOwnership } from '../core/agent-scope';
 
 export interface AuthConfig {
   type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
@@ -23,6 +24,8 @@ export interface AuthConfig {
 export interface ServiceConfig {
   baseUrl: string;
   auth: AuthConfig;
+  /** Ownership metadata for agent-scoped credential access control */
+  ownership?: CredentialOwnership;
 }
 
 export interface CapabilityConfig {
