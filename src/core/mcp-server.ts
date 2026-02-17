@@ -20,6 +20,7 @@ import { URL } from 'url';
 import express from 'express';
 import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
 import { readFileSync } from 'fs';
+import { canAgentAccess, resolveAgentIdentity, CredentialOwnership } from './agent-scope.js';
 import { join } from 'path';
 
 
@@ -54,6 +55,8 @@ export interface ServiceConfig {
     credentials?: string;  // For service-account: encrypted JSON blob
     scopes?: string[];     // For service-account: OAuth scopes
   };
+  /** Ownership metadata for agent-scoped credential access control */
+  ownership?: CredentialOwnership;
 }
 
 export interface APIRequest {
@@ -78,11 +81,14 @@ export interface ReloadResult {
 export interface MCPServerOptions {
   capabilities: Capability[];
   services: Map<string, ServiceConfig>;
+  /** Map of service name -> ownership metadata for agent-scoped access control */
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
   onExecCommand?: (session: any, capability: Capability, command: string[], stdin?: string) => Promise<ExecResult>;
   onReloadConfig?: () => ReloadResult;
+  /** Persist ownership changes to config storage (called after grant/revoke) */
+  onPersistOwnership?: (serviceName: string, ownership: CredentialOwnership) => void;
 }
 
 /**
@@ -109,7 +115,7 @@ function parseTTL(ttl: string): number {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig } = options;
+  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig, onPersistOwnership } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -130,10 +136,15 @@ export function createMCPServer(options: MCPServerOptions): Server {
   // Tool: list_services
   const listServicesTool: Tool = {
     name: 'list_services',
-    description: 'List available API capabilities managed by Janee',
+    description: 'List available API capabilities managed by Janee. If you provide your agentId, only credentials you have access to will be shown.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        agentId: {
+          type: 'string',
+          description: 'Your agent identifier (optional — filters results to credentials you can access)'
+        }
+      },
       required: []
     }
   };
@@ -170,6 +181,10 @@ export function createMCPServer(options: MCPServerOptions): Server {
         reason: {
           type: 'string',
           description: 'Reason for this request (required for some capabilities)'
+        },
+        agentId: {
+          type: 'string',
+          description: 'Your agent identifier (required for agent-scoped credentials)'
         }
       },
       required: ['capability', 'method', 'path']
@@ -217,9 +232,39 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   };
 
+
+  // Tool: manage_credential (agent-scoped credential access control)
+  const manageCredentialTool: Tool = {
+    name: 'manage_credential',
+    description: 'View or manage access policies for agent-scoped credentials. Agents can check who has access, grant access to other agents, or revoke access.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['view', 'grant', 'revoke'],
+          description: 'Action to perform: view ownership info, grant access to another agent, or revoke access'
+        },
+        service: {
+          type: 'string',
+          description: 'Service name to manage'
+        },
+        targetAgentId: {
+          type: 'string',
+          description: 'Agent ID to grant/revoke access for (required for grant/revoke actions)'
+        },
+        agentId: {
+          type: 'string',
+          description: 'Your agent identifier (used to verify ownership)'
+        }
+      },
+      required: ['action', 'service']
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = [listServicesTool, executeTool];
+    const tools: Tool[] = [listServicesTool, executeTool, manageCredentialTool];
     // Add exec tool if handler is provided
     if (onExecCommand) {
       tools.push(execTool);
@@ -232,17 +277,26 @@ export function createMCPServer(options: MCPServerOptions): Server {
   });
 
   // Handle tool calls
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
 
     try {
       switch (name) {
-        case 'list_services':
+        case 'list_services': {
+          const listAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any)?.agentId
+          );
           return {
             content: [{
               type: 'text',
               text: JSON.stringify(
-                capabilities.map(cap => ({
+                capabilities
+                  .filter(cap => {
+                    const svc = services.get(cap.service);
+                    return canAgentAccess(listAgentId, svc?.ownership);
+                  })
+                  .map(cap => ({
                   name: cap.name,
                   service: cap.service,
                   mode: cap.mode || 'proxy',
@@ -260,6 +314,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
               )
             }]
           };
+        }
 
         case 'reload_config': {
           if (!onReloadConfig) {
@@ -338,13 +393,30 @@ export function createMCPServer(options: MCPServerOptions): Server {
             throw new Error(ruleCheck.reason || 'Request denied by policy');
           }
 
+          // Check agent-scoped access (transport-bound identity preferred over client-asserted)
+          const executeAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any).agentId
+          );
+          const executeSvc = services.get(cap.service);
+          if (!canAgentAccess(executeAgentId, executeSvc?.ownership)) {
+            auditLogger.logDenied(
+              cap.service,
+              method,
+              path,
+              'Agent does not have access to this credential',
+              reason
+            );
+            throw new Error(`Access denied: credential for service "${cap.service}" is not accessible to this agent`);
+          }
+
           // Get or create session
           const ttlSeconds = parseTTL(cap.ttl);
           const session = sessionManager.createSession(
             cap.name,
             cap.service,
             ttlSeconds,
-            { reason }
+            { agentId: executeAgentId, reason }
           );
 
           // Build API request
@@ -457,6 +529,101 @@ export function createMCPServer(options: MCPServerOptions): Server {
               }, null, 2)
             }]
           };
+        }
+
+        case 'manage_credential': {
+          const { action: credAction, service: credService, targetAgentId: credTarget } = args as any;
+          const credAgentId = resolveAgentIdentity(
+            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
+            (args as any).agentId
+          );
+
+          if (!credService) {
+            throw new Error('Missing required argument: service');
+          }
+
+          const svc = services.get(credService);
+          if (!svc) {
+            throw new Error(`Unknown service: ${credService}`);
+          }
+
+          if (credAction === 'view') {
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  service: credService,
+                  ownership: svc.ownership || { accessPolicy: 'all-agents', note: 'No ownership metadata (legacy credential)' },
+                  yourAccess: canAgentAccess(credAgentId, svc.ownership)
+                }, null, 2)
+              }]
+            };
+          }
+
+          // Grant/revoke require ownership verification
+          if (!credAgentId) {
+            throw new Error('agentId is required for grant/revoke actions');
+          }
+
+          if (!svc.ownership) {
+            throw new Error('Cannot manage access for legacy credentials without ownership metadata. Re-add the service to enable scoping.');
+          }
+
+          if (svc.ownership.createdBy !== credAgentId) {
+            throw new Error('Only the credential owner can grant or revoke access');
+          }
+
+          if (credAction === 'grant') {
+            if (!credTarget) {
+              throw new Error('targetAgentId is required for grant action');
+            }
+            const { grantAccess } = await import('./agent-scope.js');
+            svc.ownership = grantAccess(svc.ownership, credTarget);
+
+            // Persist ownership change to config storage
+            if (onPersistOwnership) {
+              onPersistOwnership(credService, svc.ownership);
+            }
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `Granted access to ${credTarget}`,
+                  ownership: svc.ownership,
+                  persisted: !!onPersistOwnership
+                }, null, 2)
+              }]
+            };
+          }
+
+          if (credAction === 'revoke') {
+            if (!credTarget) {
+              throw new Error('targetAgentId is required for revoke action');
+            }
+            const { revokeAccess } = await import('./agent-scope.js');
+            svc.ownership = revokeAccess(svc.ownership, credTarget);
+
+            // Persist ownership change to config storage
+            if (onPersistOwnership) {
+              onPersistOwnership(credService, svc.ownership);
+            }
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  message: `Revoked access from ${credTarget}`,
+                  ownership: svc.ownership,
+                  persisted: !!onPersistOwnership
+                }, null, 2)
+              }]
+            };
+          }
+
+          throw new Error(`Unknown action: ${credAction}. Use 'view', 'grant', or 'revoke'.`);
         }
 
         default:
