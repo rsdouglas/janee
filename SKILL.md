@@ -100,6 +100,11 @@ For Google service accounts:
     janee add analytics --auth-type service-account --credentials-file path.json \
       --scope https://www.googleapis.com/auth/analytics.readonly
 
+For GitHub Apps (installation tokens, auto-refreshed):
+
+    janee add github-app --auth-type github-app --pem-file key.pem \
+      --app-id 123456 --installation-id 789012
+
 ## Migrating Existing Keys
 
 If you see API keys in the user's environment (.env files, shell config, etc.):

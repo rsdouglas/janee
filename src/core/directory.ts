@@ -9,7 +9,7 @@ export interface ServiceTemplate {
   description: string;
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
     fields: string[];  // Required fields to prompt for
   };
   docs?: string;
@@ -43,6 +43,14 @@ export const serviceDirectory: ServiceTemplate[] = [
     baseUrl: 'https://api.github.com',
     auth: { type: 'bearer', fields: ['key'] },
     docs: 'https://docs.github.com/en/rest',
+    tags: ['developer', 'git', 'code']
+  },
+  {
+    name: 'github-app',
+    description: 'GitHub App with installation tokens (for autonomous agents)',
+    baseUrl: 'https://api.github.com',
+    auth: { type: 'github-app', fields: ['appId', 'pemFile', 'installationId'] },
+    docs: 'https://docs.github.com/en/apps',
     tags: ['developer', 'git', 'code']
   },
   {

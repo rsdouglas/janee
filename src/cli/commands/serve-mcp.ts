@@ -5,6 +5,7 @@ import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
 import { signBybit, signOKX, signMEXC } from '../../core/signing';
 import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCredentials, clearCachedToken } from '../../core/service-account';
+import { getInstallationToken, clearCachedInstallationToken, GitHubAppCredentials } from '../../core/github-app';
 import { URL } from 'url';
 import { buildExecEnv, executeCommand } from '../../core/exec.js';
 
@@ -111,6 +112,13 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
             apiSecret: serviceConfig.auth.apiSecret,
             passphrase: serviceConfig.auth.passphrase,
           };
+        } else if (serviceConfig.auth.type === 'github-app' && serviceConfig.auth.appId && serviceConfig.auth.privateKey && serviceConfig.auth.installationId) {
+          const ghCreds: GitHubAppCredentials = {
+            appId: serviceConfig.auth.appId,
+            privateKey: serviceConfig.auth.privateKey,
+            installationId: serviceConfig.auth.installationId,
+          };
+          credential = await getInstallationToken(capability.service, ghCreds);
         }
 
         // Build environment with injected credentials
@@ -223,6 +231,24 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
                 serviceConfig.auth.scopes
               );
               headers['Authorization'] = `Bearer ${accessToken}`;
+            } else {
+              throw error;
+            }
+          }
+        } else if (serviceConfig.auth.type === 'github-app' && serviceConfig.auth.appId && serviceConfig.auth.privateKey && serviceConfig.auth.installationId) {
+          const ghCreds: GitHubAppCredentials = {
+            appId: serviceConfig.auth.appId,
+            privateKey: serviceConfig.auth.privateKey,
+            installationId: serviceConfig.auth.installationId,
+          };
+          try {
+            const installationToken = await getInstallationToken(request.service, ghCreds);
+            headers['Authorization'] = `Bearer ${installationToken}`;
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('401')) {
+              clearCachedInstallationToken(request.service);
+              const installationToken = await getInstallationToken(request.service, ghCreds);
+              headers['Authorization'] = `Bearer ${installationToken}`;
             } else {
               throw error;
             }

@@ -6,6 +6,24 @@ All notable changes to Janee will be documented in this file.
 
 _(empty)_
 
+## [0.9.0] - 2026-02-19
+
+### Added
+
+- **GitHub App Authentication** — New auth type: `github-app` for GitHub App installation tokens
+  - Stores App ID, private key (encrypted), and installation ID
+  - Signs JWT with RS256, mints short-lived installation tokens (1hr TTL)
+  - Token caching with auto-refresh when <10 minutes remaining
+  - Retry-on-401 with automatic cache clear
+  - Interactive and non-interactive `janee add` support (`--pem-file`, `--app-id`, `--installation-id`)
+  - Auth tested on add (validates JWT signing + GitHub API connectivity)
+  - Directory template: `janee add github-app`
+- **create-gh-app CLI** — New package `@true-and-useful/create-gh-app` for GitHub App lifecycle management
+  - Create GitHub Apps via the manifest flow (supports personal + org)
+  - List, delete, and manage local app credentials
+  - List installations and mint installation tokens
+  - `janee-add` subcommand to pipe credentials directly into `janee add`
+
 ## [0.8.5] - 2026-02-19
 
 ### Added

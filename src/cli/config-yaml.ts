@@ -11,7 +11,7 @@ import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto'
 import { CredentialOwnership, agentCreatedOwnership, cliCreatedOwnership } from '../core/agent-scope';
 
 export interface AuthConfig {
-  type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+  type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
   key?: string;
   apiKey?: string;
   apiSecret?: string;
@@ -19,6 +19,9 @@ export interface AuthConfig {
   headers?: Record<string, string>;
   credentials?: string;  // For service-account: encrypted JSON blob
   scopes?: string[];     // For service-account: OAuth scopes
+  appId?: string;           // For github-app
+  privateKey?: string;      // For github-app: encrypted PEM
+  installationId?: string;  // For github-app
 }
 
 export interface ServiceConfig {
@@ -197,6 +200,13 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
         strictDecryption,
         `service account credentials for service "${name}"`
       );
+    } else if (svc.auth.type === 'github-app' && svc.auth.privateKey) {
+      svc.auth.privateKey = tryDecrypt(
+        svc.auth.privateKey,
+        config.masterKey,
+        strictDecryption,
+        `GitHub App private key for service "${name}"`
+      );
     }
   }
 
@@ -231,6 +241,8 @@ export function saveYAMLConfig(config: JaneeYAMLConfig): void {
       }
     } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
       svc.auth.credentials = encryptSecret(svc.auth.credentials, config.masterKey);
+    } else if (svc.auth.type === 'github-app' && svc.auth.privateKey) {
+      svc.auth.privateKey = encryptSecret(svc.auth.privateKey, config.masterKey);
     }
   }
 
