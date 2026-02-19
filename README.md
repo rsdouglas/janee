@@ -21,6 +21,7 @@
 | ⏱️ **Session TTLs** | Time-limited access with instant revocation |
 | 🔌 **Works with any MCP client** | Claude Desktop, Cursor, OpenClaw, and more |
 | 🏠 **Local-first** | Keys encrypted on your machine, never sent to a cloud |
+| 🖥️ **Exec mode** | Run CLI tools with injected credentials — agents never see the keys |
 
 ---
 
@@ -144,6 +145,37 @@ capabilities:
     autoApprove: true
 ```
 
+### Add CLI tools (exec mode)
+
+Some tools need credentials as environment variables, not HTTP headers. Exec mode handles this:
+
+```bash
+janee add twitter --exec \
+  --key "tvly-xxx" \
+  --allow-commands "bird,tweet-cli" \
+  --env-map "TWITTER_API_KEY={{credential}}"
+```
+
+Now agents can run CLI tools through Janee without ever seeing the API key:
+
+```typescript
+// Agent calls janee_exec tool
+janee_exec({
+  capability: "twitter",
+  command: ["bird", "post", "Hello world!"],
+  reason: "User asked to post a tweet"
+})
+```
+
+Janee spawns the process with `TWITTER_API_KEY` injected, runs the command, and returns stdout/stderr. The credential never enters the agent's context.
+
+**Key flags:**
+- `--exec` — configure as exec-mode (CLI wrapper instead of HTTP proxy)
+- `--allow-commands` — whitelist of allowed executables (security)
+- `--env-map` — map credentials to environment variables
+- `--work-dir` — working directory for the subprocess
+- `--timeout` — max execution time (default: 30s)
+
 ### Start the MCP server
 
 ```bash
@@ -223,7 +255,8 @@ Janee exposes three MCP tools:
 | Tool | Description |
 |------|-------------|
 | `list_services` | Discover available APIs and their policies |
-| `execute` | Make an API request through Janee |
+| `execute` | Make an API request through Janee (HTTP proxy mode) |
+| `exec` | Run a CLI command with injected credentials (exec mode) |
 | `reload_config` | Reload config from disk after adding/removing services (available when started with `janee serve`) |
 
 Agents discover what's available, then call APIs through Janee. Same audit trail, same protection.
@@ -265,6 +298,28 @@ capabilities:
 
 **Services** = Real APIs with real keys  
 **Capabilities** = What agents can request, with policies
+
+### Exec mode capabilities
+
+```yaml
+services:
+  twitter:
+    auth:
+      type: bearer
+      key: tvly-xxx
+
+capabilities:
+  twitter:
+    service: twitter
+    mode: exec
+    allowCommands: ["bird", "tweet-cli"]
+    envMap:
+      TWITTER_API_KEY: "{{credential}}"
+    ttl: 1h
+    autoApprove: true
+```
+
+Exec-mode capabilities use `janee_exec` instead of `execute`. The credential is injected as an environment variable — the agent sees only stdout/stderr.
 
 ---
 
