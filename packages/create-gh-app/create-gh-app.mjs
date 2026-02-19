@@ -263,8 +263,7 @@ async function cmdToken(slug, installationId) {
 }
 
 async function cmdJaneeAdd(slug) {
-  const { app, pemPath } = resolveApp(slug);
-  const { jwt } = resolveApp(slug);
+  const { app, pemPath, jwt } = resolveApp(slug);
 
   const installations = await githubApi(jwt, "GET", "/app/installations", null);
   if (!installations?.length) die("No installations found. Install the app first:\n  https://github.com/apps/" + app.slug + "/installations/new");
