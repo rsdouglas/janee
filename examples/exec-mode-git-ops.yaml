@@ -1,0 +1,70 @@
+# Janee Example: Exec Mode — Git Operations
+#
+# Let agents push code, create tags, and manage repos
+# with Git credentials injected securely via env vars.
+#
+# Setup:
+#   1. janee add github-push --exec --key ghp_yourtoken
+#   2. Merge this config into ~/.janee/config.yaml
+#   3. janee serve
+
+version: "1"
+masterKey: "generate-with-janee-init"
+
+services:
+  github-push:
+    auth:
+      type: bearer
+      key: "encrypted:your-github-pat"
+
+capabilities:
+  git-read:
+    service: github-push
+    mode: exec
+    allowCommands: ["git"]
+    env:
+      GIT_ASKPASS: "/bin/echo"
+      GIT_USERNAME: "x-access-token"
+      GIT_PASSWORD: "{{credential}}"
+    ttl: "15m"
+    autoApprove: true
+    timeout: 30000
+    rules:
+      allow:
+        - "git clone *"
+        - "git fetch *"
+        - "git log *"
+        - "git diff *"
+        - "git status"
+      deny:
+        - "git push *"
+        - "git force *"
+
+  git-write:
+    service: github-push
+    mode: exec
+    allowCommands: ["git"]
+    env:
+      GIT_ASKPASS: "/bin/echo"
+      GIT_USERNAME: "x-access-token"
+      GIT_PASSWORD: "{{credential}}"
+    ttl: "5m"
+    autoApprove: false
+    requiresReason: true
+    timeout: 60000
+    rules:
+      allow:
+        - "git push origin *"
+        - "git tag *"
+      deny:
+        - "git push --force *"
+        - "git push origin main"
+
+# Example agent interactions:
+#
+#   janee_exec(capability="git-read", command=["git", "log", "--oneline", "-10"])
+#   janee_exec(capability="git-write", command=["git", "push", "origin", "feature-branch"],
+#              reason="Pushing reviewed changes to feature branch")
+#
+# The agent authenticates via injected env vars but never sees the PAT.
+# Force pushes to main are denied by policy.
