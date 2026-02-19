@@ -8,6 +8,7 @@ import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
 import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
 import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
 import { validateServiceAccountCredentials, testServiceAccountAuth } from '../../core/service-account';
+import { validateGitHubAppCredentials, testGitHubAppAuth } from '../../core/github-app';
 
 function resolveEnvVar(varName: string, label: string): string {
   const value = process.env[varName];
@@ -188,7 +189,7 @@ export async function addCommand(
     }
 
     let baseUrl: string;
-    let authType: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+    let authType: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
 
     if (template) {
       // Use template from directory
@@ -245,6 +246,11 @@ export async function addCommand(
               name: 'service-account — Google-style OAuth2',
               value: 'service-account',
               description: 'Service account JSON for Google Analytics, Sheets, etc.'
+            },
+            {
+              name: 'github-app — GitHub App installation tokens',
+              value: 'github-app',
+              description: 'GitHub App with PEM key — mints short-lived installation tokens'
             },
             {
               name: 'hmac — Request signing (generic)',
@@ -432,6 +438,72 @@ export async function addCommand(
         type: 'service-account',
         credentials: JSON.stringify(credentials),
         scopes
+      };
+    } else if (authType === 'github-app') {
+      if (!options.json) console.log('\n🔑 GitHub App Setup');
+
+      let appId = (options as any).appId;
+      if (!appId) {
+        appId = await getRL().question('App ID: ');
+        appId = appId.trim();
+      }
+      if (!appId) {
+        console.error('❌ App ID is required');
+        process.exit(1);
+      }
+
+      let pemPath = (options as any).pemFile;
+      if (!pemPath) {
+        pemPath = await getRL().question('📄 Path to private key PEM file: ');
+        pemPath = pemPath.trim();
+      }
+      if (!pemPath) {
+        console.error('❌ PEM file path is required');
+        process.exit(1);
+      }
+      if (pemPath.startsWith('~/')) {
+        pemPath = path.join(os.homedir(), pemPath.slice(2));
+      }
+
+      let privateKeyPem: string;
+      try {
+        privateKeyPem = fs.readFileSync(pemPath, 'utf-8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          console.error(`❌ File not found: ${pemPath}`);
+        } else {
+          console.error('❌ Could not read PEM file:', error instanceof Error ? error.message : 'Unknown error');
+        }
+        process.exit(1);
+      }
+
+      let installationId = (options as any).installationId;
+      if (!installationId) {
+        installationId = await getRL().question('Installation ID: ');
+        installationId = installationId.trim();
+      }
+      if (!installationId) {
+        console.error('❌ Installation ID is required');
+        process.exit(1);
+      }
+
+      const ghCreds = { appId, privateKey: privateKeyPem, installationId };
+      validateGitHubAppCredentials(ghCreds);
+
+      if (!options.json) console.log('\n🔐 Testing authentication...');
+      try {
+        await testGitHubAppAuth(ghCreds);
+        if (!options.json) console.log('✅ Authentication successful');
+      } catch (error) {
+        console.error('❌ Authentication failed:', error instanceof Error ? error.message : 'Unknown error');
+        process.exit(1);
+      }
+
+      auth = {
+        type: 'github-app',
+        appId,
+        privateKey: privateKeyPem,
+        installationId,
       };
     } else if (authType === 'headers' && template?.auth.fields.length === 1 && options.key) {
       // Template tells us the header name, --key provides the value

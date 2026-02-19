@@ -46,7 +46,7 @@ export interface Capability {
 export interface ServiceConfig {
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account';
+    type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
     key?: string;
     apiKey?: string;
     apiSecret?: string;
@@ -54,6 +54,9 @@ export interface ServiceConfig {
     headers?: Record<string, string>;
     credentials?: string;  // For service-account: encrypted JSON blob
     scopes?: string[];     // For service-account: OAuth scopes
+    appId?: string;           // For github-app
+    privateKey?: string;      // For github-app: encrypted PEM
+    installationId?: string;  // For github-app
   };
   /** Ownership metadata for agent-scoped credential access control */
   ownership?: CredentialOwnership;

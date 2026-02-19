@@ -1,0 +1,32 @@
+{
+  "name": "@true-and-useful/create-gh-app",
+  "version": "0.1.0",
+  "description": "Create GitHub Apps for autonomous agents via the manifest flow. Lists installations and mints short-lived tokens.",
+  "type": "module",
+  "bin": {
+    "create-gh-app": "./create-gh-app.mjs"
+  },
+  "files": [
+    "create-gh-app.mjs",
+    "README.md"
+  ],
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rsdouglas/janee.git",
+    "directory": "packages/create-gh-app"
+  },
+  "keywords": [
+    "github",
+    "github-app",
+    "janee",
+    "agent",
+    "token",
+    "manifest"
+  ],
+  "author": "True and Useful LLC",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

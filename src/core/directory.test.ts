@@ -88,7 +88,7 @@ describe('Service Directory', () => {
     });
 
     it('all services should have valid auth types', () => {
-      const validTypes = ['bearer', 'basic', 'hmac-mexc', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account'];
+      const validTypes = ['bearer', 'basic', 'hmac-mexc', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account', 'github-app'];
       for (const service of serviceDirectory) {
         expect(validTypes).toContain(service.auth.type);
       }
