@@ -22,6 +22,7 @@
 | 🔌 **Works with any MCP client** | Claude Desktop, Cursor, OpenClaw, and more |
 | 🏠 **Local-first** | Keys encrypted on your machine, never sent to a cloud |
 | 🖥️ **Exec mode** | Run CLI tools with injected credentials — agents never see the keys |
+| 🤖 **GitHub App auth** | Short-lived tokens for autonomous agents — no static PATs |
 
 ---
 
@@ -175,6 +176,51 @@ Janee spawns the process with `TWITTER_API_KEY` injected, runs the command, and 
 - `--env-map` — map credentials to environment variables
 - `--work-dir` — working directory for the subprocess
 - `--timeout` — max execution time (default: 30s)
+
+
+### Add GitHub App auth (for autonomous agents)
+
+Static tokens are risky for long-running agents. GitHub App auth generates short-lived installation tokens on demand — no long-lived PATs required.
+
+**Option 1: Use create-gh-app (recommended)**
+
+```bash
+npx @true-and-useful/create-gh-app create my-agent --owner @me
+# Opens browser → creates app → saves credentials locally
+
+# Install the app on your repos
+# https://github.com/apps/my-agent/installations/new
+
+# Register with Janee in one command
+npx @true-and-useful/create-gh-app janee-add my-agent
+```
+
+Done. Your agent now gets short-lived GitHub tokens through Janee's MCP proxy.
+
+**Option 2: Manual setup**
+
+```bash
+janee add github-app \
+  --auth-type github-app \
+  --app-id 123456 \
+  --pem-file /path/to/private-key.pem \
+  --installation-id 789
+```
+
+Or via config:
+
+```yaml
+services:
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: github-app
+      appId: "123456"
+      pemFile: /path/to/private-key.pem
+      installationId: "789"
+```
+
+**How it works:** When an agent requests access, Janee signs a JWT with the app's private key, exchanges it for a 1-hour installation token via GitHub's API, and caches the token until expiry. The agent never sees the private key — only the short-lived token reaches the API.
 
 ### Start the MCP server
 
@@ -412,6 +458,9 @@ janee add bybit --auth-type hmac-bybit --key-from-env BYBIT_KEY --secret-from-en
 
 # HMAC auth with passphrase (OKX)
 janee add okx --auth-type hmac-okx --key-from-env OKX_KEY --secret-from-env OKX_SECRET --passphrase-from-env OKX_PASS
+
+# GitHub App auth (short-lived tokens)
+janee add github --auth-type github-app --app-id-from-env GH_APP_ID --pem-from-env GH_PEM --installation-id-from-env GH_INSTALL_ID
 ```
 
 When all required credentials are provided via flags, Janee:
