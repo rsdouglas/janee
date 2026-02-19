@@ -10,7 +10,9 @@
     "create-gh-app.mjs",
     "README.md"
   ],
-  "scripts": {},
+  "scripts": {
+    "build": "echo 'no build needed (plain .mjs)'"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/rsdouglas/janee.git",
