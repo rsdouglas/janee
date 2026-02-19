@@ -61,6 +61,7 @@ export async function addCommand(
     envMap?: string[];
     workDir?: string;
     timeout?: string;
+    header?: string[];
     json?: boolean;
   } = {}
 ): Promise<void> {
@@ -438,8 +439,54 @@ export async function addCommand(
         type: 'headers',
         headers: { [template.auth.fields[0]]: options.key }
       };
+    } else if (authType === 'headers' && options.header?.length) {
+      // --header flag(s): parse name=value pairs non-interactively
+      const headers: Record<string, string> = {};
+      for (const pair of options.header) {
+        const eqIdx = pair.indexOf('=');
+        if (eqIdx === -1) {
+          if (options.json) {
+            console.log(JSON.stringify({ ok: false, error: `Invalid --header format: "${pair}" (expected name=value)` }));
+          } else {
+            console.error(`❌ Invalid --header format: "${pair}" (expected name=value)`);
+          }
+          process.exit(1);
+        }
+        const name = pair.slice(0, eqIdx).trim();
+        const value = pair.slice(eqIdx + 1).trim();
+        if (!name) {
+          if (options.json) {
+            console.log(JSON.stringify({ ok: false, error: `Invalid --header format: "${pair}" (empty header name)` }));
+          } else {
+            console.error(`❌ Invalid --header format: "${pair}" (empty header name)`);
+          }
+          process.exit(1);
+        }
+        if (!value) {
+          if (options.json) {
+            console.log(JSON.stringify({ ok: false, error: `Invalid --header format: "${pair}" (empty value for ${name})` }));
+          } else {
+            console.error(`❌ Invalid --header format: "${pair}" (empty value for ${name})`);
+          }
+          process.exit(1);
+        }
+        headers[name] = value;
+      }
+      auth = {
+        type: 'headers',
+        headers
+      };
+    } else if (authType === 'headers' && options.key && !template) {
+      // Single --key with no template: prompt for header name or use a sensible message
+      if (options.json) {
+        console.log(JSON.stringify({ ok: false, error: 'headers auth type requires --header name=value (not --key). Use: --header "api-key=<value>"' }));
+      } else {
+        console.error('❌ headers auth type requires --header name=value (not --key).');
+        console.error('   Use: --header "api-key=<value>"');
+      }
+      process.exit(1);
     } else {
-      // headers
+      // Interactive headers fallback
       if (!options.json) console.log('Enter headers as key:value pairs (empty line to finish):');
       const headers: Record<string, string> = {};
 
