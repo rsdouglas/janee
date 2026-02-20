@@ -795,6 +795,14 @@ export async function startMCPServer(serverOptions: MCPServerOptions): Promise<v
   console.error('Janee MCP server started (stdio)');
 }
 
+/** Handle returned by startMCPServerHTTP for lifecycle management. */
+export interface HTTPServerHandle {
+  /** Gracefully close all sessions and stop the HTTP listener. */
+  close(): Promise<void>;
+  /** Number of active MCP sessions. */
+  sessionCount(): number;
+}
+
 /**
  * Start MCP server with StreamableHTTP transport over HTTP.
  *
@@ -802,17 +810,24 @@ export async function startMCPServer(serverOptions: MCPServerOptions): Promise<v
  * Each session gets its own Server instance so that concurrent clients don't
  * interfere — the SDK's Server.connect() sets a single _transport slot, so
  * sharing a Server across transports would route responses to the wrong client.
+ *
+ * Returns an HTTPServerHandle for graceful shutdown and session introspection.
+ * Sessions that are idle for longer than `idleTimeoutMs` (default: 30 minutes)
+ * are automatically closed to prevent memory leaks.
  */
 export async function startMCPServerHTTP(
   serverOptions: MCPServerOptions,
-  httpOptions: { host: string; port: number; runnerKey?: string; authorityHooks?: import('./authority.js').AuthorityExecHooks }
-): Promise<void> {
+  httpOptions: { host: string; port: number; idleTimeoutMs?: number; runnerKey?: string; authorityHooks?: import('./authority.js').AuthorityExecHooks }
+): Promise<HTTPServerHandle> {
   const app = express();
   app.use(express.json());
+
+  const idleTimeoutMs = httpOptions.idleTimeoutMs ?? 30 * 60 * 1000; // default 30 min
 
   const sessions = new Map<string, {
     transport: StreamableHTTPServerTransport;
     server: Server;
+    lastActivityAt: number;
   }>();
 
   // Authority REST endpoints -- active when runnerKey is provided
@@ -863,12 +878,34 @@ export async function startMCPServerHTTP(
     });
   }
 
+  // Sweep idle sessions every 60 seconds
+  const idleSweepInterval = idleTimeoutMs > 0 ? setInterval(async () => {
+    const now = Date.now();
+    for (const [sid, session] of sessions.entries()) {
+      if (now - session.lastActivityAt > idleTimeoutMs) {
+        console.error(`Closing idle session ${sid} (inactive for ${Math.round((now - session.lastActivityAt) / 1000)}s)`);
+        sessions.delete(sid);
+        try {
+          await session.transport.close?.();
+          await session.server.close();
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
+  }, Math.min(idleTimeoutMs, 60_000)) : undefined;
+
+  if (idleSweepInterval) {
+    idleSweepInterval.unref?.(); // Don't prevent Node from exiting
+  }
+
   app.all('/mcp', async (req, res) => {
     try {
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
       if (sessionId && sessions.has(sessionId)) {
         const session = sessions.get(sessionId)!;
+        session.lastActivityAt = Date.now();
         await session.transport.handleRequest(req, res, req.body);
 
       } else if (!sessionId && isInitializeRequest(req.body)) {
@@ -878,7 +915,7 @@ export async function startMCPServerHTTP(
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
           onsessioninitialized: (sid: string) => {
-            sessions.set(sid, { transport, server });
+            sessions.set(sid, { transport, server, lastActivityAt: Date.now() });
             if (clientName) clientSessions.set(sid, clientName);
           },
           onsessionclosed: async (sid: string) => {
@@ -923,9 +960,36 @@ export async function startMCPServerHTTP(
   });
 
   return new Promise((resolve) => {
-    app.listen(httpOptions.port, httpOptions.host, () => {
+    const httpServer = app.listen(httpOptions.port, httpOptions.host, () => {
       console.error(`Janee MCP server listening on http://${httpOptions.host}:${httpOptions.port}/mcp (StreamableHTTP)`);
-      resolve();
+
+      const handle: HTTPServerHandle = {
+        async close() {
+          if (idleSweepInterval) clearInterval(idleSweepInterval);
+
+          // Close all active sessions
+          const closeTasks = Array.from(sessions.entries()).map(async ([sid, session]) => {
+            sessions.delete(sid);
+            try {
+              await session.transport.close?.();
+              await session.server.close();
+            } catch {
+              // best-effort
+            }
+          });
+          await Promise.all(closeTasks);
+
+          // Close the HTTP listener
+          await new Promise<void>((resolveClose, rejectClose) => {
+            httpServer.close((err) => err ? rejectClose(err) : resolveClose());
+          });
+        },
+        sessionCount() {
+          return sessions.size;
+        },
+      };
+
+      resolve(handle);
     });
   });
 }
