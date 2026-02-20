@@ -1,6 +1,6 @@
 # Janee 🔐
 
-**Secrets management for AI agents via MCP**
+**Secure API credential proxy for AI agents — secrets management via MCP**
 
 [![npm version](https://img.shields.io/npm/v/@true-and-useful/janee.svg)](https://www.npmjs.com/package/@true-and-useful/janee)
 [![npm downloads](https://img.shields.io/npm/dw/@true-and-useful/janee.svg)](https://www.npmjs.com/package/@true-and-useful/janee)
@@ -51,6 +51,23 @@ Janee is an [MCP](https://modelcontextprotocol.io) server that manages API secre
 
 ---
 
+## Why Janee?
+
+| Approach | Secrets safe? | Audit trail? | Policy control? | Works with MCP? |
+|----------|:---:|:---:|:---:|:---:|
+| Hardcode keys in agent prompts | ❌ | ❌ | ❌ | — |
+| `.env` files in agent workspace | ❌ Agent can read them | ❌ | ❌ | — |
+| Vault/cloud secrets manager | ⚠️ Agent gets the secret at runtime | ⚠️ | ⚠️ | ❌ |
+| **Janee** | ✅ Agent never sees keys | ✅ Every request logged | ✅ Allow/deny rules | ✅ Native MCP server |
+
+**Janee is purpose-built for AI agents.** Unlike general-purpose secret managers (Vault, AWS Secrets Manager, 1Password), Janee doesn't hand the secret to the caller. It _proxies the request_, injecting credentials server-side. The agent gets the API response — never the key.
+
+This means:
+- A prompt-injected agent **cannot exfiltrate your keys** — it doesn't have them
+- You can **revoke access instantly** — kill the Janee session, not rotate the key
+- You get a **complete audit trail** — every API call, with the agent's stated reason
+
+
 ## Configure Once, Use Everywhere
 
 Set up your APIs in Janee once:
@@ -77,7 +94,7 @@ Now **every agent** that connects to Janee can use them:
 
 No more copying keys between tools. No more "which agent has which API configured?" Add a new agent? It already has access to everything. Revoke a key? Update it once in Janee.
 
-**One config. Every agent. Full audit trail.**
+**Secure API credential proxy for AI agents — secrets management via MCP**
 
 ---
 
