@@ -40,6 +40,8 @@ export interface CapabilityConfig {
     allow?: string[];
     deny?: string[];
   };
+  /** Restrict this capability to specific agent IDs (e.g. ["myapp:worker-1"]) */
+  allowedAgents?: string[];
   // Exec mode fields (RFC 0001)
   mode?: 'proxy' | 'exec';  // Default: 'proxy' (HTTP proxy mode)
   allowCommands?: string[];  // Whitelist of allowed executables
@@ -59,6 +61,8 @@ export interface ServerConfig {
   host: string;
   logBodies?: boolean;  // Log request bodies in audit trail (default: true)
   strictDecryption?: boolean;  // Fail hard on decryption errors (default: true)
+  /** Default access policy for capabilities without allowedAgents: "open" (any agent) or "restricted" (admin-only) */
+  defaultAccess?: 'open' | 'restricted';
 }
 
 export interface JaneeYAMLConfig {

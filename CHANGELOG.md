@@ -4,22 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.10.0] - 2026-02-20
 
 ### Added
-- **Agent-scoped credential isolation** — credentials created by one agent are invisible to others unless explicitly shared via `manage_credential` tool
-- New `CredentialOwnership` model with three access policies: `private`, `shared`, `global`
-- New MCP tool `manage_credential` for grant/revoke/view operations on credential access
-- Transport-bound agent identity resolution via `resolveAgentIdentity()` — agent identity derived from authenticated session/transport, not client-asserted arguments
-- `onPersistOwnership` callback for persisting ownership changes to disk
-- CLI-created credentials automatically tagged with `cliCreatedOwnership()` (global access)
-- 36 new tests covering agent-scope logic and MCP handler integration
 
-### Security
-- Agent identity is now resolved from transport metadata (`extra.authInfo.clientId`, `extra.sessionId`) rather than trusting client-provided `agentId` arguments
-- Credential access checks enforced on `list_services`, `execute`, and `manage_credential` handlers
-- Owner-only enforcement on grant/revoke operations
+- **Multi-session HTTP** — HTTP transport now creates a Server + Transport per session, following the official MCP SDK pattern. Multiple agents can connect concurrently with isolated sessions.
+- **Agent identity via `clientInfo.name`** — Agent identity is derived from the MCP `initialize` handshake's `clientInfo.name` field, not from tool arguments. Works across stdio, HTTP, and in-memory transports.
+- **Capability-level access control** — New `allowedAgents` array per capability restricts which agents can see and use it. New `defaultAccess: restricted | open` server config controls the default policy for capabilities without an explicit allowlist.
+- **Agent-scoped credential isolation** — Credentials created by an agent default to `agent-only` access. New `manage_credential` MCP tool lets agents view, grant, and revoke access.
+- `CredentialOwnership` model with three policies: `agent-only`, `shared`, `all-agents`
+- `captureClientInfo()` utility for stdio/test transports to capture identity from initialize
+- `isInitializeRequest` from MCP SDK used for proper session routing
 
 ### Changed
-- `addServiceYAML()` now sets `cliCreatedOwnership()` by default on new services
-- `list_services` tool filters results based on agent access when ownership metadata is present
+
+- **Breaking:** `startMCPServerHTTP` and `startMCPServer` now accept `MCPServerOptions` instead of `MCPServerResult`. Callers no longer call `createMCPServer()` directly — the start functions create server instances internally (per-session for HTTP, once for stdio).
+- `list_services` filters results by agent access when ownership or `allowedAgents` are configured
+- `addServiceYAML()` sets `cliCreatedOwnership()` (all-agents) by default on new services
+- `create-gh-app` package: de-creature-ified naming (generic `agent`/`.gh-apps` paths)
+
+### Security
+
+- Agent identity resolved from transport-level metadata (`clientInfo.name`) rather than trusting client-provided `agentId` arguments
+- 4-level identity priority chain: `verifiedAgentId` > `transportAgentHint` > `session.agentId` > `assertedAgentId`
+- Credential access checks enforced on `list_services`, `execute`, and `manage_credential`
+- Owner-only enforcement on grant/revoke operations

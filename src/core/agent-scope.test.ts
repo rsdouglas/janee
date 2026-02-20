@@ -189,15 +189,23 @@ describe('agent-scope', () => {
 import { resolveAgentIdentity } from './agent-scope';
 
 describe('resolveAgentIdentity', () => {
-  it('should prefer transport-bound identity from session metadata', () => {
+  it('should prefer verified identity over all others', () => {
     const session = {
       agentId: 'session-agent',
-      metadata: { verifiedAgentId: 'verified-agent' }
+      metadata: { verifiedAgentId: 'verified-agent', transportAgentHint: 'hint-agent' }
     };
     expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('verified-agent');
   });
 
-  it('should fallback to session agentId when no verified identity', () => {
+  it('should prefer transport hint over session agentId', () => {
+    const session = {
+      agentId: 'session-agent',
+      metadata: { transportAgentHint: 'hint-agent' }
+    };
+    expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('hint-agent');
+  });
+
+  it('should fallback to session agentId when no verified identity or hint', () => {
     const session = { agentId: 'session-agent', metadata: {} };
     expect(resolveAgentIdentity(session, 'asserted-agent')).toBe('session-agent');
   });

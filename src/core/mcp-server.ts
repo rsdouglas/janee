@@ -9,7 +9,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool
+  Tool,
+  isInitializeRequest
 } from '@modelcontextprotocol/sdk/types.js';
 import { SessionManager } from './sessions.js';
 import { checkRules, Rules } from './rules.js';
@@ -28,6 +29,32 @@ import { join } from 'path';
 const packageJsonPath = join(__dirname, '../../package.json');
 const pkgVersion = JSON.parse(readFileSync(packageJsonPath, 'utf8')).version || '0.0.0';
 
+/**
+ * Check whether an agent can access a capability.
+ * Checks capability-level allowedAgents first, then falls back to
+ * service-level ownership and the global defaultAccess policy.
+ *
+ * No agentId (e.g. CLI/admin) always gets access.
+ */
+function canAccessCapability(
+  agentId: string | undefined,
+  cap: Capability,
+  service: ServiceConfig | undefined,
+  defaultAccessPolicy: 'open' | 'restricted' | undefined
+): boolean {
+  if (!agentId) return true;
+
+  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
+    return cap.allowedAgents.includes(agentId);
+  }
+
+  if (defaultAccessPolicy === 'restricted') {
+    return false;
+  }
+
+  return canAgentAccess(agentId, service?.ownership);
+}
+
 export interface Capability {
   name: string;
   service: string;
@@ -35,6 +62,7 @@ export interface Capability {
   autoApprove?: boolean;
   requiresReason?: boolean;
   rules?: Rules;  // Optional allow/deny patterns
+  allowedAgents?: string[];  // Restrict this capability to specific agent IDs
   // Exec mode fields (RFC 0001)
   mode?: 'proxy' | 'exec';
   allowCommands?: string[];
@@ -87,6 +115,8 @@ export interface MCPServerOptions {
   /** Map of service name -> ownership metadata for agent-scoped access control */
   sessionManager: SessionManager;
   auditLogger: AuditLogger;
+  /** Default access policy for capabilities without allowedAgents: "open" (any agent) or "restricted" (no agent unless listed) */
+  defaultAccess?: 'open' | 'restricted';
   onExecute: (session: any, request: APIRequest) => Promise<APIResponse>;
   onExecCommand?: (session: any, capability: Capability, command: string[], stdin?: string) => Promise<ExecResult>;
   onReloadConfig?: () => ReloadResult;
@@ -114,15 +144,25 @@ function parseTTL(ttl: string): number {
   return value * multipliers[unit];
 }
 
+export interface MCPServerResult {
+  server: Server;
+  /** Per-session clientInfo.name storage. Populated by captureClientInfo(). */
+  clientSessions: Map<string, string>;
+}
+
 /**
  * Create and start MCP server
  */
-export function createMCPServer(options: MCPServerOptions): Server {
-  const { sessionManager, auditLogger, onExecute, onExecCommand, onReloadConfig, onPersistOwnership } = options;
+export function createMCPServer(options: MCPServerOptions): MCPServerResult {
+  const { sessionManager, auditLogger, defaultAccess, onExecute, onExecCommand, onReloadConfig, onPersistOwnership } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
   let services = options.services;
+
+  // Maps MCP session IDs to clientInfo.name from the initialize handshake.
+  // Populated by captureClientInfo() after connecting a transport.
+  const clientSessions = new Map<string, string>();
 
   const server = new Server(
     {
@@ -136,18 +176,30 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   );
 
+  /**
+   * Resolve agent identity from the MCP session.
+   * Identity comes from clientInfo.name captured during initialize.
+   * For HTTP: stored by session UUID (captured in startMCPServerHTTP).
+   * For stdio/tests: stored under '__default__' (captured by captureClientInfo).
+   * Falls back to args.agentId for legacy scenarios.
+   */
+  function resolveAgentFromRequest(extra: any, args: any): string | undefined {
+    const sessionKey = extra?.sessionId || '__default__';
+    const clientName = clientSessions.get(sessionKey) || clientSessions.get('__default__');
+
+    return resolveAgentIdentity(
+      { agentId: extra?.sessionId, metadata: { transportAgentHint: clientName } },
+      args?.agentId
+    );
+  }
+
   // Tool: list_services
   const listServicesTool: Tool = {
     name: 'list_services',
-    description: 'List available API capabilities managed by Janee. If you provide your agentId, only credentials you have access to will be shown.',
+    description: 'List available API capabilities managed by Janee',
     inputSchema: {
       type: 'object',
-      properties: {
-        agentId: {
-          type: 'string',
-          description: 'Your agent identifier (optional — filters results to credentials you can access)'
-        }
-      },
+      properties: {},
       required: []
     }
   };
@@ -184,10 +236,6 @@ export function createMCPServer(options: MCPServerOptions): Server {
         reason: {
           type: 'string',
           description: 'Reason for this request (required for some capabilities)'
-        },
-        agentId: {
-          type: 'string',
-          description: 'Your agent identifier (required for agent-scoped credentials)'
         }
       },
       required: ['capability', 'method', 'path']
@@ -255,10 +303,6 @@ export function createMCPServer(options: MCPServerOptions): Server {
         targetAgentId: {
           type: 'string',
           description: 'Agent ID to grant/revoke access for (required for grant/revoke actions)'
-        },
-        agentId: {
-          type: 'string',
-          description: 'Your agent identifier (used to verify ownership)'
         }
       },
       required: ['action', 'service']
@@ -286,10 +330,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
     try {
       switch (name) {
         case 'list_services': {
-          const listAgentId = resolveAgentIdentity(
-            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
-            (args as any)?.agentId
-          );
+          const listAgentId = resolveAgentFromRequest(extra, args);
           return {
             content: [{
               type: 'text',
@@ -297,7 +338,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
                 capabilities
                   .filter(cap => {
                     const svc = services.get(cap.service);
-                    return canAgentAccess(listAgentId, svc?.ownership);
+                    return canAccessCapability(listAgentId, cap, svc, defaultAccess);
                   })
                   .map(cap => ({
                   name: cap.name,
@@ -396,21 +437,18 @@ export function createMCPServer(options: MCPServerOptions): Server {
             throw new Error(ruleCheck.reason || 'Request denied by policy');
           }
 
-          // Check agent-scoped access (transport-bound identity preferred over client-asserted)
-          const executeAgentId = resolveAgentIdentity(
-            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
-            (args as any).agentId
-          );
+          // Check agent-scoped access (capability-level allowedAgents, then service-level ownership)
+          const executeAgentId = resolveAgentFromRequest(extra, args);
           const executeSvc = services.get(cap.service);
-          if (!canAgentAccess(executeAgentId, executeSvc?.ownership)) {
+          if (!canAccessCapability(executeAgentId, cap, executeSvc, defaultAccess)) {
             auditLogger.logDenied(
               cap.service,
               method,
               path,
-              'Agent does not have access to this credential',
+              'Agent does not have access to this capability',
               reason
             );
-            throw new Error(`Access denied: credential for service "${cap.service}" is not accessible to this agent`);
+            throw new Error(`Access denied: capability "${capability}" is not accessible to this agent`);
           }
 
           // Get or create session
@@ -479,6 +517,20 @@ export function createMCPServer(options: MCPServerOptions): Server {
             throw new Error(`Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`);
           }
 
+          // Check agent-scoped access
+          const execAgentId = resolveAgentFromRequest(extra, args);
+          const execSvc = services.get(execCap.service);
+          if (!canAccessCapability(execAgentId, execCap, execSvc, defaultAccess)) {
+            auditLogger.logDenied(
+              execCap.service,
+              'EXEC',
+              execCommand.join(' '),
+              'Agent does not have access to this capability',
+              execReason
+            );
+            throw new Error(`Access denied: capability "${execCapName}" is not accessible to this agent`);
+          }
+
           // Check if reason required
           if (execCap.requiresReason && !execReason) {
             throw new Error(`Capability "${execCapName}" requires a reason`);
@@ -536,10 +588,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
 
         case 'manage_credential': {
           const { action: credAction, service: credService, targetAgentId: credTarget } = args as any;
-          const credAgentId = resolveAgentIdentity(
-            { agentId: extra?.sessionId, metadata: { verifiedAgentId: extra?.authInfo?.clientId } },
-            (args as any).agentId
-          );
+          const credAgentId = resolveAgentFromRequest(extra, args);
 
           if (!credService) {
             throw new Error('Missing required argument: service');
@@ -645,7 +694,7 @@ export function createMCPServer(options: MCPServerOptions): Server {
     }
   });
 
-  return server;
+  return { server, clientSessions };
 }
 
 /**
@@ -698,48 +747,118 @@ export function makeAPIRequest(
 }
 
 /**
- * Start MCP server with stdio transport (default)
+ * Intercept MCP transport messages to capture clientInfo.name from initialize handshakes.
+ * For HTTP (with sessionId in extra), stores per-session.
+ * For stdio/InMemory (no sessionId), stores under '__default__'.
  */
-export async function startMCPServer(server: Server): Promise<void> {
+export function captureClientInfo(
+  transport: { onmessage?: (...args: any[]) => any },
+  clientSessions: Map<string, string>
+): void {
+  const original = transport.onmessage;
+  transport.onmessage = (message: any, extra?: any) => {
+    if (message?.method === 'initialize' && message?.params?.clientInfo?.name) {
+      const key = extra?.sessionId || '__default__';
+      clientSessions.set(key, message.params.clientInfo.name);
+    }
+    return (original as any)?.call(transport, message, extra);
+  };
+}
+
+/**
+ * Start MCP server with stdio transport (single session).
+ */
+export async function startMCPServer(serverOptions: MCPServerOptions): Promise<void> {
+  const { server, clientSessions } = createMCPServer(serverOptions);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  captureClientInfo(transport, clientSessions);
 
   console.error('Janee MCP server started (stdio)');
 }
 
 /**
- * Start MCP server with StreamableHTTP transport over HTTP
+ * Start MCP server with StreamableHTTP transport over HTTP.
  *
- * Note: Express is used for convenience (routing + body parsing).
- * StreamableHTTP only requires Node.js IncomingMessage/ServerResponse,
- * so you could use native http.createServer() if you prefer.
+ * Creates a new Server + Transport per session (the official MCP SDK pattern).
+ * Each session gets its own Server instance so that concurrent clients don't
+ * interfere — the SDK's Server.connect() sets a single _transport slot, so
+ * sharing a Server across transports would route responses to the wrong client.
  */
 export async function startMCPServerHTTP(
-  server: Server,
-  options: { host: string; port: number }
+  serverOptions: MCPServerOptions,
+  httpOptions: { host: string; port: number }
 ): Promise<void> {
   const app = express();
-
-  // Parse JSON bodies (StreamableHTTP accepts pre-parsed body as third parameter)
-  // This middleware runs globally but doesn't break streaming since we pass the parsed body
   app.use(express.json());
 
-  // Create StreamableHTTP transport (replaces deprecated SSE transport)
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID()
-  });
+  const sessions = new Map<string, {
+    transport: StreamableHTTPServerTransport;
+    server: Server;
+  }>();
 
-  await server.connect(transport);
-
-  // Handle GET and POST requests to /mcp endpoint
-  // StreamableHTTP protocol uses GET for streaming responses and POST for requests
   app.all('/mcp', async (req, res) => {
-    await transport.handleRequest(req, res, req.body);
+    try {
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+      if (sessionId && sessions.has(sessionId)) {
+        const session = sessions.get(sessionId)!;
+        await session.transport.handleRequest(req, res, req.body);
+
+      } else if (!sessionId && isInitializeRequest(req.body)) {
+        const clientName: string | undefined = req.body?.params?.clientInfo?.name;
+        const { server, clientSessions } = createMCPServer(serverOptions);
+
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => crypto.randomUUID(),
+          onsessioninitialized: (sid: string) => {
+            sessions.set(sid, { transport, server });
+            if (clientName) clientSessions.set(sid, clientName);
+          },
+          onsessionclosed: async (sid: string) => {
+            sessions.delete(sid);
+            await server.close();
+          },
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && sessions.has(sid)) {
+            sessions.delete(sid);
+          }
+        };
+
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+
+      } else if (sessionId) {
+        res.status(404).json({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Session not found' },
+          id: null,
+        });
+      } else {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32600, message: 'Bad Request: Missing session ID or not an initialize request' },
+          id: null,
+        });
+      }
+    } catch (error) {
+      console.error('Error handling MCP request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal server error' },
+          id: null,
+        });
+      }
+    }
   });
 
   return new Promise((resolve) => {
-    app.listen(options.port, options.host, () => {
-      console.error(`Janee MCP server listening on http://${options.host}:${options.port}/mcp (StreamableHTTP)`);
+    app.listen(httpOptions.port, httpOptions.host, () => {
+      console.error(`Janee MCP server listening on http://${httpOptions.host}:${httpOptions.port}/mcp (StreamableHTTP)`);
       resolve();
     });
   });

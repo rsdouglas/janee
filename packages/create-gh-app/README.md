@@ -29,7 +29,7 @@ create-gh-app my-agent --owner my-org     # create under an org
 create-gh-app my-agent --owner @me        # create under your personal account
 ```
 
-Opens a browser to complete the GitHub manifest flow. The app credentials (including private key) are saved locally to `.creature-gh-app/<agent>/<timestamp>/`.
+Opens a browser to complete the GitHub manifest flow. The app credentials (including private key) are saved locally to `.gh-apps/<agent>/<timestamp>/`.
 
 After creation, install the app on the target org/account:
 

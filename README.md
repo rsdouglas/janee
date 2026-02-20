@@ -257,6 +257,7 @@ Janee exposes three MCP tools:
 | `list_services` | Discover available APIs and their policies |
 | `execute` | Make an API request through Janee (HTTP proxy mode) |
 | `exec` | Run a CLI command with injected credentials (exec mode) |
+| `manage_credential` | View, grant, or revoke access to agent-scoped credentials |
 | `reload_config` | Reload config from disk after adding/removing services (available when started with `janee serve`) |
 
 Agents discover what's available, then call APIs through Janee. Same audit trail, same protection.
@@ -298,6 +299,33 @@ capabilities:
 
 **Services** = Real APIs with real keys  
 **Capabilities** = What agents can request, with policies
+
+### Access control
+
+Control which agents can use which capabilities:
+
+```yaml
+server:
+  host: localhost
+  defaultAccess: restricted   # capabilities require explicit allowlist
+
+capabilities:
+  stripe:
+    service: stripe
+    ttl: 1h
+    allowedAgents: ["agent-a", "agent-b"]   # only these agents can use it
+
+  github:
+    service: github
+    ttl: 1h
+    # no allowedAgents + defaultAccess: restricted → no agent can use this
+```
+
+- **`defaultAccess: restricted`** — capabilities without an `allowedAgents` list are hidden from all agents
+- **`defaultAccess: open`** (default) — capabilities without an `allowedAgents` list are available to all agents
+- **`allowedAgents`** — per-capability list of agent names (matched against `clientInfo.name` from the MCP initialize handshake)
+
+Credentials created by agents at runtime default to `agent-only` access — only the creating agent can use them unless it explicitly grants access via the `manage_credential` tool.
 
 ### Exec mode capabilities
 
@@ -447,7 +475,10 @@ Agent never touches the real key.
 ## Security
 
 - **Encryption**: Keys stored with AES-256-GCM
-- **Local only**: MCP server over stdio (no network exposure)
+- **Agent identity**: Derived from `clientInfo.name` in the MCP initialize handshake — no custom headers needed
+- **Agent isolation**: Each agent gets its own session with isolated identity (HTTP transport creates a Server+Transport per session)
+- **Access control**: Per-capability `allowedAgents` whitelist + server-wide `defaultAccess` policy
+- **Credential scoping**: Agent-created credentials default to `agent-only`
 - **Audit log**: Every request logged to `~/.janee/logs/`
 - **Sessions**: Time-limited, revocable
 - **Kill switch**: `janee revoke` or delete config

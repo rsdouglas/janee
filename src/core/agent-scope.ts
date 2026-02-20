@@ -55,18 +55,24 @@ export function resolveAgentIdentity(
   session: { agentId?: string; metadata?: Record<string, unknown> } | undefined,
   assertedAgentId?: string
 ): string | undefined {
-  // Priority 1: Transport-bound identity from session metadata
-  // (set by authenticated MCP transports — OAuth, mTLS, signed tokens)
+  // Priority 1: Verified identity from authenticated transport (OAuth, mTLS, signed tokens).
+  // Reserved for Phase 2 hardening — not currently populated by any transport.
   if (session?.metadata?.verifiedAgentId) {
     return session.metadata.verifiedAgentId as string;
   }
 
-  // Priority 2: Session-level agentId (set during session creation)
+  // Priority 2: Unverified transport hint (e.g. clientInfo.name from MCP initialize).
+  // Better than tool args (set by framework, not user prompt), but not cryptographically verified.
+  if (session?.metadata?.transportAgentHint) {
+    return session.metadata.transportAgentHint as string;
+  }
+
+  // Priority 3: Session-level agentId (set during session creation)
   if (session?.agentId) {
     return session.agentId;
   }
 
-  // Priority 3 (fallback): Client-asserted identity from tool arguments.
+  // Priority 4 (fallback): Client-asserted identity from tool arguments.
   // WARNING: This is spoofable. Only use in single-agent or dev environments.
   return assertedAgentId;
 }

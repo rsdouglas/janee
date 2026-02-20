@@ -42,10 +42,34 @@ Call this first to see what APIs are configured.
 
 Returns: { status, body }
 
+### manage_credential
+
+Manage access to agent-scoped credentials.
+
+- action (required) — `view`, `grant`, or `revoke`
+- capability (required for grant/revoke) — capability name
+- agentId (required for grant/revoke) — agent to grant/revoke access
+
+Only the agent that created a credential can grant or revoke access.
+Credentials created by agents default to `agent-only` — no other agent can use them
+unless the creator explicitly grants access.
+
 ### reload_config
 
 No parameters. Reloads config from disk after adding/removing services.
 Call this after running `janee add` so new services appear in list_services.
+
+## Access Control
+
+Janee supports capability-level access control. Each agent is identified by its
+`clientInfo.name` from the MCP initialize handshake — no extra headers or args needed.
+
+- **`defaultAccess`** (server config): Set to `restricted` so capabilities without an
+  explicit allowlist are hidden from all agents. Set to `open` (default) to allow all.
+- **`allowedAgents`** (per capability): An array of agent names that can see and use
+  the capability. If omitted and `defaultAccess` is `open`, all agents can access it.
+- **Agent-created credentials**: Default to `agent-only`. The creating agent can use
+  `manage_credential` to grant access to others.
 
 ## Making API Calls
 

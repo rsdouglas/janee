@@ -1,7 +1,7 @@
 {
   "name": "@true-and-useful/janee",
   "mcpName": "io.github.rsdouglas/janee",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Secrets management for AI agents via MCP",
   "main": "dist/index.js",
   "bin": {

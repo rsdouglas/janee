@@ -6,15 +6,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createMCPServer, Capability, ServiceConfig } from './mcp-server';
+import { createMCPServer, captureClientInfo, Capability, ServiceConfig } from './mcp-server';
 import { SessionManager } from './sessions';
 import { AuditLogger } from './audit';
 import { CredentialOwnership, agentCreatedOwnership, cliCreatedOwnership } from './agent-scope';
 
 // Helper to create a connected client+server pair
 async function createTestPair(overrides: {
+  clientName?: string;
   capabilities?: Capability[];
   services?: Map<string, ServiceConfig>;
+  defaultAccess?: 'open' | 'restricted';
   onPersistOwnership?: (service: string, ownership: CredentialOwnership) => void;
 } = {}) {
   const capabilities = overrides.capabilities ?? [{
@@ -31,11 +33,12 @@ async function createTestPair(overrides: {
     }]
   ]);
 
-  const server = createMCPServer({
+  const { server, clientSessions } = createMCPServer({
     capabilities,
     services,
     sessionManager: new SessionManager(),
     auditLogger: { log: vi.fn(), logDenied: vi.fn() } as unknown as AuditLogger,
+    defaultAccess: overrides.defaultAccess,
     onExecute: vi.fn().mockResolvedValue({
       statusCode: 200,
       headers: { 'content-type': 'application/json' },
@@ -46,14 +49,18 @@ async function createTestPair(overrides: {
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
-  const client = new Client({ name: 'test-client', version: '1.0.0' });
+  const client = new Client({
+    name: overrides.clientName || 'test-client',
+    version: '1.0.0'
+  });
 
-  await Promise.all([
-    client.connect(clientTransport),
-    server.connect(serverTransport),
-  ]);
+  // Connect server first, then wrap transport, then connect client.
+  // This ensures captureClientInfo intercepts the initialize handshake.
+  await server.connect(serverTransport);
+  captureClientInfo(serverTransport, clientSessions);
+  await client.connect(clientTransport);
 
-  return { client, server, clientTransport, serverTransport };
+  return { client, server, clientTransport, serverTransport, clientSessions };
 }
 
 function extractText(result: any): string {
@@ -101,12 +108,11 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         { name: 'cap-b', service: 'agent-b-service', ttl: '1h', autoApprove: true },
       ];
 
-      const { client } = await createTestPair({ services, capabilities });
+      const { client } = await createTestPair({ clientName: 'agent-a', services, capabilities });
 
-      // Agent A requests list — should see shared + own, not agent-b's
       const result = await client.callTool({
         name: 'list_services',
-        arguments: { agentId: 'agent-a' }
+        arguments: {}
       });
       const parsed = extractJSON(result);
 
@@ -129,11 +135,11 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         { name: 'cli-cap', service: 'cli-service', ttl: '1h', autoApprove: true },
       ];
 
-      const { client } = await createTestPair({ services, capabilities });
+      const { client } = await createTestPair({ clientName: 'random-agent', services, capabilities });
 
       const result = await client.callTool({
         name: 'list_services',
-        arguments: { agentId: 'random-agent' }
+        arguments: {}
       });
       const parsed = extractJSON(result);
 
@@ -159,16 +165,14 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         autoApprove: true,
       }];
 
-      const { client } = await createTestPair({ services, capabilities });
+      const { client } = await createTestPair({ clientName: 'intruder-agent', services, capabilities });
 
-      // Different agent tries to execute
       const result = await client.callTool({
         name: 'execute',
         arguments: {
           capability: 'protected-cap',
           method: 'GET',
           path: '/data',
-          agentId: 'intruder-agent',
         }
       });
 
@@ -193,7 +197,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         autoApprove: true,
       }];
 
-      const { client } = await createTestPair({ services, capabilities });
+      const { client } = await createTestPair({ clientName: 'my-agent', services, capabilities });
 
       const result = await client.callTool({
         name: 'execute',
@@ -201,7 +205,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           capability: 'my-cap',
           method: 'GET',
           path: '/data',
-          agentId: 'my-agent',
         }
       });
 
@@ -225,7 +228,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         autoApprove: true,
       }];
 
-      const { client } = await createTestPair({ services, capabilities });
+      const { client } = await createTestPair({ clientName: 'random-agent', services, capabilities });
 
       const result = await client.callTool({
         name: 'execute',
@@ -233,7 +236,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           capability: 'legacy-cap',
           method: 'GET',
           path: '/open',
-          agentId: 'random-agent',
         }
       });
 
@@ -253,7 +255,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         }],
       ]);
 
-      const { client } = await createTestPair({ services });
+      const { client } = await createTestPair({ clientName: 'not-the-owner', services });
 
       const result = await client.callTool({
         name: 'manage_credential',
@@ -261,7 +263,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           action: 'grant',
           service: 'owned-service',
           targetAgentId: 'some-friend',
-          agentId: 'not-the-owner',
         }
       });
 
@@ -281,6 +282,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       ]);
 
       const { client } = await createTestPair({
+        clientName: 'real-owner',
         services,
         onPersistOwnership: persistFn,
       });
@@ -291,7 +293,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           action: 'grant',
           service: 'owned-service',
           targetAgentId: 'friend-agent',
-          agentId: 'real-owner',
         }
       });
 
@@ -312,6 +313,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       ]);
 
       const { client } = await createTestPair({
+        clientName: 'owner',
         services,
         onPersistOwnership: persistFn,
       });
@@ -322,7 +324,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           action: 'grant',
           service: 'persist-service',
           targetAgentId: 'new-agent',
-          agentId: 'owner',
         }
       });
 
@@ -348,6 +349,7 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       ]);
 
       const { client } = await createTestPair({
+        clientName: 'owner',
         services,
         onPersistOwnership: persistFn,
       });
@@ -358,7 +360,6 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
           action: 'revoke',
           service: 'revoke-service',
           targetAgentId: 'grantee',
-          agentId: 'owner',
         }
       });
 
@@ -377,14 +378,13 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         }],
       ]);
 
-      const { client } = await createTestPair({ services });
+      const { client } = await createTestPair({ clientName: 'view-owner', services });
 
       const result = await client.callTool({
         name: 'manage_credential',
         arguments: {
           action: 'view',
           service: 'view-service',
-          agentId: 'view-owner',
         }
       });
 
@@ -404,14 +404,13 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
         }],
       ]);
 
-      const { client } = await createTestPair({ services });
+      const { client } = await createTestPair({ clientName: 'outsider', services });
 
       const result = await client.callTool({
         name: 'manage_credential',
         arguments: {
           action: 'view',
           service: 'private-service',
-          agentId: 'outsider',
         }
       });
 
@@ -423,60 +422,280 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
 
   describe('grant → execute flow (end-to-end)', () => {
     it('should allow execution after being granted access', async () => {
-      const services = new Map<string, ServiceConfig>([
+      let currentOwnership: CredentialOwnership = agentCreatedOwnership('owner');
+
+      const makeServices = () => new Map<string, ServiceConfig>([
         ['e2e-service', {
           baseUrl: 'https://api.e2e.com',
           auth: { type: 'bearer', key: 'secret' },
-          ownership: agentCreatedOwnership('owner'),
+          ownership: currentOwnership,
         }],
       ]);
 
-      const capabilities: Capability[] = [{
+      const caps: Capability[] = [{
         name: 'e2e-cap',
         service: 'e2e-service',
         ttl: '1h',
         autoApprove: true,
       }];
 
-      const { client } = await createTestPair({ services, capabilities });
+      // Friend should be denied before grant
+      const { client: friendBefore } = await createTestPair({
+        clientName: 'friend',
+        services: makeServices(),
+        capabilities: caps,
+      });
 
-      // First: friend should be denied
-      const denied = await client.callTool({
+      const denied = await friendBefore.callTool({
         name: 'execute',
-        arguments: {
-          capability: 'e2e-cap',
-          method: 'GET',
-          path: '/data',
-          agentId: 'friend',
-        }
+        arguments: { capability: 'e2e-cap', method: 'GET', path: '/data' }
       });
       expect(denied.isError).toBe(true);
 
-      // Owner grants access to friend
-      const grant = await client.callTool({
+      // Owner grants access to friend — capture the updated ownership via persist callback
+      const { client: ownerClient } = await createTestPair({
+        clientName: 'owner',
+        services: makeServices(),
+        capabilities: caps,
+        onPersistOwnership: (_svc, updated) => { currentOwnership = updated; },
+      });
+
+      const grant = await ownerClient.callTool({
         name: 'manage_credential',
-        arguments: {
-          action: 'grant',
-          service: 'e2e-service',
-          targetAgentId: 'friend',
-          agentId: 'owner',
-        }
+        arguments: { action: 'grant', service: 'e2e-service', targetAgentId: 'friend' }
       });
       expect(grant.isError).toBeFalsy();
 
-      // Now friend should be able to execute
-      const allowed = await client.callTool({
+      // Friend should now be able to execute (using the persisted ownership)
+      const { client: friendAfter } = await createTestPair({
+        clientName: 'friend',
+        services: makeServices(),
+        capabilities: caps,
+      });
+
+      const allowed = await friendAfter.callTool({
         name: 'execute',
-        arguments: {
-          capability: 'e2e-cap',
-          method: 'GET',
-          path: '/data',
-          agentId: 'friend',
-        }
+        arguments: { capability: 'e2e-cap', method: 'GET', path: '/data' }
       });
       expect(allowed.isError).toBeFalsy();
       const parsed = extractJSON(allowed);
       expect(parsed.status).toBe(200);
+    });
+  });
+
+  describe('capability-level allowedAgents', () => {
+    it('should allow an agent listed in allowedAgents', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['github-service', {
+          baseUrl: 'https://api.github.com',
+          auth: { type: 'bearer', key: 'secret' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [{
+        name: 'github-cap',
+        service: 'github-service',
+        ttl: '1h',
+        autoApprove: true,
+        allowedAgents: ['agent-a'],
+      }];
+
+      const { client } = await createTestPair({ clientName: 'agent-a', services, capabilities });
+
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'github-cap', method: 'GET', path: '/user' }
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = extractJSON(result);
+      expect(parsed.status).toBe(200);
+    });
+
+    it('should deny an agent not listed in allowedAgents', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['github-service', {
+          baseUrl: 'https://api.github.com',
+          auth: { type: 'bearer', key: 'secret' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [{
+        name: 'github-cap',
+        service: 'github-service',
+        ttl: '1h',
+        autoApprove: true,
+        allowedAgents: ['agent-a'],
+      }];
+
+      const { client } = await createTestPair({ clientName: 'agent-b', services, capabilities });
+
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'github-cap', method: 'GET', path: '/user' }
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.error).toContain('Access denied');
+    });
+
+    it('should hide restricted capabilities from list_services', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['github-service', {
+          baseUrl: 'https://api.github.com',
+          auth: { type: 'bearer', key: 'key1' },
+        }],
+        ['devto-service', {
+          baseUrl: 'https://dev.to/api',
+          auth: { type: 'bearer', key: 'key2' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [
+        { name: 'github-cap', service: 'github-service', ttl: '1h', autoApprove: true, allowedAgents: ['agent-a'] },
+        { name: 'devto-cap', service: 'devto-service', ttl: '1h', autoApprove: true },
+      ];
+
+      const { client } = await createTestPair({ clientName: 'agent-b', services, capabilities });
+
+      const result = await client.callTool({
+        name: 'list_services',
+        arguments: {}
+      });
+      const parsed = extractJSON(result);
+      const names = parsed.map((c: any) => c.name);
+
+      expect(names).toContain('devto-cap');
+      expect(names).not.toContain('github-cap');
+    });
+  });
+
+  describe('defaultAccess policy', () => {
+    it('should deny all agents when defaultAccess is "restricted" and no allowedAgents set', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['open-service', {
+          baseUrl: 'https://api.open.com',
+          auth: { type: 'bearer', key: 'key' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [{
+        name: 'open-cap',
+        service: 'open-service',
+        ttl: '1h',
+        autoApprove: true,
+      }];
+
+      const { client } = await createTestPair({
+        clientName: 'some-agent',
+        services,
+        capabilities,
+        defaultAccess: 'restricted',
+      });
+
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'open-cap', method: 'GET', path: '/data' }
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.error).toContain('Access denied');
+    });
+
+    it('should allow agents when defaultAccess is "open" and no allowedAgents set', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['open-service', {
+          baseUrl: 'https://api.open.com',
+          auth: { type: 'bearer', key: 'key' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [{
+        name: 'open-cap',
+        service: 'open-service',
+        ttl: '1h',
+        autoApprove: true,
+      }];
+
+      const { client } = await createTestPair({
+        clientName: 'some-agent',
+        services,
+        capabilities,
+        defaultAccess: 'open',
+      });
+
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'open-cap', method: 'GET', path: '/data' }
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = extractJSON(result);
+      expect(parsed.status).toBe(200);
+    });
+
+    it('should still allow explicitly listed agents even with defaultAccess restricted', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['github-service', {
+          baseUrl: 'https://api.github.com',
+          auth: { type: 'bearer', key: 'key' },
+        }],
+      ]);
+
+      const capabilities: Capability[] = [{
+        name: 'github-cap',
+        service: 'github-service',
+        ttl: '1h',
+        autoApprove: true,
+        allowedAgents: ['agent-a'],
+      }];
+
+      const { client } = await createTestPair({
+        clientName: 'agent-a',
+        services,
+        capabilities,
+        defaultAccess: 'restricted',
+      });
+
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'github-cap', method: 'GET', path: '/user' }
+      });
+
+      expect(result.isError).toBeFalsy();
+      const parsed = extractJSON(result);
+      expect(parsed.status).toBe(200);
+    });
+
+    it('should hide all capabilities from list_services when defaultAccess is restricted', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc-a', { baseUrl: 'https://a.com', auth: { type: 'bearer', key: 'k1' } }],
+        ['svc-b', { baseUrl: 'https://b.com', auth: { type: 'bearer', key: 'k2' } }],
+      ]);
+
+      const capabilities: Capability[] = [
+        { name: 'cap-a', service: 'svc-a', ttl: '1h', autoApprove: true },
+        { name: 'cap-b', service: 'svc-b', ttl: '1h', autoApprove: true, allowedAgents: ['agent-x'] },
+      ];
+
+      const { client } = await createTestPair({
+        clientName: 'agent-x',
+        services,
+        capabilities,
+        defaultAccess: 'restricted',
+      });
+
+      const result = await client.callTool({
+        name: 'list_services',
+        arguments: {}
+      });
+      const parsed = extractJSON(result);
+      const names = parsed.map((c: any) => c.name);
+
+      expect(names).toContain('cap-b');
+      expect(names).not.toContain('cap-a');
     });
   });
 });

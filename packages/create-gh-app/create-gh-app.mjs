@@ -62,7 +62,7 @@ async function githubApi(token, method, urlPath, bodyObj) {
     headers: {
       "Accept": "application/vnd.github+json",
       "Authorization": `Bearer ${token}`,
-      "User-Agent": "create-gh-app-creature",
+      "User-Agent": "create-gh-app",
       ...(bodyObj ? { "Content-Type": "application/json" } : {}),
     },
     body: bodyObj ? JSON.stringify(bodyObj) : undefined,
@@ -116,7 +116,7 @@ async function pickOwner() {
   return idx === 0 ? "@me" : orgs[idx - 1];
 }
 
-const APP_BASE = path.join(process.cwd(), ".creature-gh-app");
+const APP_BASE = path.join(process.cwd(), ".gh-apps");
 
 function loadApps() {
   if (!fs.existsSync(APP_BASE)) return [];
@@ -170,7 +170,7 @@ function resolveApp(slug) {
 
 function cmdList() {
   const apps = loadApps();
-  if (!apps.length) { console.log("No apps found in .creature-gh-app/"); return; }
+  if (!apps.length) { console.log("No apps found in .gh-apps/"); return; }
 
   console.log();
   for (const { agent, ts, app } of apps) {
@@ -348,20 +348,18 @@ async function main() {
   console.log(`\nOwner: ${owner === "@me" ? "personal account" : owner}`);
 
   const ts = nowStamp();
-  const outDir = path.join(process.cwd(), ".creature-gh-app", agent, ts);
+  const outDir = path.join(process.cwd(), ".gh-apps", agent, ts);
   fs.mkdirSync(outDir, { recursive: true });
 
   const port = await pickPort();
   const state = crypto.randomBytes(18).toString("base64url");
   const redirectUrl = `http://127.0.0.1:${port}/redirect`;
 
-  // Minimal useful defaults for a “security creature”
-  // You can edit these later in GitHub UI.
   const manifest = {
-    name: `${agent} (Creature)`,
+    name: agent,
     url: "https://github.com",
     redirect_url: redirectUrl,
-    description: `Autonomous creature: ${agent}`,
+    description: `GitHub App: ${agent}`,
     public: false,
   
     default_permissions: {

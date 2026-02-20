@@ -1,5 +1,5 @@
 import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import { createMCPServer, startMCPServer, startMCPServerHTTP, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
+import { startMCPServer, startMCPServerHTTP, MCPServerOptions, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
 import { SessionManager } from '../../core/sessions';
 import { AuditLogger } from '../../core/audit';
 import { getAuditDir } from '../config-yaml';
@@ -23,6 +23,7 @@ function loadConfigForMCP(): ReloadResult {
       autoApprove: cap.autoApprove,
       requiresReason: cap.requiresReason,
       rules: cap.rules,
+      allowedAgents: cap.allowedAgents,
       // Exec mode fields (RFC 0001)
       mode: cap.mode || 'proxy',
       allowCommands: cap.allowCommands,
@@ -81,12 +82,12 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
     // Keep a mutable reference to services for the onExecute closure
     let currentServices = services;
 
-    // Create MCP server
-    const mcpServer = createMCPServer({
+    const serverOptions: MCPServerOptions = {
       capabilities,
       services,
       sessionManager,
       auditLogger,
+      defaultAccess: config.server?.defaultAccess,
 
       // RFC 0001: Secure CLI execution handler
       onExecCommand: async (session, capability, command, stdin) => {
@@ -271,13 +272,13 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
 
         return response;
       }
-    });
+    };
 
     // Start server with selected transport
     if (transport === 'http') {
-      await startMCPServerHTTP(mcpServer, { host, port });
+      await startMCPServerHTTP(serverOptions, { host, port });
     } else {
-      await startMCPServer(mcpServer);
+      await startMCPServer(serverOptions);
     }
 
   } catch (error) {
