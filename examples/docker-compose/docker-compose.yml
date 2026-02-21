@@ -1,0 +1,41 @@
+# Janee + Agent Docker Compose
+#
+# Runs Janee on the host network, with your agent in a container.
+# The agent connects to Janee over HTTP — no secrets in the container.
+#
+# Usage:
+#   1. Install and configure Janee on your host:
+#      npm install -g @true-and-useful/janee
+#      janee init
+#      janee add stripe -u https://api.stripe.com --auth-type bearer --key sk_live_xxx
+#
+#   2. Start:
+#      docker compose up
+#
+#   3. Your agent can now use Janee's MCP tools over HTTP.
+
+services:
+  janee:
+    image: node:22-slim
+    command: >
+      sh -c "npm install -g @true-and-useful/janee &&
+             janee serve --transport http --port 9100"
+    ports:
+      - "9100:9100"
+    volumes:
+      - ~/.janee:/root/.janee:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Replace this with your actual agent image
+  agent:
+    build: ./agent
+    environment:
+      - JANEE_URL=http://janee:9100
+    depends_on:
+      janee:
+        condition: service_healthy

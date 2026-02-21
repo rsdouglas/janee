@@ -1,0 +1,117 @@
+# Janee Example: Exec Mode — Deploy & DevOps
+#
+# This config lets an AI agent deploy code, manage infrastructure,
+# and interact with cloud CLIs — without ever seeing your credentials.
+#
+# Exec mode injects secrets via environment variables into whitelisted
+# commands. The agent sees stdout/stderr but never the raw keys.
+#
+# Setup:
+#   1. npm install -g @true-and-useful/janee
+#   2. janee init
+#   3. Add your credentials:
+#      janee add aws-prod --exec --key AKIAIOSFODNN7EXAMPLE
+#      janee add docker-registry --exec --key dckr_pat_yourtoken
+#      janee add fly-deploy --exec --key fo1_yourtoken
+#   4. Copy this file to ~/.janee/config.yaml (merge with existing)
+#   5. janee serve
+
+version: "1"
+masterKey: "generate-with-janee-init"
+
+services:
+  aws-prod:
+    auth:
+      type: bearer
+      key: "encrypted:your-aws-key"
+    extraCredentials:
+      apiSecret: "encrypted:your-aws-secret"
+
+  docker-registry:
+    auth:
+      type: bearer
+      key: "encrypted:your-docker-pat"
+
+  fly-deploy:
+    auth:
+      type: bearer
+      key: "encrypted:your-fly-token"
+
+capabilities:
+  # AWS CLI — read-only access for debugging
+  aws-readonly:
+    service: aws-prod
+    mode: exec
+    allowCommands: ["aws"]
+    env:
+      AWS_ACCESS_KEY_ID: "{{apiKey}}"
+      AWS_SECRET_ACCESS_KEY: "{{apiSecret}}"
+      AWS_DEFAULT_REGION: "us-east-1"
+    ttl: "10m"
+    autoApprove: false
+    timeout: 30000
+    rules:
+      allow:
+        - "aws s3 ls *"
+        - "aws ecs describe-*"
+        - "aws logs get-*"
+      deny:
+        - "aws iam *"
+        - "aws s3 rm *"
+
+  # Docker — build and push images
+  docker-push:
+    service: docker-registry
+    mode: exec
+    allowCommands: ["docker"]
+    env:
+      DOCKER_TOKEN: "{{credential}}"
+    ttl: "15m"
+    requiresReason: true
+    timeout: 120000
+    rules:
+      allow:
+        - "docker build *"
+        - "docker push *"
+        - "docker tag *"
+      deny:
+        - "docker rm *"
+        - "docker system prune *"
+
+  # Fly.io — deploy applications
+  fly-app-deploy:
+    service: fly-deploy
+    mode: exec
+    allowCommands: ["fly", "flyctl"]
+    env:
+      FLY_API_TOKEN: "{{credential}}"
+    ttl: "10m"
+    requiresReason: true
+    timeout: 180000
+    rules:
+      allow:
+        - "fly deploy *"
+        - "fly status *"
+        - "fly logs *"
+      deny:
+        - "fly destroy *"
+        - "fly secrets *"
+
+# Agent config for Claude Desktop / Cursor:
+#
+# {
+#   "mcpServers": {
+#     "janee": {
+#       "command": "janee",
+#       "args": ["serve"]
+#     }
+#   }
+# }
+#
+# The agent can now run:
+#   janee_exec(capability="aws-readonly", command=["aws", "s3", "ls"])
+#   janee_exec(capability="docker-push", command=["docker", "build", "-t", "myapp:latest", "."])
+#   janee_exec(capability="fly-app-deploy", command=["fly", "deploy"])
+#
+# Credentials are injected as env vars — the agent never sees the raw keys.
+# All executions are audited in ~/.janee/audit.log.

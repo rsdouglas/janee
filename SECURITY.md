@@ -1,87 +1,67 @@
 # Security Policy
 
-## Supported Versions
+## Reporting Vulnerabilities
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.8.x   | :white_check_mark: |
-| < 0.8   | :x:                |
+**Please do not report security vulnerabilities through public GitHub issues.**
 
-## Reporting a Vulnerability
+Email security reports to: **security@janee.io**
 
-Janee takes security seriously — it's a secrets management tool, so security is foundational to its value.
-
-### How to Report
-
-**Please do NOT report security vulnerabilities through public GitHub issues.**
-
-Instead, report vulnerabilities by emailing: **security@janee.dev**
-
-If that bounces or you don't receive a response within 48 hours, open a [GitHub Security Advisory](https://github.com/rsdouglas/janee/security/advisories/new) on this repository.
-
-### What to Include
-
+Include:
 - Description of the vulnerability
-- Steps to reproduce (or a proof-of-concept)
-- Impact assessment (what could an attacker do?)
-- Any suggested fix, if you have one
+- Steps to reproduce
+- Impact assessment
+- Suggested fix (if any)
 
-### What to Expect
-
-- **Acknowledgment** within 48 hours
-- **Assessment** within 7 days — we'll confirm whether it's a valid issue and its severity
-- **Fix timeline** based on severity:
-  - **Critical** (secret exposure, auth bypass): Patch within 72 hours
-  - **High** (privilege escalation, policy bypass): Patch within 7 days
-  - **Medium** (information disclosure, DoS): Patch within 30 days
-  - **Low** (minor issues): Next scheduled release
-
-### Safe Harbor
-
-We consider security research conducted in good faith to be authorized. We will not pursue legal action against researchers who:
-
-- Make a good faith effort to avoid privacy violations and data destruction
-- Only interact with accounts they own or with explicit permission
-- Report vulnerabilities promptly and don't exploit them beyond what's needed to demonstrate the issue
+We aim to acknowledge reports within 48 hours and provide a fix timeline within 5 business days.
 
 ## Security Model
 
-Janee operates as a **local-first MCP server** that manages secrets for AI agents. Key security properties:
+Janee is a secrets proxy — it sits between AI agents and external APIs so that **agents never see raw credentials**. The threat model assumes:
 
-### Threat Model
+1. **Agents are untrusted.** They may be compromised via prompt injection, jailbreaks, or malicious tool calls. Janee enforces server-side policies regardless of agent intent.
+2. **The host machine is trusted.** Janee runs on the user's machine or in their infrastructure. The master key and config file must be protected by standard OS-level access controls.
+3. **Transport is local by default.** stdio transport exposes no network surface. HTTP transport binds to localhost unless explicitly configured otherwise.
 
-| Threat | Mitigation |
-|--------|-----------|
-| Agent reads raw secrets | Secrets are never exposed to agents — Janee injects credentials into proxied requests |
-| Prompt injection exfiltrates keys | Request policies restrict which APIs and methods each capability can access |
-| Unauthorized API access | Session TTLs provide time-limited access with instant revocation |
-| Local secret storage compromise | Secrets encrypted at rest in  |
-| Path traversal in config | File-based providers validate and sandbox all paths |
-| Audit evasion | Every proxied request is logged with timestamp, method, path, and status |
+### What's protected
 
-### Architecture Principles
+| Layer | Mechanism |
+|-------|-----------|
+| **Secrets at rest** | AES-256-GCM encryption with a per-install master key |
+| **Secrets in transit** | Never sent to agents — Janee injects credentials into outbound API calls server-side |
+| **API access scope** | Path-based request policies (allow/deny rules per HTTP method and path) |
+| **Session limits** | Configurable TTLs with automatic session expiry |
+| **Audit trail** | All proxied requests logged with agent identity, timestamp, and capability used |
+| **Agent identity** | `clientInfo.name` from MCP handshake used for access control in multi-agent setups |
 
-1. **Zero-knowledge agents**: Agents never see raw API keys or tokens
-2. **Principle of least privilege**: Capabilities grant minimal required access
-3. **Defense in depth**: Multiple layers (encryption, policies, audit, TTLs)
-4. **Fail-closed**: If Janee can't verify a request, it's denied
-5. **Full audit trail**: Every action is logged for forensic analysis
+### What's NOT protected
 
-### What Janee Does NOT Protect Against
+- **Config file permissions** — Janee does not enforce file permissions on `~/.janee/config.yaml`. Users must set appropriate permissions (`chmod 600`).
+- **Master key storage** — The master key is stored in the config file. If an attacker has read access to the config, they can decrypt all secrets.
+- **Localhost network access** — In HTTP mode, any process on the same machine can connect to the MCP endpoint unless additional network controls are applied.
+- **Agent impersonation** — `clientInfo.name` is self-reported by agents and not cryptographically verified in the current version. See [issue #96](https://github.com/rsdouglas/janee/issues/96) for hardened agent identity.
 
-- Compromise of the host machine where Janee runs (if an attacker has root, all bets are off)
-- Side-channel attacks on the MCP transport layer
-- Vulnerabilities in upstream APIs that Janee proxies to
-- Social engineering of the human who configures Janee
+## Encryption Details
 
-## Dependencies
+- **Algorithm:** AES-256-GCM (authenticated encryption)
+- **Key:** 256-bit random key, base64-encoded, generated via `crypto.randomBytes(32)`
+- **IV:** 12-byte random IV per encryption operation (GCM standard)
+- **Auth tag:** 16-byte authentication tag for integrity verification
+- **Storage format:** `base64(iv + authTag + ciphertext)`
 
-Janee minimizes its dependency footprint to reduce supply chain risk. We monitor dependencies via:
+Each secret is encrypted independently with a unique random IV, providing semantic security (identical plaintext values produce different ciphertexts).
 
-- GitHub Dependabot alerts
-- Regular  checks
-- Pinned dependency versions in 
+## Supported Versions
 
-## Acknowledgments
+| Version | Supported |
+|---------|-----------|
+| 0.10.x  | ✅ Current |
+| < 0.10  | ❌ Upgrade recommended |
 
-We're grateful to security researchers who help keep Janee and its users safe. Responsible disclosures will be acknowledged in release notes (unless the reporter prefers anonymity).
+## Best Practices
+
+1. **Set file permissions** on your config: `chmod 600 ~/.janee/config.yaml`
+2. **Use request policies** to limit what agents can do — don't rely on agent "intent"
+3. **Set session TTLs** for time-limited access in automated workflows
+4. **Review audit logs** periodically for unexpected API usage patterns
+5. **Use separate capabilities** per agent in multi-agent setups with access control
+6. **Rotate secrets** if you suspect the master key or config file has been compromised

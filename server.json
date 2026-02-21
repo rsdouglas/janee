@@ -1,17 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.rsdouglas/janee",
-  "description": "Secure secrets proxy for AI agents — manages API keys so agents never see raw credentials.",
+  "title": "Janee — Secrets Management for AI Agents",
+  "description": "Secure secrets proxy for AI agents — manages API keys so agents never see raw credentials. Supports request policies, audit logging, session TTLs, exec mode, and GitHub App auth.",
   "repository": {
     "url": "https://github.com/rsdouglas/janee",
     "source": "github"
   },
-  "version": "0.8.5",
+  "websiteUrl": "https://janee.io",
+  "version": "0.10.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@true-and-useful/janee",
-      "version": "0.8.5",
+      "version": "0.10.1",
       "transport": {
         "type": "stdio"
       },
@@ -24,6 +26,12 @@
           "name": "JANEE_CONFIG"
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "transportType": "http",
+      "url": "http://localhost:9100/mcp"
     }
   ]
 }

@@ -36,7 +36,15 @@
     "secrets",
     "mcp",
     "model-context-protocol",
-    "api-proxy"
+    "api-proxy",
+    "api-keys",
+    "credential-management",
+    "secrets-management",
+    "ai-security",
+    "claude",
+    "llm",
+    "prompt-injection",
+    "audit-log"
   ],
   "author": {
     "name": "True and Useful LLC",

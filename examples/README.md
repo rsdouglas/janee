@@ -50,7 +50,40 @@ janee serve
 - Send Slack messages and edit Notion (requires approval + reason)
 - Destructive operations (delete, archive) always blocked
 
+
+### [`exec-mode-deploy.yaml`](./exec-mode-deploy.yaml)
+
+**Use case:** AI agent deploying code and managing infrastructure via CLI tools.
+
+- AWS CLI with read-only access (auto-approved) — credentials injected as env vars
+- Docker build & push with approval required
+- Fly.io deploy with reason required
+- All exec mode — agent runs commands but never sees raw keys
+
+### [`exec-mode-git-ops.yaml`](./exec-mode-git-ops.yaml)
+
+**Use case:** AI agent performing Git operations with managed credentials.
+
+- Read operations (clone, fetch, log) auto-approved
+- Write operations (push, tag) require approval + reason
+- Force pushes and pushes to main explicitly denied
+- Uses `GIT_ASKPASS` for transparent credential injection
+
 ## Key Concepts
+
+
+**Exec mode** runs CLI commands with credentials injected as environment variables.
+The agent specifies the command; Janee injects the secret and scrubs it from output:
+```yaml
+capabilities:
+  deploy:
+    service: fly-deploy
+    mode: exec
+    allowCommands: ["fly", "flyctl"]
+    env:
+      FLY_API_TOKEN: "{{credential}}"
+    ttl: "10m"
+```
 
 **Services** define your API connections — base URL + authentication.
 
@@ -80,6 +113,7 @@ rules:
 | `hmac-bybit` | Bybit exchange | Signed requests with API key + secret |
 | `hmac-okx` | OKX exchange | Signed requests with key + secret + passphrase |
 | `headers` | Custom header auth | APIs with non-standard auth headers |
+| `exec` | CLI tools | AWS CLI, Docker, Git, Fly.io, kubectl |
 | `service-account` | Google Cloud | Service account JSON credentials |
 
 ## Security Notes
