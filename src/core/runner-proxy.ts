@@ -1,6 +1,6 @@
 /**
  * Runner proxy -- MCP client that forwards tool calls to a remote Authority.
- * Uses raw HTTP + SSE parsing (same pattern as OpenSeed creature clients).
+ * Uses raw HTTP + SSE parsing to forward MCP tool calls.
  */
 
 let authoritySessionId: string | null = null;

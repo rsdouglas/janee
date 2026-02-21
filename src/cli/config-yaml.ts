@@ -78,7 +78,7 @@ export interface JaneeYAMLConfig {
  * Get config directory path (dynamically computed for testability)
  */
 export function getConfigDir(): string {
-  return path.join(os.homedir(), '.janee');
+  return process.env.JANEE_HOME || path.join(os.homedir(), '.janee');
 }
 
 /**
