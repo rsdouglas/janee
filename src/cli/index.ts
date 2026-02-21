@@ -16,6 +16,7 @@ import { sessionsCommand } from './commands/sessions';
 import { revokeCommand } from './commands/revoke';
 import { searchCommand } from './commands/search';
 import { statusCommand } from './commands/status';
+import { authorityCommand } from './commands/authority';
 import {
   capabilityListCommand,
   capabilityAddCommand,
@@ -81,7 +82,21 @@ program
   .option('-t, --transport <type>', 'Transport type (stdio|http)', 'stdio')
   .option('-p, --port <number>', 'Port for network transport (default: 9100)', '9100')
   .option('--host <host>', 'Host to bind to (default: localhost)', 'localhost')
+  .option('--authority <url>', 'Authority URL for runner mode (e.g., https://janee.example.com)')
+  .option('--runner-key <key>', 'Runner shared key for authority mode (or JANEE_RUNNER_KEY)')
+  .option('--runner-id <id>', 'Runner identity (or JANEE_RUNNER_ID)', 'local-runner')
+  .option('--runner-env <env>', 'Runner environment label (or JANEE_RUNNER_ENV)', 'dev')
+  .option('--runner-host-label <label>', 'Runner host label (or JANEE_RUNNER_HOST)')
   .action(serveCommand);
+
+
+program
+  .command('authority')
+  .description('Start Janee authority server (runner control plane API)')
+  .option('-p, --port <number>', 'Port for authority server (default: 9120)', '9120')
+  .option('--host <host>', 'Host to bind to (default: 127.0.0.1)', '127.0.0.1')
+  .option('--runner-key <key>', 'Shared runner API key (or JANEE_RUNNER_KEY)')
+  .action(authorityCommand);
 
 program
   .command('list')

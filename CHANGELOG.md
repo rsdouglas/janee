@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-02-18
+
+### Added
+
+- **Runner/Authority architecture** — Runner mode (`--authority`) proxies non-exec MCP calls to a host Authority and handles `janee_exec` locally inside containers.
+- **Integrated authority endpoints** in `startMCPServerHTTP` for single-process Authority + MCP serving.
+- `buildAuthorityHooks` factory for reusable exec authorization logic.
+
+### Changed
+
+- **Breaking:** `janee_exec` hidden in HTTP Authority mode (use Runner mode for containerized agents).
+- Removed `creatureId` / `--creature-id` — Janee is agent-framework agnostic.
+
+### Security
+
+- `timingSafeEqual` for runner key comparison.
+- Scrub hit counting order fixed (count before scrubbing).
+
 ## [0.10.0] - 2026-02-20
 
 ### Added

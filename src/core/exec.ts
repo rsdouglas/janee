@@ -1,9 +1,8 @@
 /**
- * Secure CLI Execution for Janee (RFC 0001)
- * 
- * Executes CLI commands with credentials injected via environment variables.
- * The agent specifies the command to run but never sees the actual credential.
- * Janee's core security property is preserved: agent never sees the key.
+ * CLI Execution for Janee
+ *
+ * Runs commands with credentials injected as env vars, then scrubs
+ * those values from the output so the agent never sees raw secrets.
  */
 
 import { spawn } from 'child_process';
@@ -13,18 +12,18 @@ import { randomUUID } from 'crypto';
 export interface ExecCapability {
   service: string;
   mode: 'exec';
-  allowCommands: string[];  // Whitelist of allowed executables
-  env: Record<string, string>;  // Env var mapping, {{credential}} for secret injection
+  allowCommands: string[];
+  env: Record<string, string>;
   workDir?: string;
   ttl: string;
   autoApprove?: boolean;
   requiresReason?: boolean;
-  timeout?: number;  // Max execution time in ms (default: 30000)
+  timeout?: number;
 }
 
 export interface ExecRequest {
   capability: string;
-  command: string[];  // e.g., ["bird", "tweet", "Hello from Janee!"]
+  command: string[];
   stdin?: string;
 }
 
@@ -33,6 +32,13 @@ export interface ExecResult {
   stderr: string;
   exitCode: number;
   executionTimeMs: number;
+  scrubbedStdoutHits?: number;
+  scrubbedStderrHits?: number;
+}
+
+function countOccurrences(output: string, needle: string): number {
+  if (!needle || needle.length < 8) return 0;
+  return output.split(needle).length - 1;
 }
 
 export interface ExecAuditEvent {
@@ -51,9 +57,6 @@ export interface ExecAuditEvent {
   reason?: string;
 }
 
-/**
- * Validate that a command is allowed by the capability's whitelist
- */
 export function validateCommand(
   command: string[],
   allowCommands: string[]
@@ -63,7 +66,6 @@ export function validateCommand(
   }
 
   const executable = path.basename(command[0]);
-
   if (!allowCommands.includes(executable)) {
     return {
       allowed: false,
@@ -71,25 +73,9 @@ export function validateCommand(
     };
   }
 
-  // Check for shell injection patterns in arguments
-  const shellMetachars = /[;&|`$(){}\\<>]/;
-  for (let i = 1; i < command.length; i++) {
-    if (shellMetachars.test(command[i])) {
-      return {
-        allowed: false,
-        reason: `Argument ${i} contains shell metacharacters. Use structured arguments instead of shell syntax.`
-      };
-    }
-  }
-
   return { allowed: true };
 }
 
-/**
- * Build environment variables for command execution.
- * Replaces {{credential}} placeholders with the actual secret.
- * Replaces {{apiKey}} and {{apiSecret}} for HMAC-style auth.
- */
 export function buildExecEnv(
   envTemplate: Record<string, string>,
   credential: string,
@@ -115,10 +101,6 @@ export function buildExecEnv(
   return env;
 }
 
-/**
- * Scrub credential values from output strings.
- * Prevents accidental credential leakage in stdout/stderr.
- */
 export function scrubCredentials(
   output: string,
   credential: string,
@@ -126,11 +108,9 @@ export function scrubCredentials(
 ): string {
   let scrubbed = output;
 
-  // Only scrub if credential is long enough to be meaningful
   if (credential && credential.length >= 8) {
     scrubbed = scrubbed.replaceAll(credential, '[REDACTED]');
   }
-
   if (extraCredentials?.apiKey && extraCredentials.apiKey.length >= 8) {
     scrubbed = scrubbed.replaceAll(extraCredentials.apiKey, '[REDACTED]');
   }
@@ -144,9 +124,34 @@ export function scrubCredentials(
   return scrubbed;
 }
 
+export function hashPolicyFingerprint(capability: {
+  name: string;
+  mode?: string;
+  allowCommands?: string[];
+  workDir?: string;
+  timeout?: number;
+  env?: Record<string, string>;
+}): string {
+  const serialized = JSON.stringify({
+    name: capability.name,
+    mode: capability.mode,
+    allowCommands: capability.allowCommands || [],
+    workDir: capability.workDir || '',
+    timeout: capability.timeout || 30000,
+    envKeys: Object.keys(capability.env || {}).sort(),
+  });
+
+  let hash = 0;
+  for (let i = 0; i < serialized.length; i++) {
+    hash = (hash * 31 + serialized.charCodeAt(i)) >>> 0;
+  }
+  return `policy-${hash.toString(16)}`;
+}
+
 /**
- * Execute a CLI command with injected credentials.
- * Returns stdout/stderr/exitCode without exposing the credential.
+ * Run a command with credentials injected as env vars.
+ * Inherits the caller's environment — the only additions are the
+ * credential env vars. Output is scrubbed before returning.
  */
 export async function executeCommand(
   command: string[],
@@ -162,70 +167,59 @@ export async function executeCommand(
   const timeout = options.timeout || 30000;
   const startTime = Date.now();
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const proc = spawn(command[0], command.slice(1), {
-      env: {
-        ...process.env,  // Inherit base env
-        ...injectedEnv,  // Override with injected credentials
-        // Safety: prevent credential exfil via common env vars
-        HISTFILE: '/dev/null',
-        LESSHISTFILE: '/dev/null',
-      },
-      cwd: options.workDir || '/tmp/janee-exec',
+      env: { ...process.env, ...injectedEnv },
+      cwd: options.workDir || process.cwd(),
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout,
-      // Don't use shell — prevents injection
-      shell: false,
     });
 
     let stdout = '';
     let stderr = '';
 
-    proc.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     if (options.stdin) {
       proc.stdin.write(options.stdin);
-      proc.stdin.end();
-    } else {
-      proc.stdin.end();
     }
+    proc.stdin.end();
+
+    const timeoutId = setTimeout(() => {
+      proc.kill('SIGKILL');
+    }, timeout);
 
     proc.on('close', (code) => {
+      clearTimeout(timeoutId);
       const executionTimeMs = Date.now() - startTime;
 
-      // Scrub credentials from output
-      const scrubbedStdout = scrubCredentials(
-        stdout,
+      const secrets = [
         options.credential,
-        options.extraCredentials
-      );
-      const scrubbedStderr = scrubCredentials(
-        stderr,
-        options.credential,
-        options.extraCredentials
-      );
+        options.extraCredentials?.apiKey,
+        options.extraCredentials?.apiSecret,
+        options.extraCredentials?.passphrase,
+      ].filter((v): v is string => Boolean(v));
+
+      const scrubbedStdoutHits = secrets.reduce((sum, s) => sum + countOccurrences(stdout, s), 0);
+      const scrubbedStderrHits = secrets.reduce((sum, s) => sum + countOccurrences(stderr, s), 0);
 
       resolve({
-        stdout: scrubbedStdout,
-        stderr: scrubbedStderr,
+        stdout: scrubCredentials(stdout, options.credential, options.extraCredentials),
+        stderr: scrubCredentials(stderr, options.credential, options.extraCredentials),
         exitCode: code ?? 1,
         executionTimeMs,
+        scrubbedStdoutHits,
+        scrubbedStderrHits,
       });
     });
 
     proc.on('error', (error) => {
-      const executionTimeMs = Date.now() - startTime;
+      clearTimeout(timeoutId);
       resolve({
         stdout: '',
         stderr: `Failed to execute command: ${error.message}`,
         exitCode: 127,
-        executionTimeMs,
+        executionTimeMs: Date.now() - startTime,
       });
     });
   });

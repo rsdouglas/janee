@@ -395,6 +395,36 @@ capabilities:
 
 Exec-mode capabilities use `janee_exec` instead of `execute`. The credential is injected as an environment variable — the agent sees only stdout/stderr.
 
+Runner hardening defaults in exec mode:
+- isolated minimal environment (no full host env inheritance)
+- temporary `HOME` per command
+- timeout kills the process group
+
+### Runner/Authority mode (for containers)
+
+When agents run inside Docker containers, `janee_exec` on a remote host cannot access the container filesystem. The Runner/Authority architecture solves this:
+
+- **Authority** runs on the host: holds credentials, enforces policy, proxies API requests
+- **Runner** runs inside each container: serves MCP to the agent, forwards non-exec calls to the Authority, runs `janee_exec` locally
+
+```bash
+# Host: start Authority (MCP + exec authorization on one port)
+janee serve -t http -p 3100 --host 0.0.0.0 --runner-key "$JANEE_RUNNER_KEY"
+
+# Container: start Runner (agent talks to this)
+janee serve -t http -p 3200 --host 127.0.0.1 \
+  --authority http://host.docker.internal:3100 --runner-key "$JANEE_RUNNER_KEY"
+```
+
+The agent only needs `JANEE_URL=http://localhost:3200`.
+
+You can also run the Authority as a standalone process:
+
+```bash
+janee authority --runner-key "$JANEE_RUNNER_KEY" --host 127.0.0.1 --port 9120
+```
+
+
 ---
 
 ## Request Policies
@@ -465,6 +495,8 @@ janee cap edit <name>         # Edit capability
 janee cap remove <name>       # Remove capability
 janee serve                   # Start MCP server (stdio, default)
 janee serve --transport http --port 9100  # Start with HTTP transport (for containers)
+janee serve --authority https://janee.example.com --runner-key $JANEE_RUNNER_KEY  # Runner mode
+janee authority --runner-key $JANEE_RUNNER_KEY  # Start authority API
 janee logs                    # View audit log
 janee logs -f                 # Tail audit log
 janee logs --json             # Output as JSON

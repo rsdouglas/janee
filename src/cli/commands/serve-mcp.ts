@@ -8,6 +8,9 @@ import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCreden
 import { getInstallationToken, clearCachedInstallationToken, GitHubAppCredentials } from '../../core/github-app';
 import { URL } from 'url';
 import { buildExecEnv, executeCommand } from '../../core/exec.js';
+import { authorityAuthorizeExec, authorityCompleteExec, buildAuthorityHooks } from '../../core/authority.js';
+import { forwardToolCall, resetAuthoritySession } from '../../core/runner-proxy.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Load config and convert to MCP format
@@ -45,6 +48,11 @@ export interface ServeMCPOptions {
   transport?: 'stdio' | 'http';
   port?: string;
   host?: string;
+  authority?: string;
+  runnerKey?: string;
+  runnerId?: string;
+  runnerEnv?: string;
+  runnerHostLabel?: string;
 }
 
 export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<void> {
@@ -61,8 +69,10 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       process.exit(1);
     }
 
-    // Check for YAML config
-    if (!hasYAMLConfig()) {
+    const isRunnerMode = !!options.authority;
+
+    // In standalone mode, local config is required. In runner mode, it's optional.
+    if (!isRunnerMode && !hasYAMLConfig()) {
       console.error('❌ YAML config required for MCP mode');
       console.error('');
       console.error('Run: janee migrate');
@@ -70,34 +80,96 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       process.exit(1);
     }
 
-    const config = loadYAMLConfig();
+    const config = hasYAMLConfig() ? loadYAMLConfig() : { server: {}, services: {}, capabilities: {} };
     const sessionManager = new SessionManager();
     const auditLogger = new AuditLogger(getAuditDir(), {
-      logBodies: config.server?.logBodies ?? true
+      logBodies: (config as any).server?.logBodies ?? true
     });
 
-    // Load initial config
-    const { capabilities, services } = loadConfigForMCP();
+    // Load initial config (may be empty in runner mode)
+    const { capabilities, services } = hasYAMLConfig() ? loadConfigForMCP() : { capabilities: [] as Capability[], services: new Map<string, ServiceConfig>() };
 
     // Keep a mutable reference to services for the onExecute closure
     let currentServices = services;
+
+    const runnerName = options.runnerId || process.env.JANEE_RUNNER_ID || 'janee-runner';
+
+    // In HTTP standalone mode (no --authority), this is an Authority: hide janee_exec
+    // since commands would run on the host, not in the agent's context.
+    const isAuthorityHTTP = transport === 'http' && !isRunnerMode;
 
     const serverOptions: MCPServerOptions = {
       capabilities,
       services,
       sessionManager,
       auditLogger,
-      defaultAccess: config.server?.defaultAccess,
+      defaultAccess: (config as any).server?.defaultAccess,
+      hideExecTool: isAuthorityHTTP,
 
-      // RFC 0001: Secure CLI execution handler
+      // Runner proxy: forward non-exec tools to the Authority
+      ...(isRunnerMode ? {
+        onForwardToolCall: async (toolName: string, args: Record<string, unknown>) => {
+          return forwardToolCall(options.authority!, runnerName, toolName, args);
+        },
+      } : {}),
+
+      // RFC 0001 + runner/authority mode: secure CLI execution handler
       onExecCommand: async (session, capability, command, stdin) => {
-        // Get service config for credentials
+        const authorityUrl = options.authority;
+
+        // Authority-backed runner mode
+        if (authorityUrl) {
+          const runnerKey = options.runnerKey || process.env.JANEE_RUNNER_KEY;
+          if (!runnerKey) {
+            throw new Error('Authority mode requires runner key (--runner-key or JANEE_RUNNER_KEY)');
+          }
+
+          const grant = await authorityAuthorizeExec(authorityUrl, runnerKey, {
+            runner: {
+              runnerId: options.runnerId || process.env.JANEE_RUNNER_ID || 'local-runner',
+              environment: options.runnerEnv || process.env.JANEE_RUNNER_ENV || 'dev',
+              hostLabel: options.runnerHostLabel || process.env.JANEE_RUNNER_HOST,
+            },
+            agentId: session?.agentId,
+            capabilityId: capability.name,
+            command,
+            cwd: capability.workDir,
+            timeoutMs: capability.timeout,
+            requestId: randomUUID(),
+          });
+
+          const execResult = await executeCommand(command, grant.envInjections, {
+            workDir: grant.constraints.cwd || capability.workDir,
+            timeout: grant.effectiveTimeoutMs,
+            stdin,
+            credential: grant.scrubValues[0] || '',
+            extraCredentials: {
+              apiKey: grant.scrubValues[1],
+              apiSecret: grant.scrubValues[2],
+              passphrase: grant.scrubValues[3],
+            },
+          });
+
+          await authorityCompleteExec(authorityUrl, runnerKey, {
+            grantId: grant.grantId,
+            exitCode: execResult.exitCode,
+            startedAt: new Date(Date.now() - execResult.executionTimeMs).toISOString(),
+            durationMs: execResult.executionTimeMs,
+            stdoutBytes: Buffer.byteLength(execResult.stdout || '', 'utf8'),
+            stderrBytes: Buffer.byteLength(execResult.stderr || '', 'utf8'),
+            scrubbedStdoutHits: execResult.scrubbedStdoutHits || 0,
+            scrubbedStderrHits: execResult.scrubbedStderrHits || 0,
+          });
+
+          return execResult;
+        }
+
+        // Standalone mode
         const serviceConfig = currentServices.get(capability.service);
         if (!serviceConfig) {
           throw new Error(`Service not found: ${capability.service}`);
         }
 
-        // Determine credential from service auth
         let credential = '';
         let extraCredentials: { apiKey?: string; apiSecret?: string; passphrase?: string } | undefined;
 
@@ -122,14 +194,12 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
           credential = await getInstallationToken(capability.service, ghCreds);
         }
 
-        // Build environment with injected credentials
         const injectedEnv = buildExecEnv(
           capability.env || {},
           credential,
           extraCredentials
         );
 
-        // Execute command
         return executeCommand(command, injectedEnv, {
           workDir: capability.workDir,
           timeout: capability.timeout || 30000,
@@ -140,14 +210,20 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       },
 
       onReloadConfig: () => {
+        if (options.authority) {
+          // Runner mode: forward reload to Authority, then refresh our forwarded view
+          const runnerName = options.runnerId || process.env.JANEE_RUNNER_ID || 'janee-runner';
+          forwardToolCall(options.authority, runnerName, 'reload_config', {}).catch(() => {});
+          resetAuthoritySession();
+        }
         const result = loadConfigForMCP();
-        // Update our local reference for onExecute
         currentServices = result.services;
         return result;
       },
 
       onExecute: async (session, request) => {
-        // Get service config (use currentServices for hot-reload support)
+        // In runner mode, execute calls are forwarded by onForwardToolCall
+        // before reaching this handler. This is standalone-only.
         const serviceConfig = currentServices.get(request.service);
         if (!serviceConfig) {
           throw new Error(`Service not found: ${request.service}`);
@@ -276,7 +352,24 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
 
     // Start server with selected transport
     if (transport === 'http') {
-      await startMCPServerHTTP(serverOptions, { host, port });
+      const runnerKey = options.runnerKey || process.env.JANEE_RUNNER_KEY;
+      const isAuthority = runnerKey && !options.authority;
+
+      await startMCPServerHTTP(serverOptions, {
+        host,
+        port,
+        // When we have a runner key but no --authority, we ARE the authority
+        ...(isAuthority ? {
+          runnerKey,
+          authorityHooks: buildAuthorityHooks(
+            {
+              services: Object.fromEntries(currentServices),
+              capabilities: serverOptions.capabilities,
+            },
+            auditLogger,
+          ),
+        } : {}),
+      });
     } else {
       await startMCPServer(serverOptions);
     }

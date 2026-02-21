@@ -122,6 +122,15 @@ export interface MCPServerOptions {
   onReloadConfig?: () => ReloadResult;
   /** Persist ownership changes to config storage (called after grant/revoke) */
   onPersistOwnership?: (serviceName: string, ownership: CredentialOwnership) => void;
+  /**
+   * Runner proxy: when set, tool calls (except janee_exec) are forwarded
+   * to the Authority via this callback instead of handled locally.
+   * janee_exec is always handled locally by onExecCommand.
+   */
+  onForwardToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
+  /** When true, janee_exec is hidden from the tool list. Used in authority/HTTP mode
+   * where exec would run in the wrong context. */
+  hideExecTool?: boolean;
 }
 
 /**
@@ -154,7 +163,7 @@ export interface MCPServerResult {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): MCPServerResult {
-  const { sessionManager, auditLogger, defaultAccess, onExecute, onExecCommand, onReloadConfig, onPersistOwnership } = options;
+  const { sessionManager, auditLogger, defaultAccess, onExecute, onExecCommand, onReloadConfig, onPersistOwnership, onForwardToolCall } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -312,11 +321,9 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [listServicesTool, executeTool, manageCredentialTool];
-    // Add exec tool if handler is provided
-    if (onExecCommand) {
+    if (onExecCommand && !options.hideExecTool) {
       tools.push(execTool);
     }
-    // Only expose reload_config if a reload handler is provided
     if (onReloadConfig) {
       tools.push(reloadConfigTool);
     }
@@ -328,6 +335,13 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     const { name, arguments: args } = request.params;
 
     try {
+      // Runner proxy: forward non-exec tools to the Authority
+      if (onForwardToolCall && name !== 'janee_exec') {
+        const result = await onForwardToolCall(name, (args || {}) as Record<string, unknown>);
+        // Authority returns MCP result format -- pass through
+        return result as any;
+      }
+
       switch (name) {
         case 'list_services': {
           const listAgentId = resolveAgentFromRequest(extra, args);
@@ -491,7 +505,6 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
 
           const { capability: execCapName, command: rawExecCommand, stdin: execStdin, reason: execReason } = args as any;
 
-          // Validate required arguments
           if (!execCapName) {
             throw new Error('Missing required argument: capability');
           }
@@ -499,66 +512,70 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
             throw new Error('Missing required argument: command');
           }
 
-          // Normalize command to array — accept both string and array from MCP clients
           const execCommand: string[] = Array.isArray(rawExecCommand)
             ? rawExecCommand
             : typeof rawExecCommand === 'string'
               ? rawExecCommand.trim().split(/\s+/)
               : [];
 
-          // Find capability
-          const execCap = capabilities.find(c => c.name === execCapName);
-          if (!execCap) {
-            throw new Error(`Unknown capability: ${execCapName}`);
-          }
+          let execCap: Capability;
+          let execSession: any;
 
-          // Verify this is an exec-mode capability
-          if (execCap.mode !== 'exec') {
-            throw new Error(`Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`);
-          }
+          if (onForwardToolCall) {
+            // Runner mode: Authority handles validation and credential injection.
+            // Build a minimal capability stub so onExecCommand has the name.
+            execCap = { name: execCapName, service: '', ttl: '1h', mode: 'exec' } as Capability;
+            execSession = null;
+          } else {
+            // Standalone mode: validate locally
+            const foundCap = capabilities.find(c => c.name === execCapName);
+            if (!foundCap) {
+              throw new Error(`Unknown capability: ${execCapName}`);
+            }
+            execCap = foundCap;
 
-          // Check agent-scoped access
-          const execAgentId = resolveAgentFromRequest(extra, args);
-          const execSvc = services.get(execCap.service);
-          if (!canAccessCapability(execAgentId, execCap, execSvc, defaultAccess)) {
-            auditLogger.logDenied(
+            if (execCap.mode !== 'exec') {
+              throw new Error(`Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`);
+            }
+
+            const execAgentId = resolveAgentFromRequest(extra, args);
+            const execSvc = services.get(execCap.service);
+            if (!canAccessCapability(execAgentId, execCap, execSvc, defaultAccess)) {
+              auditLogger.logDenied(
+                execCap.service,
+                'EXEC',
+                execCommand.join(' '),
+                'Agent does not have access to this capability',
+                execReason
+              );
+              throw new Error(`Access denied: capability "${execCapName}" is not accessible to this agent`);
+            }
+
+            if (execCap.requiresReason && !execReason) {
+              throw new Error(`Capability "${execCapName}" requires a reason`);
+            }
+
+            const cmdValidation = validateCommand(execCommand, execCap.allowCommands || []);
+            if (!cmdValidation.allowed) {
+              auditLogger.logDenied(
+                execCap.service,
+                'EXEC',
+                execCommand.join(' '),
+                cmdValidation.reason || 'Command not allowed',
+                execReason
+              );
+              throw new Error(cmdValidation.reason || 'Command not allowed');
+            }
+
+            const execTtlSeconds = parseTTL(execCap.ttl);
+            execSession = sessionManager.createSession(
+              execCap.name,
               execCap.service,
-              'EXEC',
-              execCommand.join(' '),
-              'Agent does not have access to this capability',
-              execReason
+              execTtlSeconds,
+              { reason: execReason }
             );
-            throw new Error(`Access denied: capability "${execCapName}" is not accessible to this agent`);
           }
 
-          // Check if reason required
-          if (execCap.requiresReason && !execReason) {
-            throw new Error(`Capability "${execCapName}" requires a reason`);
-          }
-
-          // Validate command against whitelist
-          const cmdValidation = validateCommand(execCommand, execCap.allowCommands || []);
-          if (!cmdValidation.allowed) {
-            auditLogger.logDenied(
-              execCap.service,
-              'EXEC',
-              execCommand.join(' '),
-              cmdValidation.reason || 'Command not allowed',
-              execReason
-            );
-            throw new Error(cmdValidation.reason || 'Command not allowed');
-          }
-
-          // Get or create session
-          const execTtlSeconds = parseTTL(execCap.ttl);
-          const execSession = sessionManager.createSession(
-            execCap.name,
-            execCap.service,
-            execTtlSeconds,
-            { reason: execReason }
-          );
-
-          // Execute command
           const execResult = await onExecCommand(execSession, execCap, execCommand, execStdin);
 
           // Log to audit
@@ -581,6 +598,7 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
                 stdout: execResult.stdout,
                 stderr: execResult.stderr,
                 executionTimeMs: execResult.executionTimeMs,
+                executionTarget: 'runner',
               }, null, 2)
             }]
           };
@@ -787,7 +805,7 @@ export async function startMCPServer(serverOptions: MCPServerOptions): Promise<v
  */
 export async function startMCPServerHTTP(
   serverOptions: MCPServerOptions,
-  httpOptions: { host: string; port: number }
+  httpOptions: { host: string; port: number; runnerKey?: string; authorityHooks?: import('./authority.js').AuthorityExecHooks }
 ): Promise<void> {
   const app = express();
   app.use(express.json());
@@ -796,6 +814,54 @@ export async function startMCPServerHTTP(
     transport: StreamableHTTPServerTransport;
     server: Server;
   }>();
+
+  // Authority REST endpoints -- active when runnerKey is provided
+  if (httpOptions.runnerKey && httpOptions.authorityHooks) {
+    const { timingSafeEqual } = await import('crypto');
+    const runnerKey = httpOptions.runnerKey;
+    const hooks = httpOptions.authorityHooks;
+
+    const authMiddleware: express.RequestHandler = (req, res, next) => {
+      const provided = req.header('x-janee-runner-key');
+      if (!provided || provided.length !== runnerKey.length ||
+          !timingSafeEqual(Buffer.from(provided), Buffer.from(runnerKey))) {
+        res.status(401).json({ error: 'Unauthorized runner request' });
+        return;
+      }
+      next();
+    };
+
+    app.get('/v1/health', (_req, res) => {
+      res.status(200).json({ ok: true, mode: 'authority' });
+    });
+
+    app.post('/v1/exec/authorize', authMiddleware, async (req, res) => {
+      try {
+        const body = req.body;
+        if (!body?.runner?.runnerId || !Array.isArray(body?.command) || body.command.length === 0 || !body.capabilityId) {
+          res.status(400).json({ error: 'Invalid authorize request' });
+          return;
+        }
+        const response = await hooks.authorizeExec(body);
+        res.status(200).json(response);
+      } catch (error) {
+        res.status(403).json({ error: error instanceof Error ? error.message : 'Authorization failed' });
+      }
+    });
+
+    app.post('/v1/exec/complete', authMiddleware, async (req, res) => {
+      try {
+        if (!req.body?.grantId) {
+          res.status(400).json({ error: 'grantId is required' });
+          return;
+        }
+        await hooks.completeExec(req.body);
+        res.status(200).json({ ok: true });
+      } catch (error) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'completion failed' });
+      }
+    });
+  }
 
   app.all('/mcp', async (req, res) => {
     try {

