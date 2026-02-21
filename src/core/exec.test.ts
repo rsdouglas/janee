@@ -287,7 +287,7 @@ describe('executeCommand', () => {
       {},
       { credential: '' }
     );
-    expect(result.stdout.trim()).toContain('/tmp/janee-home-');
+    expect(result.stdout.trim()).toContain('janee-home-');
   });
 
   it('does not force-disable git hooks via env config', async () => {
@@ -328,6 +328,7 @@ describe('executeCommand', () => {
       {},
       { credential: '', workDir: '/tmp' }
     );
-    expect(result.stdout.trim()).toBe('/tmp');
+    // macOS resolves /tmp -> /private/tmp via symlink
+    expect(result.stdout.trim()).toMatch(/^\/?(?:private\/)?tmp$/);
   });
 });

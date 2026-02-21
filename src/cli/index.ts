@@ -87,7 +87,6 @@ program
   .option('--runner-id <id>', 'Runner identity (or JANEE_RUNNER_ID)', 'local-runner')
   .option('--runner-env <env>', 'Runner environment label (or JANEE_RUNNER_ENV)', 'dev')
   .option('--runner-host-label <label>', 'Runner host label (or JANEE_RUNNER_HOST)')
-  .option('--creature-id <id>', 'Optional creature binding metadata (or JANEE_CREATURE_ID)')
   .action(serveCommand);
 
 

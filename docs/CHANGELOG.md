@@ -2,17 +2,30 @@
 
 All notable changes to Janee will be documented in this file.
 
-## [Unreleased]
+## [0.11.0] - 2026-02-18
 
 ### Added
 
-- Authority mode (`janee authority`) with runner-authenticated exec control plane endpoints: `POST /v1/exec/authorize`, `POST /v1/exec/complete`, and `GET /v1/health`.
-- Runner/authority execution path for `janee serve --authority <url>` using short-lived execution grants and completion callbacks.
+- **Runner/Authority architecture** — Janee can now run in two modes: Authority (central credential store and policy enforcement on the host) and Runner (local MCP proxy inside containers that handles exec locally).
+- **Runner proxy mode** — `janee serve --authority <url> --runner-key <key>` starts a Runner that forwards `list_services`, `execute`, `manage_credential`, and `reload_config` to the Authority via MCP, while intercepting `janee_exec` for local execution inside the container.
+- **Integrated authority endpoints** — `startMCPServerHTTP` can now serve both MCP and authority REST endpoints (`/v1/exec/authorize`, `/v1/exec/complete`, `/v1/health`) from a single process when `runnerKey` is provided.
+- **`buildAuthorityHooks`** — Reusable factory function for creating authority exec hooks from config, used by both standalone `janee authority` and integrated HTTP serve.
+- Runner proxy starts without local config in `--authority` mode, fetching capabilities from the Authority.
 
 ### Changed
 
-- Exec engine hardening: isolated minimal environment (no `process.env` inheritance), temporary HOME, process-group timeout kill, and scrub hit accounting.
-- `janee_exec` responses now include explicit execution locus metadata (`executionTarget`, `executionCwd`) for clearer runtime semantics.
+- **Breaking:** `janee_exec` is hidden from the MCP tool list when serving over HTTP without `--authority` (Authority mode). Exec over HTTP ran commands on the host in the wrong filesystem context. Use Runner mode for containerized agents, or stdio mode for local agents.
+- Removed `creatureId` from `RunnerIdentity` and `--creature-id` CLI flag — Janee is agent-framework agnostic.
+
+### Security
+
+- Runner key comparison uses `timingSafeEqual` to prevent timing attacks.
+- Scrub hit counting now happens before credential scrubbing (was previously always 0).
+- Process group kill (`process.kill(-pid)`) has ESRCH race condition documented and handled.
+
+### Fixed
+
+- macOS test compatibility for `os.tmpdir()` symlink resolution (`/var/folders/...` vs `/tmp`).
 
 ## [0.10.0] - 2026-02-20
 

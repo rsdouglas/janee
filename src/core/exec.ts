@@ -251,6 +251,8 @@ export async function executeCommand(
 
     const timeoutId = setTimeout(() => {
       try {
+        // Negative PID kills the entire process group (detached).
+        // May throw ESRCH if the group already exited -- fall back to direct kill.
         process.kill(-proc.pid!, 'SIGKILL');
       } catch {
         proc.kill('SIGKILL');
@@ -261,7 +263,17 @@ export async function executeCommand(
       clearTimeout(timeoutId);
       const executionTimeMs = Date.now() - startTime;
 
-      // Scrub credentials from output
+      const scrubValues = [
+        options.credential,
+        options.extraCredentials?.apiKey,
+        options.extraCredentials?.apiSecret,
+        options.extraCredentials?.passphrase,
+      ].filter((value): value is string => Boolean(value));
+
+      // Count before scrubbing -- after scrub the secrets are gone
+      const scrubbedStdoutHits = scrubValues.reduce((sum, secret) => sum + countOccurrences(stdout, secret), 0);
+      const scrubbedStderrHits = scrubValues.reduce((sum, secret) => sum + countOccurrences(stderr, secret), 0);
+
       const scrubbedStdout = scrubCredentials(
         stdout,
         options.credential,
@@ -272,16 +284,6 @@ export async function executeCommand(
         options.credential,
         options.extraCredentials
       );
-
-      const scrubValues = [
-        options.credential,
-        options.extraCredentials?.apiKey,
-        options.extraCredentials?.apiSecret,
-        options.extraCredentials?.passphrase,
-      ].filter((value): value is string => Boolean(value));
-
-      const scrubbedStdoutHits = scrubValues.reduce((sum, secret) => sum + countOccurrences(stdout, secret), 0);
-      const scrubbedStderrHits = scrubValues.reduce((sum, secret) => sum + countOccurrences(stderr, secret), 0);
 
       fs.rmSync(tempHome, { recursive: true, force: true });
 
