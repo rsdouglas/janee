@@ -581,6 +581,8 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
                 stdout: execResult.stdout,
                 stderr: execResult.stderr,
                 executionTimeMs: execResult.executionTimeMs,
+                executionTarget: 'runner',
+                executionCwd: execCap.workDir || '/tmp/janee-exec',
               }, null, 2)
             }]
           };

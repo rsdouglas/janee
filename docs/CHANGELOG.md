@@ -2,6 +2,18 @@
 
 All notable changes to Janee will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Authority mode (`janee authority`) with runner-authenticated exec control plane endpoints: `POST /v1/exec/authorize`, `POST /v1/exec/complete`, and `GET /v1/health`.
+- Runner/authority execution path for `janee serve --authority <url>` using short-lived execution grants and completion callbacks.
+
+### Changed
+
+- Exec engine hardening: isolated minimal environment (no `process.env` inheritance), temporary HOME, process-group timeout kill, and scrub hit accounting.
+- `janee_exec` responses now include explicit execution locus metadata (`executionTarget`, `executionCwd`) for clearer runtime semantics.
+
 ## [0.10.0] - 2026-02-20
 
 ### Added

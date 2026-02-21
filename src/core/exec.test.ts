@@ -8,6 +8,7 @@ import {
   buildExecEnv,
   scrubCredentials,
   executeCommand,
+  hashPolicyFingerprint,
 } from './exec';
 import fs from 'fs';
 
@@ -156,6 +157,31 @@ describe('scrubCredentials', () => {
   });
 });
 
+
+describe('hashPolicyFingerprint', () => {
+  it('is stable for the same policy inputs', () => {
+    const first = hashPolicyFingerprint({
+      name: 'cap',
+      mode: 'exec',
+      allowCommands: ['git', 'gh'],
+      workDir: '/creature',
+      timeout: 30000,
+      env: { GH_TOKEN: '{{credential}}' },
+    });
+    const second = hashPolicyFingerprint({
+      name: 'cap',
+      mode: 'exec',
+      allowCommands: ['git', 'gh'],
+      workDir: '/creature',
+      timeout: 30000,
+      env: { GH_TOKEN: '{{credential}}' },
+    });
+
+    expect(first).toBe(second);
+    expect(first).toContain('policy-');
+  });
+});
+
 describe('executeCommand', () => {
   beforeEach(() => {
     // Ensure working directory exists
@@ -253,6 +279,48 @@ describe('executeCommand', () => {
     // Should be killed before completing
     expect(result.exitCode).not.toBe(0);
   }, 5000);
+
+
+  it('uses isolated HOME for execution', async () => {
+    const result = await executeCommand(
+      ['sh', '-c', 'echo "$HOME"'],
+      {},
+      { credential: '' }
+    );
+    expect(result.stdout.trim()).toContain('/tmp/janee-home-');
+  });
+
+  it('does not force-disable git hooks via env config', async () => {
+    const result = await executeCommand(
+      ['sh', '-c', 'echo "${GIT_CONFIG_KEY_0:-unset}"'],
+      {},
+      { credential: '' }
+    );
+    expect(result.stdout.trim()).toBe('unset');
+  });
+
+  it('does not inherit arbitrary host env variables', async () => {
+    process.env.JANEE_TEST_SHOULD_NOT_LEAK = 'secret-leak-value';
+    const result = await executeCommand(
+      ['sh', '-c', 'echo "${JANEE_TEST_SHOULD_NOT_LEAK:-missing}"'],
+      {},
+      { credential: '' }
+    );
+    delete process.env.JANEE_TEST_SHOULD_NOT_LEAK;
+    expect(result.stdout.trim()).toBe('missing');
+  });
+
+  it('reports scrub hit counts', async () => {
+    const secret = 'count-secret-123456';
+    const result = await executeCommand(
+      ['sh', '-c', `echo "${secret} ${secret}" && echo "${secret}" >&2`],
+      {},
+      { credential: secret }
+    );
+
+    expect(result.scrubbedStdoutHits).toBe(2);
+    expect(result.scrubbedStderrHits).toBe(1);
+  });
 
   it('uses specified working directory', async () => {
     const result = await executeCommand(

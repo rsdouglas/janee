@@ -8,6 +8,8 @@ import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCreden
 import { getInstallationToken, clearCachedInstallationToken, GitHubAppCredentials } from '../../core/github-app';
 import { URL } from 'url';
 import { buildExecEnv, executeCommand } from '../../core/exec.js';
+import { authorityAuthorizeExec, authorityCompleteExec } from '../../core/authority.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Load config and convert to MCP format
@@ -45,6 +47,12 @@ export interface ServeMCPOptions {
   transport?: 'stdio' | 'http';
   port?: string;
   host?: string;
+  authority?: string;
+  runnerKey?: string;
+  runnerId?: string;
+  runnerEnv?: string;
+  runnerHostLabel?: string;
+  creatureId?: string;
 }
 
 export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<void> {
@@ -89,15 +97,64 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       auditLogger,
       defaultAccess: config.server?.defaultAccess,
 
-      // RFC 0001: Secure CLI execution handler
+      // RFC 0001 + runner/authority mode: secure CLI execution handler
       onExecCommand: async (session, capability, command, stdin) => {
-        // Get service config for credentials
+        const authorityUrl = options.authority;
+
+        // Authority-backed runner mode
+        if (authorityUrl) {
+          const runnerKey = options.runnerKey || process.env.JANEE_RUNNER_KEY;
+          if (!runnerKey) {
+            throw new Error('Authority mode requires runner key (--runner-key or JANEE_RUNNER_KEY)');
+          }
+
+          const grant = await authorityAuthorizeExec(authorityUrl, runnerKey, {
+            runner: {
+              runnerId: options.runnerId || process.env.JANEE_RUNNER_ID || 'local-runner',
+              environment: options.runnerEnv || process.env.JANEE_RUNNER_ENV || 'dev',
+              hostLabel: options.runnerHostLabel || process.env.JANEE_RUNNER_HOST,
+              creatureId: options.creatureId || process.env.JANEE_CREATURE_ID,
+            },
+            agentId: session?.agentId,
+            capabilityId: capability.name,
+            command,
+            cwd: capability.workDir,
+            timeoutMs: capability.timeout,
+            requestId: randomUUID(),
+          });
+
+          const execResult = await executeCommand(command, grant.envInjections, {
+            workDir: grant.constraints.cwd || capability.workDir,
+            timeout: grant.effectiveTimeoutMs,
+            stdin,
+            credential: grant.scrubValues[0] || '',
+            extraCredentials: {
+              apiKey: grant.scrubValues[1],
+              apiSecret: grant.scrubValues[2],
+              passphrase: grant.scrubValues[3],
+            },
+          });
+
+          await authorityCompleteExec(authorityUrl, runnerKey, {
+            grantId: grant.grantId,
+            exitCode: execResult.exitCode,
+            startedAt: new Date(Date.now() - execResult.executionTimeMs).toISOString(),
+            durationMs: execResult.executionTimeMs,
+            stdoutBytes: Buffer.byteLength(execResult.stdout || '', 'utf8'),
+            stderrBytes: Buffer.byteLength(execResult.stderr || '', 'utf8'),
+            scrubbedStdoutHits: execResult.scrubbedStdoutHits || 0,
+            scrubbedStderrHits: execResult.scrubbedStderrHits || 0,
+          });
+
+          return execResult;
+        }
+
+        // Standalone mode
         const serviceConfig = currentServices.get(capability.service);
         if (!serviceConfig) {
           throw new Error(`Service not found: ${capability.service}`);
         }
 
-        // Determine credential from service auth
         let credential = '';
         let extraCredentials: { apiKey?: string; apiSecret?: string; passphrase?: string } | undefined;
 
@@ -122,14 +179,12 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
           credential = await getInstallationToken(capability.service, ghCreds);
         }
 
-        // Build environment with injected credentials
         const injectedEnv = buildExecEnv(
           capability.env || {},
           credential,
           extraCredentials
         );
 
-        // Execute command
         return executeCommand(command, injectedEnv, {
           workDir: capability.workDir,
           timeout: capability.timeout || 30000,

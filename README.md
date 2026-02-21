@@ -395,6 +395,22 @@ capabilities:
 
 Exec-mode capabilities use `janee_exec` instead of `execute`. The credential is injected as an environment variable — the agent sees only stdout/stderr.
 
+Runner hardening defaults in exec mode:
+- isolated minimal environment (no full host env inheritance)
+- temporary `HOME` per command
+- timeout kills the process group
+
+You can also run Janee in authority-backed runner mode:
+
+```bash
+# runner side (agent-facing MCP)
+janee serve --authority https://janee.example.com --runner-key "$JANEE_RUNNER_KEY"
+
+# authority side (control plane API)
+janee authority --runner-key "$JANEE_RUNNER_KEY" --host 127.0.0.1 --port 9120
+```
+
+
 ---
 
 ## Request Policies
@@ -465,6 +481,8 @@ janee cap edit <name>         # Edit capability
 janee cap remove <name>       # Remove capability
 janee serve                   # Start MCP server (stdio, default)
 janee serve --transport http --port 9100  # Start with HTTP transport (for containers)
+janee serve --authority https://janee.example.com --runner-key $JANEE_RUNNER_KEY  # Runner mode
+janee authority --runner-key $JANEE_RUNNER_KEY  # Start authority API
 janee logs                    # View audit log
 janee logs -f                 # Tail audit log
 janee logs --json             # Output as JSON
