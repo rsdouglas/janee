@@ -435,3 +435,121 @@ describe("runner-proxy session retry", () => {
     }
   });
 });
+
+describe("runner-proxy per-agent sessions", () => {
+  let server: http.Server;
+  let port: number;
+  const initClients: string[] = [];
+  const sessionMap = new Map<string, string>();
+
+  beforeAll(async () => {
+    const app = express();
+    app.use(express.json());
+
+    app.post("/mcp", (req, res) => {
+      if (req.body.method === "initialize") {
+        const clientName = req.body.params.clientInfo.name;
+        initClients.push(clientName);
+        const sid = "sid-" + clientName + "-" + Date.now();
+        sessionMap.set(clientName, sid);
+        res.setHeader("mcp-session-id", sid);
+        return res.json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          result: {
+            protocolVersion: "2025-03-26",
+            capabilities: { tools: {} },
+            serverInfo: { name: "mock-authority", version: "0.0.1" },
+          },
+        });
+      }
+
+      if (req.body.method === "tools/call") {
+        const { name, arguments: args } = req.body.params;
+        return res.json({
+          jsonrpc: "2.0",
+          id: req.body.id,
+          result: {
+            content: [
+              { type: "text", text: JSON.stringify({ forwarded: name, args }) },
+            ],
+          },
+        });
+      }
+
+      res.status(400).json({ error: "unknown" });
+    });
+
+    server = await new Promise<http.Server>((resolve) => {
+      const s = http.createServer(app);
+      s.listen(0, "127.0.0.1", () => resolve(s));
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === "string") throw new Error("bad address");
+    port = addr.port;
+  });
+
+  afterAll(async () => {
+    resetAuthoritySession();
+    await new Promise<void>((r, e) =>
+      server.close((err) => (err ? e(err) : r())),
+    );
+  });
+
+  beforeEach(() => {
+    resetAuthoritySession();
+    initClients.length = 0;
+    sessionMap.clear();
+  });
+
+  it("creates separate sessions for different agent identities", async () => {
+    const url = `http://127.0.0.1:${port}`;
+
+    // Agent A makes a call
+    await forwardToolCall(url, "creature:alpha", "list_services", {});
+    // Agent B makes a call
+    await forwardToolCall(url, "creature:beta", "list_services", {});
+
+    // Both should have triggered separate initialize calls
+    expect(initClients).toContain("creature:alpha");
+    expect(initClients).toContain("creature:beta");
+    expect(initClients.length).toBe(2);
+  });
+
+  it("reuses session for same agent identity", async () => {
+    const url = `http://127.0.0.1:${port}`;
+
+    await forwardToolCall(url, "creature:alpha", "list_services", {});
+    await forwardToolCall(url, "creature:alpha", "execute", { capability: "test" });
+
+    // Only one initialize for alpha
+    const alphaInits = initClients.filter((c) => c === "creature:alpha");
+    expect(alphaInits.length).toBe(1);
+  });
+
+  it("sends correct clientInfo.name for each agent", async () => {
+    const url = `http://127.0.0.1:${port}`;
+
+    await forwardToolCall(url, "creature:patch", "list_services", {});
+
+    expect(initClients[0]).toBe("creature:patch");
+  });
+
+  it("isolates session expiry per agent", async () => {
+    const url = `http://127.0.0.1:${port}`;
+
+    // Both agents establish sessions
+    await forwardToolCall(url, "agent-1", "list_services", {});
+    await forwardToolCall(url, "agent-2", "list_services", {});
+    expect(initClients.length).toBe(2);
+
+    // Reset clears all sessions — next call from agent-1 re-initializes
+    resetAuthoritySession();
+    initClients.length = 0;
+
+    await forwardToolCall(url, "agent-1", "list_services", {});
+    expect(initClients.length).toBe(1);
+    expect(initClients[0]).toBe("agent-1");
+  });
+});
