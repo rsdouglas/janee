@@ -1,0 +1,33 @@
+---
+title: Janee
+description: Secure secrets proxy for AI agents
+template: splash
+hero:
+  title: Secure secrets for AI agents
+  tagline: Janee proxies API requests for AI agents, injecting credentials server-side. Your agents get the tools they need without ever seeing a single API key.
+  actions:
+    - text: Get Started
+      link: /getting-started/quickstart/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/rsdouglas/janee
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Zero-knowledge agents" icon="approve-check">
+    Credentials are injected into outbound HTTP requests server-side. Agents never see raw secrets — even if prompt-injected.
+  </Card>
+  <Card title="Request policies" icon="setting">
+    Control which endpoints, methods, and headers each capability can use. Defense-in-depth for every API call.
+  </Card>
+  <Card title="Works with any MCP client" icon="puzzle">
+    Claude Desktop, Cursor, Windsurf, or custom agents — if it speaks MCP, it works with Janee.
+  </Card>
+  <Card title="Runner / Authority" icon="laptop">
+    Split trust boundaries for container deployments. Agents in containers, secrets on your machine.
+  </Card>
+</CardGrid>
