@@ -1,41 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CLI — Janee Docs</title>
-  <meta name="description" content="Janee documentation — CLI">
-  <link rel="canonical" href="https://janee.io/docs/cli">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLI Reference — Janee Docs</title>
+  <meta name="description" content="Complete reference for all Janee CLI commands — add, serve, sessions, revoke, and more.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root{--bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased}
+    *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6}
     .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
     nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
     nav .container{display:flex;align-items:center;justify-content:space-between}
-    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
-    .nav-links{display:flex;gap:1.5rem;list-style:none}
-    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
-    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}.nav-links{display:flex;gap:1.5rem;list-style:none}.nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}.nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
     .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
-    .sidebar{position:sticky;top:80px;align-self:start}
-    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
-    .sidebar h3:first-child{margin-top:0}
-    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
-    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
-    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
-    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .sidebar{position:sticky;top:80px;align-self:start}.sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}.sidebar h3:first-child{margin-top:0}.sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}.sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}.docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
     .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
-    .docs-content p{margin-bottom:1rem}.docs-content ul{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}.docs-content ul,.docs-content ol{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
     .docs-content a{color:var(--accent);text-decoration:none}.docs-content a:hover{text-decoration:underline}
     code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
-    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
-    pre code{background:none;padding:0}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}pre code{background:none;padding:0}
     footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .nav-bottom{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}.nav-bottom a{text-decoration:none;color:var(--accent);font-weight:500}
     @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static}}
   </style>
 </head>
@@ -46,12 +37,104 @@
       <h3>Getting Started</h3><a href="/docs/">Overview</a><a href="/docs/quickstart.html">Quickstart</a><a href="/docs/installation.html">Installation</a>
       <h3>Configuration</h3><a href="/docs/providers.html">Providers</a><a href="/docs/policies.html">Policies &amp; Scoping</a><a href="/docs/mcp-integration.html">MCP Integration</a>
       <h3>Architecture</h3><a href="/docs/how-it-works.html">How It Works</a><a href="/docs/security-model.html">Security Model</a>
-      <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html">API Reference</a>
+      <h3>Reference</h3><a href="/docs/cli.html" class="active">CLI Reference</a><a href="/docs/api.html">API Reference</a>
     </aside>
     <main class="docs-content">
-      <h1>CLI</h1>
-      <p class="subtitle">Coming soon.</p>
-      <p>This page is under construction. Check back soon or <a href="https://github.com/rsdouglas/janee">contribute on GitHub</a>.</p>
+      <h1>CLI Reference</h1>
+      <p class="subtitle">Every Janee command, with options and examples.</p>
+
+      <h2>janee serve</h2>
+      <p>Start the MCP server. This is the main command — it exposes Janee's tools to your MCP client.</p>
+      <pre><code>janee serve</code></pre>
+      <p>In most setups, you don't run this directly — your MCP client config handles it:</p>
+      <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "npx",
+      "args": ["@true-and-useful/janee", "serve"]
+    }
+  }
+}</code></pre>
+
+      <h2>janee add</h2>
+      <p>Add a new service credential.</p>
+      <pre><code># HTTP proxy mode (default)
+janee add stripe --key "sk_live_xxx" --base-url "https://api.stripe.com"
+
+# Exec mode (CLI tools)
+janee add twitter --exec \
+  --key "tvly-xxx" \
+  --allow-commands "bird,tweet-cli" \
+  --env-map "TWITTER_API_KEY={{credential}}"
+
+# GitHub App (short-lived tokens)
+janee add github --github-app \
+  --app-id 12345 \
+  --private-key-path ~/.janee/github-app.pem \
+  --installation-id 67890</code></pre>
+
+      <h3>Options</h3>
+      <ul>
+        <li><code>--key &lt;value&gt;</code> — API key or token</li>
+        <li><code>--base-url &lt;url&gt;</code> — Base URL for HTTP proxy mode</li>
+        <li><code>--header &lt;name&gt;</code> — Header name for the credential (default: <code>Authorization</code>)</li>
+        <li><code>--prefix &lt;value&gt;</code> — Header value prefix (default: <code>Bearer</code>)</li>
+        <li><code>--exec</code> — Use exec mode instead of HTTP proxy</li>
+        <li><code>--allow-commands &lt;list&gt;</code> — Comma-separated allowed executables (exec mode)</li>
+        <li><code>--env-map &lt;mapping&gt;</code> — Environment variable mapping (exec mode)</li>
+        <li><code>--work-dir &lt;path&gt;</code> — Working directory for subprocesses (exec mode)</li>
+        <li><code>--timeout &lt;seconds&gt;</code> — Max execution time (exec mode, default: 30s)</li>
+        <li><code>--github-app</code> — Use GitHub App authentication</li>
+        <li><code>--app-id &lt;id&gt;</code> — GitHub App ID</li>
+        <li><code>--private-key-path &lt;path&gt;</code> — Path to GitHub App private key</li>
+        <li><code>--installation-id &lt;id&gt;</code> — GitHub App installation ID</li>
+      </ul>
+
+      <h2>janee list</h2>
+      <p>List all configured services.</p>
+      <pre><code>janee list
+
+# Output:
+# stripe     (proxy)  https://api.stripe.com
+# github     (app)    github-app:12345
+# twitter    (exec)   bird, tweet-cli</code></pre>
+
+      <h2>janee remove</h2>
+      <p>Remove a service and its stored credentials.</p>
+      <pre><code>janee remove stripe</code></pre>
+
+      <h2>janee sessions</h2>
+      <p>List active agent sessions.</p>
+      <pre><code>janee sessions
+
+# Output:
+# ID          CAPABILITY      EXPIRES         REQUESTS
+# a1b2c3d4    stripe-readonly 45m remaining   12
+# e5f6g7h8    github-repos    12m remaining   3</code></pre>
+
+      <h2>janee revoke</h2>
+      <p>Revoke active sessions immediately.</p>
+      <pre><code># Revoke a specific session
+janee revoke a1b2c3d4
+
+# Revoke all sessions
+janee revoke --all</code></pre>
+
+      <h2>janee audit</h2>
+      <p>View the audit log of agent requests.</p>
+      <pre><code># Recent entries
+janee audit
+
+# Filter by capability
+janee audit --capability stripe-readonly
+
+# Last N entries
+janee audit --last 50</code></pre>
+
+      <div class="nav-bottom">
+        <a href="/docs/security-model.html">← Security Model</a>
+        <a href="/docs/api.html">API Reference →</a>
+      </div>
     </main>
   </div></div>
   <footer><div class="container">© 2025 Janee. Open source under MIT.</div></footer>

@@ -1,41 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>API — Janee Docs</title>
-  <meta name="description" content="Janee documentation — API">
-  <link rel="canonical" href="https://janee.io/docs/api">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Reference — Janee Docs</title>
+  <meta name="description" content="MCP tools exposed by Janee — execute, exec, list_capabilities, and more.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root{--bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7}
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased}
+    *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6}
     .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
     nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
     nav .container{display:flex;align-items:center;justify-content:space-between}
-    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
-    .nav-links{display:flex;gap:1.5rem;list-style:none}
-    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
-    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}.nav-links{display:flex;gap:1.5rem;list-style:none}.nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}.nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
     .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
-    .sidebar{position:sticky;top:80px;align-self:start}
-    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
-    .sidebar h3:first-child{margin-top:0}
-    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
-    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
-    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
-    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .sidebar{position:sticky;top:80px;align-self:start}.sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}.sidebar h3:first-child{margin-top:0}.sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}.sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}.docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
     .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
-    .docs-content p{margin-bottom:1rem}.docs-content ul{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}.docs-content ul,.docs-content ol{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
     .docs-content a{color:var(--accent);text-decoration:none}.docs-content a:hover{text-decoration:underline}
     code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
-    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
-    pre code{background:none;padding:0}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}pre code{background:none;padding:0}
     footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .nav-bottom{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}.nav-bottom a{text-decoration:none;color:var(--accent);font-weight:500}
+    .tool-card{background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1.5rem}
+    .tool-card h3{margin-top:0}
     @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static}}
   </style>
 </head>
@@ -46,12 +39,98 @@
       <h3>Getting Started</h3><a href="/docs/">Overview</a><a href="/docs/quickstart.html">Quickstart</a><a href="/docs/installation.html">Installation</a>
       <h3>Configuration</h3><a href="/docs/providers.html">Providers</a><a href="/docs/policies.html">Policies &amp; Scoping</a><a href="/docs/mcp-integration.html">MCP Integration</a>
       <h3>Architecture</h3><a href="/docs/how-it-works.html">How It Works</a><a href="/docs/security-model.html">Security Model</a>
-      <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html">API Reference</a>
+      <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html" class="active">API Reference</a>
     </aside>
     <main class="docs-content">
-      <h1>API</h1>
-      <p class="subtitle">Coming soon.</p>
-      <p>This page is under construction. Check back soon or <a href="https://github.com/rsdouglas/janee">contribute on GitHub</a>.</p>
+      <h1>API Reference</h1>
+      <p class="subtitle">MCP tools and resources exposed by the Janee server.</p>
+
+      <h2>MCP Tools</h2>
+      <p>When you run <code>janee serve</code>, these tools become available to your MCP client:</p>
+
+      <div class="tool-card">
+        <h3><code>janee_execute</code></h3>
+        <p>Make an HTTP request through Janee's proxy. Credentials are injected server-side — the agent never sees them.</p>
+        <pre><code>{
+  "capability": "stripe-readonly",
+  "method": "GET",
+  "path": "/v1/balance",
+  "reason": "User asked for their Stripe balance"
+}</code></pre>
+        <h3>Parameters</h3>
+        <ul>
+          <li><code>capability</code> <em>(string, required)</em> — Name of the capability to use</li>
+          <li><code>method</code> <em>(string, required)</em> — HTTP method (GET, POST, PUT, DELETE, PATCH)</li>
+          <li><code>path</code> <em>(string, required)</em> — Request path (appended to service base URL)</li>
+          <li><code>body</code> <em>(object, optional)</em> — Request body (for POST/PUT/PATCH)</li>
+          <li><code>headers</code> <em>(object, optional)</em> — Additional request headers</li>
+          <li><code>reason</code> <em>(string, optional)</em> — Why the agent is making this request (logged to audit trail)</li>
+        </ul>
+        <h3>Returns</h3>
+        <p>The HTTP response body from the upstream API.</p>
+      </div>
+
+      <div class="tool-card">
+        <h3><code>janee_exec</code></h3>
+        <p>Execute a CLI command with injected credentials. The agent never sees the credential values.</p>
+        <pre><code>{
+  "capability": "twitter",
+  "command": ["bird", "post", "Hello world!"],
+  "reason": "User asked to post a tweet"
+}</code></pre>
+        <h3>Parameters</h3>
+        <ul>
+          <li><code>capability</code> <em>(string, required)</em> — Name of the exec-mode capability</li>
+          <li><code>command</code> <em>(string[], required)</em> — Command and arguments to execute</li>
+          <li><code>reason</code> <em>(string, optional)</em> — Why the agent is running this command</li>
+        </ul>
+        <h3>Returns</h3>
+        <p>Object with <code>stdout</code>, <code>stderr</code>, and <code>exitCode</code>.</p>
+      </div>
+
+      <div class="tool-card">
+        <h3><code>janee_list_capabilities</code></h3>
+        <p>List available capabilities and their configuration.</p>
+        <pre><code>// No parameters needed
+janee_list_capabilities({})</code></pre>
+        <h3>Returns</h3>
+        <p>Array of capabilities with their names, types (proxy/exec/app), TTLs, and rules.</p>
+      </div>
+
+      <h2>Audit Log Format</h2>
+      <p>Every tool call is logged to <code>~/.janee/audit.log</code> as newline-delimited JSON:</p>
+      <pre><code>{
+  "timestamp": "2025-01-15T10:30:00Z",
+  "tool": "janee_execute",
+  "capability": "stripe-readonly",
+  "method": "GET",
+  "path": "/v1/balance",
+  "status": 200,
+  "reason": "User asked for account balance",
+  "duration_ms": 245
+}</code></pre>
+
+      <h2>Config File</h2>
+      <p>Janee configuration lives at <code>~/.janee/config.yaml</code>:</p>
+      <pre><code>services:
+  stripe:
+    base_url: https://api.stripe.com
+    auth_header: Authorization
+    auth_prefix: "Bearer "
+
+capabilities:
+  stripe-readonly:
+    service: stripe
+    ttl: 1h
+    autoApprove: true
+    rules:
+      - allow: GET /v1/*
+      - deny: "*"</code></pre>
+
+      <div class="nav-bottom">
+        <a href="/docs/cli.html">← CLI Reference</a>
+        <a href="/docs/">Back to Overview →</a>
+      </div>
     </main>
   </div></div>
   <footer><div class="container">© 2025 Janee. Open source under MIT.</div></footer>
