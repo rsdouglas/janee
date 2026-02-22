@@ -6,6 +6,7 @@
  */
 
 import { spawn } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 
@@ -149,10 +150,37 @@ export function hashPolicyFingerprint(capability: {
 }
 
 /**
- * Run a command with credentials injected as env vars.
- * Inherits the caller's environment — the only additions are the
- * credential env vars. Output is scrubbed before returning.
+ * When running `git` with a GH/GITHUB token in the env, create a temp
+ * askpass script so git can authenticate over HTTPS automatically.
+ * Returns the temp file path (caller must clean up) or null.
  */
+function setupGitAskpass(
+  executable: string,
+  env: Record<string, string>,
+): string | null {
+  if (path.basename(executable) !== 'git') return null;
+
+  const tokenVar = env.GH_TOKEN ? 'GH_TOKEN'
+    : env.GITHUB_TOKEN ? 'GITHUB_TOKEN'
+    : null;
+  if (!tokenVar) return null;
+
+  const askpassPath = path.join(
+    process.env.TMPDIR || process.env.TMP || '/tmp',
+    `janee-askpass-${randomUUID()}.sh`,
+  );
+  fs.writeFileSync(askpassPath, [
+    '#!/bin/sh',
+    `case "$1" in`,
+    `  Username*|username*) echo "x-access-token" ;;`,
+    `  *) echo "\${${tokenVar}}" ;;`,
+    'esac',
+    '',
+  ].join('\n'), { mode: 0o700 });
+
+  return askpassPath;
+}
+
 export async function executeCommand(
   command: string[],
   injectedEnv: Record<string, string>,
@@ -167,9 +195,16 @@ export async function executeCommand(
   const timeout = options.timeout || 30000;
   const startTime = Date.now();
 
+  const mergedEnv = { ...process.env, ...injectedEnv };
+  const askpassFile = setupGitAskpass(command[0], injectedEnv);
+  if (askpassFile) {
+    mergedEnv.GIT_ASKPASS = askpassFile;
+    mergedEnv.GIT_TERMINAL_PROMPT = '0';
+  }
+
   return new Promise((resolve) => {
     const proc = spawn(command[0], command.slice(1), {
-      env: { ...process.env, ...injectedEnv },
+      env: mergedEnv,
       cwd: options.workDir || process.cwd(),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -191,6 +226,7 @@ export async function executeCommand(
 
     proc.on('close', (code) => {
       clearTimeout(timeoutId);
+      if (askpassFile) try { fs.unlinkSync(askpassFile); } catch { /* best effort */ }
       const executionTimeMs = Date.now() - startTime;
 
       const secrets = [
@@ -215,6 +251,7 @@ export async function executeCommand(
 
     proc.on('error', (error) => {
       clearTimeout(timeoutId);
+      if (askpassFile) try { fs.unlinkSync(askpassFile); } catch { /* best effort */ }
       resolve({
         stdout: '',
         stderr: `Failed to execute command: ${error.message}`,

@@ -279,4 +279,35 @@ describe('executeCommand', () => {
     // macOS resolves /tmp -> /private/tmp via symlink
     expect(result.stdout.trim()).toMatch(/^\/?(?:private\/)?tmp$/);
   });
+
+  it('creates GIT_ASKPASS for git commands with GH_TOKEN', async () => {
+    const result = await executeCommand(
+      ['git', 'version'],
+      { GH_TOKEN: 'test-token-12345678' },
+      { credential: 'test-token-12345678' }
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('git version');
+  });
+
+  it('does not create GIT_ASKPASS for non-git commands', async () => {
+    const result = await executeCommand(
+      ['sh', '-c', 'echo $GIT_ASKPASS'],
+      { GH_TOKEN: 'test-token-12345678' },
+      { credential: 'test-token-12345678' }
+    );
+    expect(result.stdout.trim()).toBe('');
+  });
+
+  it('cleans up askpass temp file after git command', async () => {
+    const fs = await import('fs');
+    const tmpBefore = fs.readdirSync('/tmp').filter(f => f.startsWith('janee-askpass-'));
+    await executeCommand(
+      ['git', 'version'],
+      { GH_TOKEN: 'test-token-12345678' },
+      { credential: 'test-token-12345678' }
+    );
+    const tmpAfter = fs.readdirSync('/tmp').filter(f => f.startsWith('janee-askpass-'));
+    expect(tmpAfter.length).toBe(tmpBefore.length);
+  });
 });
