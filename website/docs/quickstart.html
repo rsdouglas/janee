@@ -110,36 +110,36 @@
         </div>
 
         <div class="step">
-          <h2><span class="step-number">2</span> Configure a provider</h2>
-          <p>Create a <code>janee.config.json</code> file in your project root:</p>
-          <pre><code>{
-  "providers": {
-    "github": {
-      "type": "openapi",
-      "url": "https://api.github.com",
-      "auth": {
-        "type": "bearer",
-        "token": "${GITHUB_TOKEN}"
-      },
-      "allow": [
-        "GET /repos/**",
-        "GET /user"
-      ]
-    }
-  }
-}</code></pre>
+          <h2><span class="step-number">2</span> Initialize &amp; add a service</h2>
+          <pre><code>janee init</code></pre>
+          <p>This creates <code>~/.janee/config.yaml</code> with example configuration. Then add a service:</p>
+          <pre><code>janee add github</code></pre>
+          <p>Or edit the config directly:</p>
+          <pre><code># ~/.janee/config.yaml
+services:
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: ghp_your_token_here  # encrypted at rest
+
+capabilities:
+  github_readonly:
+    service: github
+    ttl: 1h
+    policies:
+      - effect: allow
+        methods: [GET]
+        paths: ["/repos/**", "/user"]</code></pre>
 
           <div class="callout">
-            <p>💡 <strong>Secrets stay safe.</strong> The <code>${GITHUB_TOKEN}</code> reference reads from your environment variables. The actual token never enters any AI context window.</p>
+            <p>💡 <strong>Secrets stay safe.</strong> Keys are encrypted in <code>~/.janee/</code>. When an agent calls an API through Janee, the real credentials are injected server-side — the agent never sees them.</p>
           </div>
-
-          <p>Set your environment variable:</p>
-          <pre><code>export GITHUB_TOKEN=ghp_your_token_here</code></pre>
         </div>
 
         <div class="step">
           <h2><span class="step-number">3</span> Start Janee</h2>
-          <pre><code>janee start</code></pre>
+          <pre><code>janee serve</code></pre>
           <p>Janee starts an MCP server on stdio. Your agent can now call the configured APIs through Janee's secure proxy.</p>
         </div>
 
@@ -152,7 +152,7 @@
   "mcpServers": {
     "janee": {
       "command": "janee",
-      "args": ["start"]
+      "args": ["serve"]
     }
   }
 }</code></pre>
@@ -163,7 +163,7 @@
   "mcpServers": {
     "janee": {
       "command": "janee",
-      "args": ["start"]
+      "args": ["serve"]
     }
   }
 }</code></pre>
@@ -174,7 +174,7 @@
   "mcpServers": {
     "janee": {
       "command": "janee",
-      "args": ["start"]
+      "args": ["serve"]
     }
   }
 }</code></pre>
