@@ -3,15 +3,14 @@ name: Deploy Website to Cloudflare Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'website/**'
+    paths: ['website/**']
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
