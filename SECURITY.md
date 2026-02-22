@@ -4,7 +4,7 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Email security reports to: **security@janee.io**
+Report vulnerabilities through a [GitHub Security Advisory](https://github.com/rsdouglas/janee/security/advisories/new) on this repository.
 
 Include:
 - Description of the vulnerability
