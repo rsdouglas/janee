@@ -119,7 +119,12 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       const names = parsed.map((s: any) => s.name);
       expect(names).toContain('shared-cap');
       expect(names).toContain('cap-a');
-      expect(names).not.toContain('cap-b');
+      expect(names).toContain('cap-b');
+
+      const accessible = (name: string) => parsed.find((s: any) => s.name === name)?.accessible;
+      expect(accessible('shared-cap')).toBe(true);
+      expect(accessible('cap-a')).toBe(true);
+      expect(accessible('cap-b')).toBe(false);
     });
 
     it('should show CLI-created services to all agents', async () => {
@@ -567,7 +572,11 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       const names = parsed.map((c: any) => c.name);
 
       expect(names).toContain('devto-cap');
-      expect(names).not.toContain('github-cap');
+      expect(names).toContain('github-cap');
+
+      const accessible = (name: string) => parsed.find((c: any) => c.name === name)?.accessible;
+      expect(accessible('devto-cap')).toBe(true);
+      expect(accessible('github-cap')).toBe(false);
     });
   });
 
@@ -695,7 +704,11 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       const names = parsed.map((c: any) => c.name);
 
       expect(names).toContain('cap-b');
-      expect(names).not.toContain('cap-a');
+      expect(names).toContain('cap-a');
+
+      const accessible = (name: string) => parsed.find((c: any) => c.name === name)?.accessible;
+      expect(accessible('cap-b')).toBe(true);
+      expect(accessible('cap-a')).toBe(false);
     });
   });
 });
