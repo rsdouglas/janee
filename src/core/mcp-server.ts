@@ -354,11 +354,8 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
               type: 'text',
               text: JSON.stringify(
                 capabilities
-                  .filter(cap => {
-                    const svc = services.get(cap.service);
-                    return canAccessCapability(listAgentId, cap, svc, defaultAccess);
-                  })
                   .map(cap => ({
+                  accessible: canAccessCapability(listAgentId, cap, services.get(cap.service), defaultAccess),
                   name: cap.name,
                   service: cap.service,
                   mode: cap.mode || 'proxy',
