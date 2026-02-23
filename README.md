@@ -23,6 +23,7 @@
 | 🏠 **Local-first** | Keys encrypted on your machine, never sent to a cloud |
 | 🖥️ **Exec mode** | Run CLI tools with injected credentials — agents never see the keys |
 | 🤖 **GitHub App auth** | Short-lived tokens for autonomous agents — no static PATs |
+| 🔧 **Automatic git auth** | `git push/pull` just works when credentials include GitHub tokens |
 
 ---
 
@@ -164,6 +165,7 @@ Now agents can run CLI tools through Janee without ever seeing the API key:
 janee_exec({
   capability: "twitter",
   command: ["bird", "post", "Hello world!"],
+  cwd: "/home/agent/project",  // optional working directory
   reason: "User asked to post a tweet"
 })
 ```
@@ -177,6 +179,31 @@ Janee spawns the process with `TWITTER_API_KEY` injected, runs the command, and 
 - `--work-dir` — working directory for the subprocess
 - `--timeout` — max execution time (default: 30s)
 
+
+### Git operations (automatic HTTPS auth)
+
+When using exec mode with GitHub credentials, Janee automatically handles git authentication. No extra configuration needed — `git push`, `git pull`, and `git clone` just work:
+
+```yaml
+capabilities:
+  - name: git-ops
+    service: github
+    mode: exec
+    allowCommands: [git]
+    env:
+      GH_TOKEN: "{{credential}}"
+```
+
+```typescript
+// Agent can push code without ever seeing the token
+janee_exec({
+  capability: "git-ops",
+  command: ["git", "push", "origin", "main"],
+  cwd: "/workspace/my-repo"
+})
+```
+
+Janee detects `git` commands with `GH_TOKEN`/`GITHUB_TOKEN` in the environment and creates a temporary askpass script for HTTPS authentication. The script is cleaned up automatically after the command completes.
 
 ### Add GitHub App auth (for autonomous agents)
 

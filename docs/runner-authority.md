@@ -200,3 +200,54 @@ services:
 **Commands fail but worked in non-Runner mode**
 - The command runs inside the container — ensure the executable is installed there
 - Working directory may differ; set `workDir` in the capability config
+
+## Recent Features
+
+### Working Directory (`cwd`) — v0.11.2
+
+Agents can specify the working directory for exec commands using the `cwd` parameter:
+
+```json
+{
+  "tool": "janee_exec",
+  "arguments": {
+    "capability": "gh-cli",
+    "command": ["gh", "pr", "list"],
+    "cwd": "/home/agent/project"
+  }
+}
+```
+
+Without `cwd`, commands run in the Runner's `process.cwd()`. This is useful when agents work on multiple projects or need to run commands in a specific repository checkout.
+
+### Agent Identity Forwarding — v0.11.1
+
+The Runner now maintains **per-agent MCP sessions** with the Authority. Previously, the Authority saw all requests as coming from the Runner itself. Now each unique agent gets its own session, so `allowedAgents` access control works correctly through the Runner.
+
+This is transparent — agents don't need to do anything differently. The Runner reads the agent's `clientInfo.name` from the MCP initialize handshake and creates a corresponding session with the Authority.
+
+```
+Agent "creature:patch" ──▶ Runner ──▶ Authority session for "creature:patch"
+Agent "creature:voyager" ──▶ Runner ──▶ Authority session for "creature:voyager"
+```
+
+### GitHub App Token Minting in Exec — v0.11.1
+
+Capabilities using `github-app` auth type now work correctly in exec mode. The Authority mints short-lived GitHub App installation tokens and injects them as environment variables for the command.
+
+### Automatic GIT_ASKPASS — v0.11.2
+
+When `janee_exec` runs a `git` command and the capability injects `GH_TOKEN` or `GITHUB_TOKEN` as an environment variable, Janee automatically creates a temporary askpass script. This makes HTTPS authentication transparent — agents can `git push`, `git pull`, and `git clone` without any extra configuration.
+
+The askpass script is created before the command runs and cleaned up automatically afterward. It returns `x-access-token` as the username and the token value as the password, following GitHub's HTTPS token authentication protocol.
+
+```yaml
+# This "just works" — git auth is handled automatically
+capabilities:
+  - name: git-ops
+    service: github
+    mode: exec
+    allowCommands: [git]
+    env:
+      GH_TOKEN: "{{credential}}"
+```
