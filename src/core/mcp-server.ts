@@ -154,6 +154,8 @@ function parseTTL(ttl: string): number {
 }
 
 export interface MCPServerResult {
+  /** Swap capabilities and services in the closure. Used for SIGHUP reload. */
+  reloadConfig: (result: ReloadResult) => void;
   server: Server;
   /** Per-session clientInfo.name storage. Populated by captureClientInfo(). */
   clientSessions: Map<string, string>;
@@ -716,7 +718,14 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     }
   });
 
-  return { server, clientSessions };
+  return {
+    server,
+    clientSessions,
+    reloadConfig: (result: ReloadResult) => {
+      capabilities = result.capabilities;
+      services = result.services;
+    },
+  };
 }
 
 /**
@@ -790,13 +799,15 @@ export function captureClientInfo(
 /**
  * Start MCP server with stdio transport (single session).
  */
-export async function startMCPServer(serverOptions: MCPServerOptions): Promise<void> {
-  const { server, clientSessions } = createMCPServer(serverOptions);
+export async function startMCPServer(serverOptions: MCPServerOptions): Promise<MCPServerResult> {
+  const mcpResult = createMCPServer(serverOptions);
+  const { server, clientSessions } = mcpResult;
   const transport = new StdioServerTransport();
   await server.connect(transport);
   captureClientInfo(transport, clientSessions);
 
   console.error('Janee MCP server started (stdio)');
+  return mcpResult;
 }
 
 /** Handle returned by startMCPServerHTTP for lifecycle management. */
@@ -914,7 +925,8 @@ export async function startMCPServerHTTP(
 
       } else if (!sessionId && isInitializeRequest(req.body)) {
         const clientName: string | undefined = req.body?.params?.clientInfo?.name;
-        const { server, clientSessions } = createMCPServer(serverOptions);
+        const mcpResult = createMCPServer(serverOptions);
+  const { server, clientSessions } = mcpResult;
 
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
