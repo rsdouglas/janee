@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-426R0H9KND');
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quickstart — Janee Docs</title>
+  <meta name="description" content="Get Janee running in under 5 minutes. Install, configure a provider, and connect to your MCP client.">
+  <link rel="canonical" href="https://janee.io/docs/quickstart">
+  <meta property="og:title" content="Quickstart — Janee Docs">
+  <meta property="og:description" content="Get Janee running in under 5 minutes.">
+  <meta property="og:image" content="https://janee.io/og-image.png">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff; --bg-subtle: #f8f9fa; --fg: #1a1a2e; --fg-muted: #6b7280;
+      --fg-dim: #9ca3af; --accent: #10b981; --accent-hover: #059669;
+      --border: #e5e7eb; --border-subtle: #f3f4f6; --code-bg: #f4f5f7; --code-fg: #1a1a2e;
+    }
+    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    .container { max-width: 920px; margin: 0 auto; padding: 0 1.5rem; }
+    nav { padding: 1.25rem 0; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 100; }
+    nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-weight: 700; font-size: 1.25rem; text-decoration: none; color: var(--fg); }
+    .nav-links { display: flex; gap: 1.5rem; list-style: none; }
+    .nav-links a { text-decoration: none; color: var(--fg-muted); font-size: 0.9rem; font-weight: 500; }
+    .nav-links a:hover { color: var(--accent); }
+    .nav-links a.active { color: var(--accent); }
+    .docs-layout { display: grid; grid-template-columns: 220px 1fr; gap: 3rem; padding: 2.5rem 0 4rem; }
+    .sidebar { position: sticky; top: 80px; align-self: start; }
+    .sidebar h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-dim); margin-bottom: 0.75rem; margin-top: 1.5rem; }
+    .sidebar h3:first-child { margin-top: 0; }
+    .sidebar a { display: block; padding: 0.35rem 0; text-decoration: none; color: var(--fg-muted); font-size: 0.9rem; }
+    .sidebar a:hover, .sidebar a.active { color: var(--accent); }
+    .docs-content h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .docs-content .subtitle { color: var(--fg-muted); font-size: 1.1rem; margin-bottom: 2rem; }
+    .docs-content h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-subtle); }
+    .docs-content h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+    .docs-content p { margin-bottom: 1rem; }
+    .docs-content ul, .docs-content ol { margin-bottom: 1rem; padding-left: 1.5rem; }
+    .docs-content li { margin-bottom: 0.35rem; }
+    .docs-content a { color: var(--accent); text-decoration: none; }
+    .docs-content a:hover { text-decoration: underline; }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 4px; }
+    pre { background: var(--code-bg); padding: 1.25rem; border-radius: 8px; overflow-x: auto; margin-bottom: 1.5rem; line-height: 1.5; }
+    pre code { background: none; padding: 0; }
+    .step { margin-top: 2rem; }
+    .step-number { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: white; font-size: 0.85rem; font-weight: 600; margin-right: 0.5rem; }
+    .callout { padding: 1rem 1.25rem; border-left: 3px solid var(--accent); background: rgba(16,185,129,0.04); border-radius: 0 8px 8px 0; margin-bottom: 1.5rem; }
+    .callout p { margin: 0; font-size: 0.95rem; }
+    footer { padding: 2rem 0; border-top: 1px solid var(--border); text-align: center; color: var(--fg-dim); font-size: 0.85rem; }
+    .nav-bottom { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+    .nav-bottom a { text-decoration: none; color: var(--accent); font-weight: 500; }
+    @media (max-width: 768px) { .docs-layout { grid-template-columns: 1fr; gap: 1.5rem; } .sidebar { position: static; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">Janee</a>
+      <ul class="nav-links">
+        <li><a href="https://github.com/rsdouglas/janee">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/docs/" class="active">Docs</a></li>
+        <li><a href="https://x.com/janeesecure">Twitter</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="docs-layout">
+      <aside class="sidebar">
+        <h3>Getting Started</h3>
+        <a href="/docs/">Overview</a>
+        <a href="/docs/quickstart.html" class="active">Quickstart</a>
+        <a href="/docs/installation.html">Installation</a>
+        <h3>Configuration</h3>
+        <a href="/docs/providers.html">Providers</a>
+        <a href="/docs/policies.html">Policies &amp; Scoping</a>
+        <a href="/docs/mcp-integration.html">MCP Integration</a>
+        <h3>Architecture</h3>
+        <a href="/docs/how-it-works.html">How It Works</a>
+        <a href="/docs/security-model.html">Security Model</a>
+        <h3>Reference</h3>
+        <a href="/docs/cli.html">CLI Reference</a>
+        <a href="/docs/api.html">API Reference</a>
+      </aside>
+
+      <main class="docs-content">
+        <h1>Quickstart</h1>
+        <p class="subtitle">Get Janee running in under 5 minutes.</p>
+
+        <div class="step">
+          <h2><span class="step-number">1</span> Install</h2>
+          <pre><code>npm install -g @true-and-useful/janee</code></pre>
+          <p>Or use npx to run without installing:</p>
+          <pre><code>npx @true-and-useful/janee</code></pre>
+        </div>
+
+        <div class="step">
+          <h2><span class="step-number">2</span> Initialize &amp; add a service</h2>
+          <pre><code>janee init</code></pre>
+          <p>This creates <code>~/.janee/config.yaml</code> with example configuration. Then add a service:</p>
+          <pre><code>janee add github</code></pre>
+          <p>Or edit the config directly:</p>
+          <pre><code># ~/.janee/config.yaml
+services:
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: ghp_your_token_here  # encrypted at rest
+
+capabilities:
+  github_readonly:
+    service: github
+    ttl: 1h
+    policies:
+      - effect: allow
+        methods: [GET]
+        paths: ["/repos/**", "/user"]</code></pre>
+
+          <div class="callout">
+            <p>💡 <strong>Secrets stay safe.</strong> Keys are encrypted in <code>~/.janee/</code>. When an agent calls an API through Janee, the real credentials are injected server-side — the agent never sees them.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <h2><span class="step-number">3</span> Start Janee</h2>
+          <pre><code>janee serve</code></pre>
+          <p>Janee starts an MCP server on stdio. Your agent can now call the configured APIs through Janee's secure proxy.</p>
+        </div>
+
+        <div class="step">
+          <h2><span class="step-number">4</span> Connect your MCP client</h2>
+
+          <h3>Claude Desktop</h3>
+          <p>Add to your <code>claude_desktop_config.json</code>:</p>
+          <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "janee",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+
+          <h3>Cursor</h3>
+          <p>Add to your <code>.cursor/mcp.json</code>:</p>
+          <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "janee",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+
+          <h3>Windsurf</h3>
+          <p>Add to your <code>~/.codeium/windsurf/mcp_config.json</code>:</p>
+          <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "janee",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+        </div>
+
+        <div class="step">
+          <h2><span class="step-number">5</span> Use it</h2>
+          <p>Ask your agent to use the API. For example:</p>
+          <blockquote style="border-left: 3px solid var(--border); padding-left: 1rem; color: var(--fg-muted); margin-bottom: 1rem;">
+            "List my GitHub repositories"
+          </blockquote>
+          <p>The agent calls Janee's <code>http_request</code> tool, Janee injects the bearer token, makes the request, and returns the response — all without the agent ever seeing your GitHub token.</p>
+        </div>
+
+        <h2>Next steps</h2>
+        <ul>
+          <li><a href="/docs/providers.html">Add more providers</a> — Slack, Notion, Stripe, any REST API</li>
+          <li><a href="/docs/policies.html">Configure policies</a> — restrict which endpoints agents can access</li>
+          <li><a href="/docs/security-model.html">Understand the security model</a></li>
+        </ul>
+
+        <div class="nav-bottom">
+          <a href="/docs/">← Overview</a>
+          <a href="/docs/installation.html">Installation →</a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">© 2025 Janee. Open source under MIT.</div>
+  </footer>
+</body>
+</html>

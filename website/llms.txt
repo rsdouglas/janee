@@ -1,0 +1,103 @@
+# Janee
+
+> Secrets management for AI agents. Local-first CLI with MCP integration, enforcement-based security, and exec mode for CLI tools.
+
+## Overview
+
+Janee is a secrets management tool designed specifically for AI agents. It solves the problem of giving agents raw API keys by providing:
+
+- **Local-first storage**: API keys never leave your machine (stored encrypted in ~/.janee/)
+- **MCP integration**: Native plugin for OpenClaw and other MCP-compatible AI platforms
+- **Enforcement-based security**: Server-side path-based policies that agents cannot bypass
+- **Audit logging**: Every request is logged with full context
+- **Exec mode**: Agents can run whitelisted CLI commands with credentials injected via env vars
+- **Agent-scoped credentials**: Per-agent identity and permission scoping
+
+## Installation
+
+```bash
+npm install -g @true-and-useful/janee
+janee init
+```
+
+## Key Features
+
+- **HTTP proxy (execute)**: Agent calls `execute(service, method, path, body)` — Janee injects auth, enforces rules, returns response
+- **CLI proxy (exec)**: Agent calls `exec(service, args)` — Janee injects credentials as env vars, runs the whitelisted command, scrubs secrets from output
+- **Path-based request policies**: Define allow/deny rules for specific API endpoints
+- **Command whitelisting**: Only explicitly allowed CLI commands can run; shell metacharacters blocked
+- **Agent-scoped credentials**: Transport-bound identity resolution — each agent gets its own credential scope
+- **Encrypted key storage**: AES-256-GCM encryption for all stored credentials
+- **MCP server mode**: Expose tools (`janee_list_services`, `janee_execute`, `janee_exec`) for AI agents
+- **Docker-ready**: Multi-stage Dockerfile with health checks for containerized deployment
+- **janee status**: One command to check services, sessions, audit log, encryption status (JSON output available)
+- **Interactive CLI**: Easy setup with `janee add` and `janee add --exec` for configuring services
+
+## Links
+
+- GitHub: https://github.com/rsdouglas/janee
+- npm package: https://www.npmjs.com/package/@true-and-useful/janee
+- OpenClaw plugin: https://www.npmjs.com/package/@openclaw/janee
+- Documentation: https://github.com/rsdouglas/janee/blob/main/README.md
+
+## How It Works
+
+### HTTP API Proxy
+1. Store API keys in Janee: `janee add`
+2. Configure path-based policies (e.g., "allow GET *, deny POST *")
+3. Agent requests access via MCP tools
+4. Janee enforces policies server-side and proxies requests
+5. All requests are logged with full audit trail
+
+### CLI Exec Mode
+1. Configure a CLI tool: `janee add --exec`
+2. Define allowed commands and env var mappings
+3. Agent calls `exec(service, args)` via MCP
+4. Janee injects credentials as env vars, runs the command in a sandboxed subprocess
+5. Output is scrubbed for any leaked secrets before returning
+
+### Agent Scoping
+1. Each agent is identified by transport-bound identity (stdio PID, HTTP session)
+2. Credentials are granted per-agent: `janee grant --agent coding-agent --service github`
+3. Agent only sees services explicitly granted to it
+4. Revoke per-agent: `janee revoke --agent coding-agent --service github`
+
+Example policy:
+```yaml
+capabilities:
+  stripe_readonly:
+    service: stripe
+    rules:
+      allow: [GET *]
+      deny: [POST *, DELETE *]
+```
+
+## Architecture
+
+- **CLI-first**: Install globally, use immediately
+- **Local storage**: ~/.janee/config.yaml (encrypted keys)
+- **MCP interface**: OpenClaw plugin spawns `janee serve` as subprocess
+- **Transport modes**: stdio (local) or HTTP (Docker/remote)
+- **Docker**: Multi-stage build, non-root user, health checks at `/health`
+
+## Use Cases
+
+- Giving AI assistants access to Stripe, GitHub, Gmail APIs with granular permissions
+- Running autonomous agents with read-only access to production systems
+- Delegating API access to agents without exposing raw credentials
+- Letting agents run CLI tools (git, aws, docker) without seeing credentials
+- Multi-agent setups where each agent needs different permissions
+
+## Security Model
+
+**The differentiator**: Enforcement-based, not trust-based. Agent provides intent, but Janee validates every request against configured policies. Agent cannot bypass rules even with plausible reasoning.
+
+- Keys encrypted at rest (AES-256-GCM)
+- Keys injected at request time, never exposed to agent context
+- Shell metacharacters blocked in exec mode
+- Secret scrubbing on all command output
+- Per-agent credential scoping prevents lateral access
+
+---
+
+Built by the team behind OpenClaw. Open source, MIT licensed. Available on npm.

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Integration — Janee Docs</title>
+  <meta name="description" content="Connect Janee to Claude Desktop, Cursor, and other MCP clients.">
+  <link rel="canonical" href="https://janee.io/docs/mcp-integration">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6}
+    .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
+    nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
+    nav .container{display:flex;align-items:center;justify-content:space-between}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
+    .nav-links{display:flex;gap:1.5rem;list-style:none}
+    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
+    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
+    .sidebar{position:sticky;top:80px;align-self:start}
+    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
+    .sidebar h3:first-child{margin-top:0}
+    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
+    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
+    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}
+    .docs-content ul,.docs-content ol{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
+    .docs-content a{color:var(--accent);text-decoration:none}.docs-content a:hover{text-decoration:underline}
+    code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
+    pre code{background:none;padding:0}
+    footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .nav-bottom{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+    .nav-bottom a{text-decoration:none;color:var(--accent);font-weight:500}
+    .callout{padding:1rem 1.25rem;border-left:3px solid var(--accent);background:rgba(16,185,129,0.04);border-radius:0 8px 8px 0;margin-bottom:1.5rem}
+    .callout p{margin:0;font-size:.95rem}
+    @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static}}
+  </style>
+</head>
+<body>
+  <nav><div class="container"><a href="/" class="logo">Janee</a><ul class="nav-links"><li><a href="https://github.com/rsdouglas/janee">GitHub</a></li><li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li><li><a href="/blog/">Blog</a></li><li><a href="/docs/" class="active">Docs</a></li><li><a href="https://x.com/janeesecure">Twitter</a></li></ul></div></nav>
+
+  <div class="container"><div class="docs-layout">
+    <aside class="sidebar">
+      <h3>Getting Started</h3><a href="/docs/">Overview</a><a href="/docs/quickstart.html">Quickstart</a><a href="/docs/installation.html">Installation</a>
+      <h3>Configuration</h3><a href="/docs/providers.html">Providers</a><a href="/docs/policies.html">Policies &amp; Scoping</a><a href="/docs/mcp-integration.html" class="active">MCP Integration</a>
+      <h3>Architecture</h3><a href="/docs/how-it-works.html">How It Works</a><a href="/docs/security-model.html">Security Model</a>
+      <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html">API Reference</a>
+    </aside>
+
+    <main class="docs-content">
+      <h1>MCP Integration</h1>
+      <p class="subtitle">Connect Janee to your MCP client — Claude Desktop, Cursor, and more.</p>
+
+      <h2>What is MCP?</h2>
+      <p>The <a href="https://modelcontextprotocol.io">Model Context Protocol</a> (MCP) is an open standard for connecting AI agents to tools and data. Janee implements MCP, so it works with any compatible client.</p>
+
+      <h2>Claude Desktop</h2>
+      <p>Add Janee to your Claude Desktop config (<code>~/Library/Application Support/Claude/claude_desktop_config.json</code> on macOS):</p>
+      <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "janee",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+      <p>Restart Claude Desktop. Janee tools will appear in the tool list.</p>
+
+      <h2>Cursor</h2>
+      <p>See the <a href="https://github.com/rsdouglas/janee/blob/main/docs/cursor.md">Cursor setup guide</a> in the repo.</p>
+      <p>Add to your Cursor MCP settings:</p>
+      <pre><code>{
+  "mcpServers": {
+    "janee": {
+      "command": "janee",
+      "args": ["serve"]
+    }
+  }
+}</code></pre>
+
+      <h2>Claude Code</h2>
+      <p>See the <a href="https://github.com/rsdouglas/janee/blob/main/docs/claude-code.md">Claude Code setup guide</a>.</p>
+
+      <h2>OpenClaw</h2>
+      <p>Install the native plugin for first-class support:</p>
+      <pre><code>openclaw plugins install @true-and-useful/janee-openclaw</code></pre>
+      <p>Enable in your agent config:</p>
+      <pre><code>{
+  "agents": {
+    "list": [{
+      "id": "main",
+      "tools": { "allow": ["janee"] }
+    }]
+  }
+}</code></pre>
+
+      <h2>Any MCP Client</h2>
+      <p>Janee uses stdio transport by default. Any MCP client that supports stdio can connect:</p>
+      <pre><code>{
+  "command": "janee",
+  "args": ["serve"]
+}</code></pre>
+      <p>For HTTP transport (SSE), use:</p>
+      <pre><code>janee serve --transport sse --port 3333</code></pre>
+
+      <h2>Available Tools</h2>
+      <p>Once connected, agents have access to:</p>
+      <ul>
+        <li><code>janee_list_services</code> — Discover available APIs and capabilities</li>
+        <li><code>janee_execute</code> — Make API requests through Janee (HTTP proxy)</li>
+        <li><code>janee_exec</code> — Run CLI commands through Janee (exec mode)</li>
+      </ul>
+
+      <h2>Example Agent Interaction</h2>
+      <pre><code>// Agent discovers available services
+janee_list_services()
+// → [{ name: "github", capabilities: ["github-repos"] }]
+
+// Agent makes an API call
+janee_execute({
+  capability: "github-repos",
+  method: "GET",
+  path: "/repos/rsdouglas/janee",
+  reason: "User wants repo info"
+})
+// → { status: 200, body: { ... } }</code></pre>
+
+      <div class="nav-bottom">
+        <a href="/docs/policies.html">← Policies &amp; Scoping</a>
+        <a href="/docs/how-it-works.html">How It Works →</a>
+      </div>
+    </main>
+  </div></div>
+
+  <footer><div class="container">© 2025 Janee. Open source under MIT.</div></footer>
+</body>
+</html>

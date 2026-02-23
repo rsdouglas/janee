@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How It Works — Janee Docs</title>
+  <meta name="description" content="Understand how Janee proxies API requests from AI agents while keeping secrets out of the context window.">
+  <link rel="canonical" href="https://janee.io/docs/how-it-works">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--accent-hover:#059669;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7;--code-fg:#1a1a2e; }
+    html{scroll-behavior:smooth}*{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased}
+    .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
+    nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
+    nav .container{display:flex;align-items:center;justify-content:space-between}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
+    .nav-links{display:flex;gap:1.5rem;list-style:none}
+    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
+    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
+    .sidebar{position:sticky;top:80px;align-self:start}
+    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
+    .sidebar h3:first-child{margin-top:0}
+    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
+    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
+    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}
+    .docs-content ul,.docs-content ol{margin-bottom:1rem;padding-left:1.5rem}
+    .docs-content li{margin-bottom:.35rem}
+    .docs-content a{color:var(--accent);text-decoration:none}
+    .docs-content a:hover{text-decoration:underline}
+    code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
+    pre code{background:none;padding:0}
+    .diagram{background:var(--bg-subtle);border:1px solid var(--border);border-radius:12px;padding:2rem;margin:1.5rem 0;font-family:'JetBrains Mono',monospace;font-size:.85rem;line-height:1.8;overflow-x:auto;white-space:pre}
+    footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .nav-bottom{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+    .nav-bottom a{text-decoration:none;color:var(--accent);font-weight:500}
+    @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static}}
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">Janee</a>
+      <ul class="nav-links">
+        <li><a href="https://github.com/rsdouglas/janee">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/docs/" class="active">Docs</a></li>
+        <li><a href="https://x.com/janeesecure">Twitter</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="docs-layout">
+      <aside class="sidebar">
+        <h3>Getting Started</h3>
+        <a href="/docs/">Overview</a>
+        <a href="/docs/quickstart.html">Quickstart</a>
+        <a href="/docs/installation.html">Installation</a>
+        <h3>Configuration</h3>
+        <a href="/docs/providers.html">Providers</a>
+        <a href="/docs/policies.html">Policies &amp; Scoping</a>
+        <a href="/docs/mcp-integration.html">MCP Integration</a>
+        <h3>Architecture</h3>
+        <a href="/docs/how-it-works.html" class="active">How It Works</a>
+        <a href="/docs/security-model.html">Security Model</a>
+        <h3>Reference</h3>
+        <a href="/docs/cli.html">CLI Reference</a>
+        <a href="/docs/api.html">API Reference</a>
+      </aside>
+
+      <main class="docs-content">
+        <h1>How It Works</h1>
+        <p class="subtitle">The architecture behind secure agent-to-API communication.</p>
+
+        <h2>The Problem</h2>
+        <p>When AI agents need to call APIs, the typical approach is to paste API keys directly into the prompt or system message. This means:</p>
+        <ul>
+          <li><strong>Secrets in context</strong> — API keys visible to the model, logged in conversations, potentially leaked in outputs</li>
+          <li><strong>No access control</strong> — the agent has the same permissions as the key owner</li>
+          <li><strong>No audit trail</strong> — you can't see what the agent actually requested</li>
+        </ul>
+
+        <h2>The Janee Approach</h2>
+        <p>Janee sits between the agent and the API as an MCP server. The agent never sees the actual credentials — it just describes what it wants, and Janee handles authentication.</p>
+
+        <div class="diagram">┌─────────────┐     MCP (stdio)     ┌──────────┐     HTTPS     ┌───────────┐
+│  MCP Client │ ──────────────────→ │  Janee   │ ────────────→ │  API      │
+│  (Claude,   │  "GET /repos/x/y"  │  Proxy   │  + Bearer     │  (GitHub) │
+│   Cursor)   │ ←────────────────── │          │ ←──────────── │           │
+└─────────────┘     response        └──────────┘   response    └───────────┘
+                                         │
+                                    reads secrets
+                                    from env vars
+                                    (never exposed)</div>
+
+        <h2>Request Flow</h2>
+        <ol>
+          <li><strong>Agent calls <code>http_request</code> tool</strong> — specifies the provider name, HTTP method, path, and optional body</li>
+          <li><strong>Janee validates the request</strong> — checks the path against configured <code>allow</code>/<code>deny</code> policies</li>
+          <li><strong>Janee injects credentials</strong> — reads the secret from environment variables and adds the appropriate auth header</li>
+          <li><strong>Janee forwards the request</strong> — makes the actual HTTPS call to the upstream API</li>
+          <li><strong>Response returned</strong> — the API response is passed back to the agent through MCP</li>
+        </ol>
+
+        <p>At no point does the agent see the API key, token, or any credential material.</p>
+
+        <h2>MCP Protocol</h2>
+        <p>Janee implements the <a href="https://modelcontextprotocol.io">Model Context Protocol</a> (MCP), the open standard for connecting AI agents to tools and data sources. This means it works with any MCP-compatible client:</p>
+        <ul>
+          <li>Claude Desktop</li>
+          <li>Cursor</li>
+          <li>Windsurf</li>
+          <li>Continue</li>
+          <li>Any custom MCP client</li>
+        </ul>
+
+        <h2>Provider Configuration</h2>
+        <p>Each provider in your config defines a base URL, authentication method, and access policies:</p>
+        <pre><code>{
+  "providers": {
+    "github": {
+      "type": "openapi",
+      "url": "https://api.github.com",
+      "auth": {
+        "type": "bearer",
+        "token": "${GITHUB_TOKEN}"
+      },
+      "allow": ["GET /repos/**", "GET /user"],
+      "deny": ["DELETE /**"]
+    }
+  }
+}</code></pre>
+        <p>The <code>allow</code> and <code>deny</code> lists use glob patterns to control which endpoints the agent can access. See <a href="/docs/policies.html">Policies &amp; Scoping</a> for details.</p>
+
+        <h2>Authentication Methods</h2>
+        <p>Janee supports multiple auth types per provider:</p>
+        <ul>
+          <li><code>bearer</code> — Authorization: Bearer header (GitHub, Notion, most REST APIs)</li>
+          <li><code>basic</code> — HTTP Basic auth (Jira, some legacy APIs)</li>
+          <li><code>header</code> — Custom header injection (X-API-Key, etc.)</li>
+          <li><code>query</code> — Secret appended as a query parameter</li>
+        </ul>
+
+        <div class="nav-bottom">
+          <a href="/docs/mcp-integration.html">← MCP Integration</a>
+          <a href="/docs/security-model.html">Security Model →</a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">© 2025 Janee. Open source under MIT.</div>
+  </footer>
+</body>
+</html>

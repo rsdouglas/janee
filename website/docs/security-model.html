@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Model — Janee Docs</title>
+  <meta name="description" content="Janee's security architecture — zero-knowledge agents, encrypted storage, and audit trails.">
+  <link rel="canonical" href="https://janee.io/docs/security-model">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6}
+    .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
+    nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
+    nav .container{display:flex;align-items:center;justify-content:space-between}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
+    .nav-links{display:flex;gap:1.5rem;list-style:none}
+    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
+    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
+    .sidebar{position:sticky;top:80px;align-self:start}
+    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
+    .sidebar h3:first-child{margin-top:0}
+    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
+    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
+    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}
+    .docs-content ul{margin-bottom:1rem;padding-left:1.5rem}.docs-content li{margin-bottom:.35rem}
+    .docs-content a{color:var(--accent);text-decoration:none}.docs-content a:hover{text-decoration:underline}
+    code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
+    pre code{background:none;padding:0}
+    footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .nav-bottom{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+    .nav-bottom a{text-decoration:none;color:var(--accent);font-weight:500}
+    .callout{padding:1rem 1.25rem;border-left:3px solid var(--accent);background:rgba(16,185,129,0.04);border-radius:0 8px 8px 0;margin-bottom:1.5rem}
+    .callout p{margin:0;font-size:.95rem}
+    .callout.warn{border-left-color:#f59e0b;background:rgba(245,158,11,0.04)}
+    table{width:100%;border-collapse:collapse;margin-bottom:1.5rem}
+    th,td{text-align:left;padding:.6rem .75rem;border-bottom:1px solid var(--border)}
+    th{font-weight:600;font-size:.85rem;text-transform:uppercase;letter-spacing:.03em;color:var(--fg-muted)}
+    @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static}}
+  </style>
+</head>
+<body>
+  <nav><div class="container"><a href="/" class="logo">Janee</a><ul class="nav-links"><li><a href="https://github.com/rsdouglas/janee">GitHub</a></li><li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li><li><a href="/blog/">Blog</a></li><li><a href="/docs/" class="active">Docs</a></li><li><a href="https://x.com/janeesecure">Twitter</a></li></ul></div></nav>
+
+  <div class="container"><div class="docs-layout">
+    <aside class="sidebar">
+      <h3>Getting Started</h3><a href="/docs/">Overview</a><a href="/docs/quickstart.html">Quickstart</a><a href="/docs/installation.html">Installation</a>
+      <h3>Configuration</h3><a href="/docs/providers.html">Providers</a><a href="/docs/policies.html">Policies &amp; Scoping</a><a href="/docs/mcp-integration.html">MCP Integration</a>
+      <h3>Architecture</h3><a href="/docs/how-it-works.html">How It Works</a><a href="/docs/security-model.html" class="active">Security Model</a>
+      <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html">API Reference</a>
+    </aside>
+
+    <main class="docs-content">
+      <h1>Security Model</h1>
+      <p class="subtitle">How Janee keeps your secrets safe from AI agents.</p>
+
+      <h2>Core Principle: Zero-Knowledge Agents</h2>
+      <p>Janee's fundamental guarantee: <strong>agents never see your raw API keys.</strong> When an agent makes a request through Janee, the credential is injected server-side — the agent only sees the API response, never the authentication headers.</p>
+
+      <h2>Defense in Depth</h2>
+      <table>
+        <tr><th>Layer</th><th>What it does</th></tr>
+        <tr><td><strong>Encrypted storage</strong></td><td>API keys are encrypted at rest in <code>~/.janee/</code> using AES-256</td></tr>
+        <tr><td><strong>Agent scoping</strong></td><td>Each agent session has limited capabilities — only the APIs you allow</td></tr>
+        <tr><td><strong>Request policies</strong></td><td>Allow/deny rules restrict which endpoints agents can call</td></tr>
+        <tr><td><strong>Session TTLs</strong></td><td>Access expires automatically — no lingering permissions</td></tr>
+        <tr><td><strong>Audit logging</strong></td><td>Every request logged with timestamp, method, path, status</td></tr>
+        <tr><td><strong>Instant revocation</strong></td><td>Kill any session or capability immediately</td></tr>
+      </table>
+
+      <h2>Threat Model</h2>
+
+      <h3>Prompt Injection</h3>
+      <p>If an agent is manipulated via prompt injection, the attacker gains the agent's current capabilities — not your raw keys. With scoped capabilities and short TTLs, the blast radius is limited to the allowed endpoints for the remaining session duration.</p>
+
+      <h3>Agent Exfiltration</h3>
+      <p>Even if an agent tries to extract credentials, Janee never exposes them. The agent cannot read its own authentication headers — it only receives API responses. There's no tool or MCP method that returns raw keys.</p>
+
+      <h3>Local Compromise</h3>
+      <p>If your machine is compromised, the attacker has access to encrypted config files. The encryption key is derived from your system — not hardcoded.</p>
+
+      <h2>Short-Lived Tokens</h2>
+      <p>For GitHub, Janee supports <a href="/docs/providers.html">GitHub App authentication</a> which generates tokens that expire in 1 hour. Even if a token is somehow leaked, the window of exposure is minimal.</p>
+
+      <h2>Audit Trail</h2>
+      <p>Every proxied request is logged to <code>~/.janee/audit.log</code>:</p>
+      <pre><code>{
+  "timestamp": "2025-01-15T10:30:00Z",
+  "capability": "stripe-readonly",
+  "method": "GET",
+  "path": "/v1/balance",
+  "status": 200,
+  "reason": "User asked for account balance"
+}</code></pre>
+      <p>Review what your agents have done at any time.</p>
+
+      <h2>Comparison: Before and After Janee</h2>
+      <table>
+        <tr><th></th><th>Without Janee</th><th>With Janee</th></tr>
+        <tr><td><strong>Agent key access</strong></td><td>Full raw keys</td><td>Never sees keys</td></tr>
+        <tr><td><strong>Blast radius</strong></td><td>Unlimited</td><td>Scoped to capability</td></tr>
+        <tr><td><strong>Audit trail</strong></td><td>None</td><td>Every request logged</td></tr>
+        <tr><td><strong>Kill switch</strong></td><td>Rotate all keys</td><td>Revoke session instantly</td></tr>
+        <tr><td><strong>Prompt injection</strong></td><td>Full API access</td><td>Limited to allowed endpoints</td></tr>
+      </table>
+
+      <div class="nav-bottom">
+        <a href="/docs/how-it-works.html">← How It Works</a>
+        <a href="/docs/cli.html">CLI Reference →</a>
+      </div>
+    </main>
+  </div></div>
+
+  <footer><div class="container">© 2025 Janee. Open source under MIT.</div></footer>
+</body>
+</html>

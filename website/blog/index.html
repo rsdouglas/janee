@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-426R0H9KND');
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — Janee</title>
+  <meta name="description" content="Articles about AI agent security, secrets management, and the MCP ecosystem.">
+  <link rel="canonical" href="https://janee.io/blog/">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://janee.io/blog/">
+  <meta property="og:title" content="Blog — Janee">
+  <meta property="og:description" content="Articles about AI agent security, secrets management, and the MCP ecosystem.">
+  <meta property="og:image" content="https://janee.io/og-image.png">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1f510;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f8f9fa;
+      --fg: #1a1a2e;
+      --fg-muted: #6b7280;
+      --fg-dim: #9ca3af;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --border: #e5e7eb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    nav {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--fg);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--fg); }
+    .nav-links a.active { color: var(--fg); }
+
+    .blog-header {
+      padding: 4rem 0 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .blog-header h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+
+    .blog-header p {
+      color: var(--fg-muted);
+      font-size: 1.05rem;
+    }
+
+    .posts {
+      padding: 2rem 0 4rem;
+    }
+
+    .post-card {
+      display: block;
+      padding: 2rem 0;
+      border-bottom: 1px solid var(--border);
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.15s;
+    }
+
+    .post-card:first-child {
+      padding-top: 0;
+    }
+
+    .post-card:hover .post-title {
+      color: var(--accent);
+    }
+
+    .post-date {
+      font-size: 0.825rem;
+      color: var(--fg-dim);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .post-title {
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+      transition: color 0.2s;
+    }
+
+    .post-excerpt {
+      color: var(--fg-muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .read-more {
+      display: inline-block;
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .read-more:hover {
+      color: var(--accent-hover);
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 0;
+      text-align: center;
+    }
+
+    footer p {
+      font-size: 0.825rem;
+      color: var(--fg-dim);
+    }
+
+    footer a {
+      color: var(--fg-muted);
+      text-decoration: none;
+    }
+
+    footer a:hover { color: var(--fg); }
+
+    @media (max-width: 640px) {
+      .blog-header { padding: 2.5rem 0 1.5rem; }
+      .blog-header h1 { font-size: 1.75rem; }
+      .post-title { font-size: 1.15rem; }
+      .nav-links { gap: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">Janee</a>
+      <ul class="nav-links">
+        <li><a href="https://github.com/rsdouglas/janee">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li>
+        <li><a href="/blog/" class="active">Blog</a></li>
+        <li><a href="https://github.com/rsdouglas/janee#quick-start">Docs</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="blog-header">
+      <h1>Blog</h1>
+      <p>Thinking about AI agent security, secrets management, and the MCP ecosystem.</p>
+    </div>
+
+    <div class="posts">
+      <a href="/blog/why-agents-need-secrets-manager" class="post-card">
+        <div class="post-date">February 2026</div>
+        <div class="post-title">Why Your AI Agents Need a Secrets Manager</div>
+        <p class="post-excerpt">
+          AI agents are calling APIs on your behalf. But how do they get the keys?
+          Most setups paste credentials directly into prompts or environment variables
+          the agent can read. Here&rsquo;s why that&rsquo;s dangerous &mdash; and how a
+          purpose-built secrets manager changes the game.
+        </p>
+        <span class="read-more">Read more &rarr;</span>
+      </a>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <p><a href="/">Janee</a> &mdash; Secure API access for AI agents. <a href="https://github.com/rsdouglas/janee">Open source</a> under MIT.</p>
+    </div>
+  </footer>
+</body>
+</html>
