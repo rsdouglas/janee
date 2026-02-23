@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-426R0H9KND');</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runner/Authority Architecture — Janee Docs</title>
+  <meta name="description" content="How Janee splits into Runner and Authority for secure credential handling in containerized AI agent deployments.">
+  <link rel="canonical" href="https://janee.io/docs/runner-authority">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#fff;--bg-subtle:#f8f9fa;--fg:#1a1a2e;--fg-muted:#6b7280;--fg-dim:#9ca3af;--accent:#10b981;--accent-hover:#059669;--border:#e5e7eb;--border-subtle:#f3f4f6;--code-bg:#f4f5f7;--code-fg:#1a1a2e; }
+    html{scroll-behavior:smooth}*{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased}
+    .container{max-width:920px;margin:0 auto;padding:0 1.5rem}
+    nav{padding:1.25rem 0;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100}
+    nav .container{display:flex;align-items:center;justify-content:space-between}
+    .logo{font-weight:700;font-size:1.25rem;text-decoration:none;color:var(--fg)}
+    .nav-links{display:flex;gap:1.5rem;list-style:none}
+    .nav-links a{text-decoration:none;color:var(--fg-muted);font-size:.9rem;font-weight:500}
+    .nav-links a:hover{color:var(--accent)}.nav-links a.active{color:var(--accent)}
+    .docs-layout{display:grid;grid-template-columns:220px 1fr;gap:3rem;padding:2.5rem 0 4rem}
+    .sidebar{position:sticky;top:80px;align-self:start}
+    .sidebar h3{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--fg-dim);margin-bottom:.75rem;margin-top:1.5rem}
+    .sidebar h3:first-child{margin-top:0}
+    .sidebar a{display:block;padding:.35rem 0;text-decoration:none;color:var(--fg-muted);font-size:.9rem}
+    .sidebar a:hover,.sidebar a.active{color:var(--accent)}
+    .docs-content h1{font-size:2rem;font-weight:700;margin-bottom:.5rem}
+    .docs-content .subtitle{color:var(--fg-muted);font-size:1.1rem;margin-bottom:2rem}
+    .docs-content h2{font-size:1.35rem;font-weight:600;margin-top:2.5rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-subtle)}
+    .docs-content h3{font-size:1.1rem;font-weight:600;margin-top:1.5rem;margin-bottom:.75rem}
+    .docs-content p{margin-bottom:1rem}
+    .docs-content ul,.docs-content ol{margin-bottom:1rem;padding-left:1.5rem}
+    .docs-content li{margin-bottom:.35rem}
+    .docs-content a{color:var(--accent);text-decoration:none}
+    .docs-content a:hover{text-decoration:underline}
+    code{font-family:'JetBrains Mono',monospace;font-size:.88em;background:var(--code-bg);padding:.15em .4em;border-radius:4px}
+    pre{background:var(--code-bg);padding:1.25rem;border-radius:8px;overflow-x:auto;margin-bottom:1.5rem;line-height:1.5}
+    pre code{background:none;padding:0}
+    .diagram{background:var(--bg-subtle);border:1px solid var(--border);border-radius:12px;padding:2rem;margin:1.5rem 0;font-family:'JetBrains Mono',monospace;font-size:.85rem;line-height:1.8;overflow-x:auto;white-space:pre}
+    footer{padding:2rem 0;border-top:1px solid var(--border);text-align:center;color:var(--fg-dim);font-size:.85rem}
+    .callout{background:var(--bg-subtle);border-left:3px solid var(--accent);padding:1rem 1.25rem;border-radius:0 8px 8px 0;margin:1.5rem 0}
+    .callout p{margin:0}
+    .prev-next{display:flex;justify-content:space-between;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+    .prev-next a{text-decoration:none;color:var(--accent);font-weight:500}
+    @media(max-width:768px){.docs-layout{grid-template-columns:1fr;gap:1.5rem}.sidebar{position:static;border-bottom:1px solid var(--border);padding-bottom:1rem}}
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">Janee</a>
+      <ul class="nav-links">
+        <li><a href="https://github.com/rsdouglas/janee">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li>
+        <li><a href="/blog">Blog</a></li>
+        <li><a href="/docs/" class="active">Docs</a></li>
+        <li><a href="https://x.com/rsdgls">Twitter</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="docs-layout">
+      <aside class="sidebar">
+        <h3>Getting Started</h3>
+        <a href="/docs/">Overview</a>
+        <a href="/docs/quickstart.html">Quickstart</a>
+        <a href="/docs/installation.html">Installation</a>
+        <h3>Configuration</h3>
+        <a href="/docs/providers.html">Providers</a>
+        <a href="/docs/policies.html">Policies &amp; Scoping</a>
+        <a href="/docs/mcp-integration.html">MCP Integration</a>
+        <h3>Architecture</h3>
+        <a href="/docs/how-it-works.html">How It Works</a>
+        <a href="/docs/runner-authority.html" class="active">Runner/Authority</a>
+        <a href="/docs/security-model.html">Security Model</a>
+        <h3>Reference</h3>
+        <a href="/docs/cli.html">CLI Reference</a>
+        <a href="/docs/api.html">API Reference</a>
+      </aside>
+
+      <main class="docs-content">
+        <h1>Runner/Authority Architecture</h1>
+        <p class="subtitle">Secure credential handling for containerized AI agent deployments.</p>
+
+        <p>When AI agents run inside Docker containers, they can't use <code>janee_exec</code> on the host — the host process has no access to the container's filesystem. The Runner/Authority architecture solves this by splitting Janee into two cooperating processes.</p>
+
+        <h2>Overview</h2>
+
+        <div class="diagram">┌─────────────────────────────────────────────────┐
+│  Host Machine                                    │
+│                                                  │
+│  ┌──────────────────────────────────────────┐   │
+│  │  Authority (janee serve --runner-key)     │   │
+│  │  - Holds credentials &amp; secrets            │   │
+│  │  - Enforces exec policy (allowlists)      │   │
+│  │  - Proxies API requests with credentials  │   │
+│  │  - Issues exec grants to Runners          │   │
+│  └────────────────────┬─────────────────────┘   │
+│                       │ :3100                     │
+├───────────────────────┼─────────────────────────┤
+│  Container            │                          │
+│                       │                          │
+│  ┌────────────────────▼─────────────────────┐   │
+│  │  Runner (janee serve --authority)         │   │
+│  │  - Serves MCP to the agent                │   │
+│  │  - Forwards tool calls to Authority       │   │
+│  │  - Runs janee_exec locally (in-container) │   │
+│  └────────────────────▲─────────────────────┘   │
+│                       │ :3200                     │
+│  ┌────────────────────┴─────────────────────┐   │
+│  │  Agent (Claude, Codex, custom)            │   │
+│  │  JANEE_URL=http://localhost:3200          │   │
+│  └──────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────┘</div>
+
+        <h2>How It Works</h2>
+
+        <ol>
+          <li><strong>Agent calls a tool</strong> via MCP (e.g., <code>list_services</code>, <code>execute</code>)</li>
+          <li><strong>Runner receives</strong> the MCP request on its local port</li>
+          <li>For <strong>non-exec tools</strong>: Runner forwards the call to the Authority over HTTP, which handles it with full credential access</li>
+          <li>For <strong>exec tools</strong> (<code>janee_exec</code>): Runner asks the Authority to <strong>authorize</strong> the execution, receives a grant with injected credentials and scrub values, then runs the command <strong>locally in the container</strong> where the agent's files live</li>
+          <li>After execution, Runner reports the result back to the Authority for audit logging</li>
+        </ol>
+
+        <div class="callout">
+          <p>💡 <strong>Key insight:</strong> Credentials never leave the host, but commands run where the agent's code actually lives. The agent sees a normal Janee MCP server — it has no idea it's talking to a Runner.</p>
+        </div>
+
+        <h2>Quick Start</h2>
+
+        <h3>1. Configure Janee on the host</h3>
+
+        <p>Create your <code>janee.yaml</code> with services and capabilities as usual:</p>
+
+<pre><code># ~/.janee/config.yaml
+services:
+  github:
+    baseUrl: https://api.github.com
+    auth:
+      type: bearer
+      key: ghp_your_token_here
+
+capabilities:
+  - name: gh-cli
+    service: github
+    mode: exec
+    allowCommands: [gh]
+    env:
+      GH_TOKEN: "{{credential}}"
+    timeout: 30000</code></pre>
+
+        <h3>2. Start the Authority on the host</h3>
+
+<pre><code># Generate a shared runner key
+export JANEE_RUNNER_KEY=$(openssl rand -hex 32)
+
+# Start Authority — serves both MCP and exec authorization
+janee serve -t http -p 3100 --host 0.0.0.0 --runner-key "$JANEE_RUNNER_KEY"</code></pre>
+
+        <p>The Authority exposes:</p>
+        <ul>
+          <li>Standard MCP endpoints (for proxied tool calls)</li>
+          <li><code>/v1/exec/authorize</code> — grants exec permissions with credential injection</li>
+          <li><code>/v1/exec/complete</code> — receives execution reports for audit logging</li>
+          <li><code>/v1/health</code> — unauthenticated health check</li>
+        </ul>
+
+        <h3>3. Start the Runner in each container</h3>
+
+<pre><code>janee serve -t http -p 3200 --host 127.0.0.1 \
+  --authority http://host.docker.internal:3100 \
+  --runner-key "$JANEE_RUNNER_KEY"</code></pre>
+
+        <p>The Runner:</p>
+        <ul>
+          <li>Accepts MCP connections from the agent on port 3200</li>
+          <li>Uses <code>--authority</code> to know where to forward calls</li>
+          <li>Authenticates to the Authority using <code>--runner-key</code></li>
+        </ul>
+
+        <h3>4. Point the agent at the Runner</h3>
+
+<pre><code>export JANEE_URL=http://localhost:3200</code></pre>
+
+        <p>The agent sees a normal Janee MCP server. It has no idea it's talking to a Runner.</p>
+
+        <h2>Agent Identity Forwarding</h2>
+
+        <p>When an agent connects via MCP, it sends a <code>clientInfo.name</code> field identifying itself (e.g., <code>"cursor"</code>, <code>"claude-desktop"</code>). The Runner forwards this identity to the Authority, enabling:</p>
+
+        <ul>
+          <li><strong>Per-agent access control</strong> — different agents can have different capabilities</li>
+          <li><strong>Audit attribution</strong> — every API call in the audit log shows which agent made it</li>
+          <li><strong>GitHub App tokens</strong> — the Authority can mint installation tokens scoped to the requesting agent</li>
+        </ul>
+
+        <div class="callout">
+          <p>💡 Agent identity flows automatically through the Runner proxy. No configuration needed — the Runner reads the MCP <code>clientInfo</code> and includes it in every request to the Authority.</p>
+        </div>
+
+        <h2>Working Directory (<code>cwd</code>)</h2>
+
+        <p>The <code>janee_exec</code> tool accepts an optional <code>cwd</code> parameter that sets the working directory for command execution:</p>
+
+<pre><code>// Agent calls janee_exec with cwd
+{
+  "tool": "janee_exec",
+  "arguments": {
+    "capability": "gh-cli",
+    "command": "gh repo view",
+    "cwd": "/home/agent/project"
+  }
+}</code></pre>
+
+        <p>This is especially useful in containerized environments where the agent works in a specific project directory. The Runner executes the command from that directory, so relative paths and git operations work as expected.</p>
+
+        <h2>Automatic GIT_ASKPASS</h2>
+
+        <p>When an exec capability uses <code>git</code> commands with a GitHub token (<code>GH_TOKEN</code> or <code>GITHUB_TOKEN</code>), Janee automatically creates a temporary <code>GIT_ASKPASS</code> script that provides HTTPS authentication. This means agents can run <code>git push</code>, <code>git pull</code>, and other remote operations without any extra configuration.</p>
+
+<pre><code># This "just works" — no GIT_ASKPASS setup needed
+capabilities:
+  - name: git-ops
+    service: github
+    mode: exec
+    allowCommands: [git]
+    env:
+      GH_TOKEN: "{{credential}}"</code></pre>
+
+        <div class="callout">
+          <p>💡 The askpass script is created before execution and cleaned up automatically afterward. The agent never sees the token — it's injected into the git credential flow at the OS level.</p>
+        </div>
+
+        <h2>Docker Compose Example</h2>
+
+<pre><code>version: "3.8"
+services:
+  authority:
+    image: node:20-slim
+    command: npx @true-and-useful/janee serve -t http -p 3100 --host 0.0.0.0 --runner-key ${JANEE_RUNNER_KEY}
+    volumes:
+      - ./janee-config:/root/.janee
+    ports:
+      - "3100:3100"
+
+  agent:
+    build: ./agent
+    environment:
+      - JANEE_URL=http://runner:3200
+    depends_on:
+      - runner
+
+  runner:
+    image: node:20-slim
+    command: npx @true-and-useful/janee serve -t http -p 3200 --host 0.0.0.0 --authority http://authority:3100 --runner-key ${JANEE_RUNNER_KEY}
+    depends_on:
+      - authority</code></pre>
+
+        <h2>Standalone Authority</h2>
+
+        <p>If you don't need containerized exec but want centralized credential management for a team, you can run just the Authority:</p>
+
+<pre><code># Authority with no runner-key — operates as a standard Janee server
+janee serve -t http -p 3100 --host 0.0.0.0</code></pre>
+
+        <p>Agents connect directly to the Authority over HTTP. All API calls are proxied with credentials injected server-side, and all calls are logged for audit.</p>
+
+        <h2>Security Considerations</h2>
+
+        <ul>
+          <li><strong>Runner key rotation:</strong> Rotate the shared key periodically. Both Authority and Runner must use the same key.</li>
+          <li><strong>Network isolation:</strong> The Authority should only be reachable from trusted containers. Use Docker networks to restrict access.</li>
+          <li><strong>Credential scrubbing:</strong> The Authority tells the Runner which values to scrub from command output, preventing credential leaks in stdout/stderr.</li>
+          <li><strong>Exec allowlists:</strong> Only commands listed in <code>allowCommands</code> can be executed. Everything else is denied by default.</li>
+        </ul>
+
+        <div class="prev-next">
+          <a href="/docs/how-it-works.html">← How It Works</a>
+          <a href="/docs/security-model.html">Security Model →</a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container">
+      <p>© 2026 Janee. Open source under MIT.</p>
+    </div>
+  </footer>
+</body>
+</html>
