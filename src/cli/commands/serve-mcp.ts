@@ -370,8 +370,34 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
           ),
         } : {}),
       });
+
+      // SIGHUP reload: update serverOptions so new HTTP sessions pick up changes.
+      // Existing sessions keep their config until they reconnect.
+      process.on('SIGHUP', () => {
+        try {
+          const result = loadConfigForMCP();
+          serverOptions.capabilities = result.capabilities;
+          serverOptions.services = result.services;
+          currentServices = result.services;
+          console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
+        } catch (err) {
+          console.error(`[janee] SIGHUP reload failed: ${err instanceof Error ? err.message : err}`);
+        }
+      });
     } else {
-      await startMCPServer(serverOptions);
+      const mcpResult = await startMCPServer(serverOptions);
+
+      // SIGHUP reload: swap capabilities/services inside the running MCP server closure
+      process.on('SIGHUP', () => {
+        try {
+          const result = loadConfigForMCP();
+          mcpResult.reloadConfig(result);
+          currentServices = result.services;
+          console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
+        } catch (err) {
+          console.error(`[janee] SIGHUP reload failed: ${err instanceof Error ? err.message : err}`);
+        }
+      });
     }
 
   } catch (error) {
