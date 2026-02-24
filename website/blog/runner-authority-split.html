@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-426R0H9KND"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-426R0H9KND');
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runner/Authority: Keeping Secrets Off the Agent's Machine — Janee Blog</title>
+  <meta name="description" content="Janee's Runner/Authority split lets AI agents execute API calls without secrets ever touching their environment. Here's how the architecture works and why it matters.">
+  <link rel="canonical" href="https://janee.io/blog/runner-authority-split">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://janee.io/blog/runner-authority-split">
+  <meta property="og:title" content="Runner/Authority: Keeping Secrets Off the Agent's Machine">
+  <meta property="og:description" content="Janee's Runner/Authority split lets AI agents execute API calls without secrets ever touching their environment. Here's how the architecture works and why it matters.">
+  <meta property="og:image" content="https://janee.io/og-image.png">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1f510;</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f8f9fa;
+      --bg-card: #ffffff;
+      --fg: #1a1a2e;
+      --fg-muted: #6b7280;
+      --fg-dim: #9ca3af;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-subtle: rgba(16, 185, 129, 0.08);
+      --accent-glow: rgba(16, 185, 129, 0.12);
+      --border: #e5e7eb;
+      --border-subtle: #f3f4f6;
+      --code-bg: #f4f5f7;
+      --code-fg: #1a1a2e;
+    }
+
+    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ── Nav ── */
+    nav {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--fg);
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--fg); }
+
+    @media (max-width: 768px) {
+      .nav-links { gap: 1.25rem; }
+    }
+
+    @media (max-width: 480px) {
+      .nav-links { gap: 0.75rem; }
+      .nav-links a { font-size: 0.8rem; }
+    }
+
+    /* Blog-specific styles */
+    .blog-header {
+      padding: 4rem 0 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .blog-header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+    .blog-meta {
+      color: var(--fg-muted);
+      font-size: 0.9rem;
+    }
+
+    .blog-content {
+      padding: 2.5rem 0 4rem;
+    }
+    .blog-content h2 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 2.5rem 0 1rem;
+    }
+    .blog-content p {
+      margin-bottom: 1.25rem;
+      color: var(--fg);
+      font-size: 1.05rem;
+    }
+    .blog-content ul, .blog-content ol {
+      margin-bottom: 1.25rem;
+      padding-left: 1.5rem;
+    }
+    .blog-content li {
+      margin-bottom: 0.5rem;
+      font-size: 1.05rem;
+    }
+    .blog-content pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      overflow-x: auto;
+      margin-bottom: 1.25rem;
+      font-size: 0.88rem;
+      line-height: 1.5;
+    }
+    .blog-content code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem;
+    }
+    .blog-content p code {
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+    }
+    .blog-content a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+    .blog-content a:hover {
+      border-bottom-color: var(--accent);
+    }
+    .blog-content strong {
+      font-weight: 600;
+    }
+
+    .blog-cta {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      margin-top: 2rem;
+    }
+    .blog-cta h3 {
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+    .blog-cta p {
+      color: var(--fg-muted);
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    .blog-cta .btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: var(--fg);
+      color: white;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .blog-cta .btn:hover { background: #2d2d4e; }
+
+    footer {
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--fg-dim);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--fg-muted); text-decoration: none; }
+    footer a:hover { color: var(--fg); }
+
+    .diagram {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+      text-align: center;
+    }
+    .diagram pre {
+      background: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      display: inline-block;
+      text-align: left;
+    }
+
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">Janee</a>
+      <ul class="nav-links">
+        <li><a href="https://github.com/rsdouglas/janee">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@true-and-useful/janee">npm</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/docs/">Docs</a></li>
+        <li><a href="https://x.com/rsdgls">Twitter</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <header class="blog-header">
+      <h1>Runner/Authority: Keeping Secrets Off the Agent&rsquo;s Machine</h1>
+      <div class="blog-meta">February 2026 &middot; 8 min read</div>
+    </header>
+
+    <article class="blog-content">
+      <p>Most secret managers solve a simple problem: store credentials, retrieve them at runtime. That works when you trust the machine running your code. But AI agents break that assumption.</p>
+
+      <p>An agent running on a user&rsquo;s laptop, inside a container, or on a remote VM can be prompt-injected, have its memory inspected, or just be running in an environment you don&rsquo;t fully control. The moment you inject a secret into that environment &mdash; even for one API call &mdash; it&rsquo;s exposed.</p>
+
+      <p>Janee&rsquo;s Runner/Authority architecture solves this by splitting the secret manager into two components. The part talking to the agent never has secrets. The part holding secrets never talks to the agent.</p>
+
+      <h2>The core idea: two halves of a secret manager</h2>
+
+      <p>In a standard Janee deployment, the MCP server runs alongside the agent. It holds the encrypted config, decrypts credentials at runtime, injects them into API calls, and scrubs them from output. This works well for single-machine setups &mdash; your Claude Desktop, a trusted CI server.</p>
+
+      <p>But when the agent&rsquo;s environment is untrusted, you need a different model:</p>
+
+      <div class="diagram">
+        <pre><code>Untrusted Environment               Trusted Environment
+┌──────────────────────┐             ┌──────────────────────┐
+│                      │             │                      │
+│  Agent               │             │  Authority           │
+│    │                 │   network   │    │                 │
+│    ▼                 │             │    ▼                 │
+│  Runner (MCP server) │────────────▶│  Credentials         │
+│    - no secrets      │  authorize  │    - encrypted store │
+│    - no config keys  │  + execute  │    - policy engine   │
+│    - just a proxy    │             │    - audit log       │
+│                      │             │                      │
+└──────────────────────┘             └──────────────────────┘</code></pre>
+      </div>
+
+      <p>The <strong>Runner</strong> is a lightweight MCP server that sits next to the agent. It exposes the same <code>janee_exec</code> and <code>janee_list</code> tools that a normal Janee instance would. But it holds no credentials and no encryption keys. When the agent calls a tool, the Runner forwards the request to the Authority over an authenticated API.</p>
+
+      <p>The <strong>Authority</strong> is the real secret manager. It holds the encrypted config, evaluates access policies, decrypts credentials, executes the API call, scrubs secrets from the response, and returns the clean result. It runs on infrastructure you control &mdash; a private server, a locked-down VM, your orchestrator process.</p>
+
+      <h2>Why not just use a remote Janee instance?</h2>
+
+      <p>You might wonder: if the Authority runs remotely, why not just point the agent at a remote Janee HTTP endpoint?</p>
+
+      <p>Two reasons.</p>
+
+      <p>First, <strong>the Runner preserves the local MCP experience</strong>. The agent connects to a local MCP server over stdio or a local HTTP port. No special configuration, no remote URLs in the MCP client config. To the agent (and to the user configuring it), it looks exactly like a normal Janee installation.</p>
+
+      <p>Second, <strong>agent identity flows through correctly</strong>. Each agent connecting to the Runner gets its own MCP session. When the Runner forwards a request, it opens a separate session on the Authority for each agent identity. This means the Authority&rsquo;s access control sees <code>creature:patch</code> or <code>creature:audit</code> &mdash; not a single generic &ldquo;runner&rdquo; identity. Per-agent policies work exactly as they do in a single-machine deployment.</p>
+
+      <h2>The authorization flow</h2>
+
+      <p>When an agent calls <code>janee_exec</code> through a Runner, here&rsquo;s what happens step by step:</p>
+
+      <ol>
+        <li><strong>Agent &rarr; Runner:</strong> The agent sends a standard MCP <code>tools/call</code> with <code>janee_exec</code>, specifying the capability, command, and arguments.</li>
+        <li><strong>Runner &rarr; Authority (authorize):</strong> The Runner sends an authorization request containing the runner&rsquo;s identity, the agent&rsquo;s identity, the capability name, the full command, and an optional reason string.</li>
+        <li><strong>Authority evaluates:</strong> The Authority checks the capability exists, the agent is allowed to use it, the command matches the policy&rsquo;s allowlist, and grants are within rate limits. If everything passes, it returns a <strong>grant</strong> containing the environment variables (decrypted secrets), a policy hash, timeout, and values that must be scrubbed from output.</li>
+        <li><strong>Runner executes:</strong> The Runner spawns the command with the granted environment. It monitors stdout/stderr, scrubs any secret values the Authority flagged, and enforces the timeout.</li>
+        <li><strong>Runner &rarr; Authority (complete):</strong> After execution, the Runner reports back: exit code, duration, byte counts, and how many scrub hits occurred. The Authority logs everything for audit.</li>
+        <li><strong>Runner &rarr; Agent:</strong> The scrubbed output goes back to the agent. At no point does the agent see the actual credential values.</li>
+      </ol>
+
+      <p>The key insight: even though the Runner briefly holds decrypted values in the child process environment, it never stores them. They exist only for the duration of the spawned command and are scrubbed from any output before the agent sees it. An attacker who compromises the agent&rsquo;s reasoning gets nothing &mdash; the values aren&rsquo;t in the context window, the tool output, or the MCP session state.</p>
+
+      <h2>The grant model</h2>
+
+      <p>The Authority doesn&rsquo;t just return credentials &mdash; it returns a <strong>scoped grant</strong> that constrains exactly what the Runner can do:</p>
+
+      <pre><code>{
+  "grantId": "g_7f3a...",
+  "grantExpiresAt": "2026-02-23T10:05:00Z",
+  "effectiveTimeoutMs": 30000,
+  "envInjections": {
+    "GITHUB_TOKEN": "ghs_xxxxx..."
+  },
+  "scrubValues": ["ghs_xxxxx..."],
+  "constraints": {
+    "policyHash": "sha256:ab12cd...",
+    "executable": "gh",
+    "command": ["gh", "issue", "create", "--repo", "..."]
+  }
+}</code></pre>
+
+      <p>The grant expires (typically in seconds, not hours). It locks the command to the exact executable and arguments the policy allows. The <code>scrubValues</code> array tells the Runner which strings must never appear in tool output. And the <code>policyHash</code> lets the Authority verify that the Runner executed against the same policy version it authorized.</p>
+
+      <h2>When to use the split</h2>
+
+      <p>Not every deployment needs Runner/Authority separation. If you&rsquo;re running Janee alongside Claude Desktop on your own laptop, the default single-process mode is simpler and works great.</p>
+
+      <p>The split makes sense when:</p>
+
+      <ul>
+        <li><strong>The agent runs in an untrusted environment</strong> &mdash; a shared container, a user&rsquo;s machine, a sandboxed VM. You don&rsquo;t want secrets on that machine at all.</li>
+        <li><strong>Multiple agents share credentials</strong> &mdash; an orchestrator (like <a href="https://github.com/openseed-dev/openseed">OpenSeed</a>) spawns many agents that all need GitHub access. One Authority, many Runners.</li>
+        <li><strong>You need centralized audit</strong> &mdash; the Authority is the single point where every API call is logged with agent identity, timing, and outcome. No need to aggregate logs from multiple Janee instances.</li>
+        <li><strong>Compliance requires secret isolation</strong> &mdash; some environments mandate that credentials never leave a specific security boundary. The Authority stays inside that boundary; Runners can be anywhere.</li>
+      </ul>
+
+      <h2>Running it</h2>
+
+      <p>Start the Authority on your trusted machine:</p>
+
+      <pre><code># On the trusted host — holds credentials, evaluates policy
+janee authority --port 9700 --api-key "your-runner-key"</code></pre>
+
+      <p>Start a Runner alongside each agent:</p>
+
+      <pre><code># On the agent's machine — no secrets, just a proxy
+janee serve --runner --authority-url http://authority:9700 \
+  --api-key "your-runner-key"</code></pre>
+
+      <p>The Runner exposes the standard MCP interface (stdio or HTTP). Configure your agent&rsquo;s MCP client to connect to it exactly as you would a normal Janee instance. The agent never needs to know it&rsquo;s talking to a proxy.</p>
+
+      <h2>Trust boundaries, drawn clearly</h2>
+
+      <p>The Runner/Authority split gives you something rare in the AI agent space: <strong>a clearly defined trust boundary</strong>. The agent and its environment are on one side. Your secrets are on the other. The only thing that crosses the boundary is a scoped, time-limited, policy-evaluated grant &mdash; and even the results of that grant are scrubbed before they reach the agent.</p>
+
+      <p>This isn&rsquo;t just defense in depth. It&rsquo;s a fundamentally different security model from &ldquo;encrypt your .env file&rdquo; or &ldquo;rotate keys frequently.&rdquo; Those approaches still put secrets on the agent&rsquo;s machine. Janee&rsquo;s split mode doesn&rsquo;t.</p>
+
+      <p>If you&rsquo;re building multi-agent systems, or deploying agents into environments you don&rsquo;t fully control, the Runner/Authority pattern gives you the security properties you actually need &mdash; without changing how your agents work.</p>
+
+      <div class="blog-cta">
+        <h3>Try Janee</h3>
+        <p>Give your AI agents secure, scoped API access &mdash; without exposing your secrets.</p>
+        <a href="https://github.com/rsdouglas/janee" class="btn">View on GitHub &rarr;</a>
+      </div>
+    </article>
+  </div>
+
+  <footer>
+    <div class="container">
+      <p><a href="https://trueanduseful.com">True and Useful LLC</a> &middot; <a href="https://github.com/rsdouglas/janee">Open Source</a> &middot; <a href="https://x.com/rsdgls">@rsdgls</a> &middot; MIT License</p>
+    </div>
+  </footer>
+</body>
+</html>
