@@ -39,6 +39,7 @@
       <h3>Getting Started</h3><a href="/docs/">Overview</a><a href="/docs/quickstart.html">Quickstart</a><a href="/docs/installation.html">Installation</a>
       <h3>Configuration</h3><a href="/docs/providers.html">Providers</a><a href="/docs/policies.html">Policies &amp; Scoping</a><a href="/docs/mcp-integration.html">MCP Integration</a>
       <h3>Architecture</h3><a href="/docs/how-it-works.html">How It Works</a><a href="/docs/security-model.html">Security Model</a>
+        <a href="/docs/runner-authority.html">Runner/Authority</a>
       <h3>Reference</h3><a href="/docs/cli.html">CLI Reference</a><a href="/docs/api.html" class="active">API Reference</a>
     </aside>
     <main class="docs-content">
@@ -83,9 +84,12 @@
           <li><code>capability</code> <em>(string, required)</em> — Name of the exec-mode capability</li>
           <li><code>command</code> <em>(string[], required)</em> — Command and arguments to execute</li>
           <li><code>reason</code> <em>(string, optional)</em> — Why the agent is running this command</li>
+          <li><code>cwd</code> <em>(string, optional)</em> — Working directory for command execution</li>
         </ul>
         <h3>Returns</h3>
         <p>Object with <code>stdout</code>, <code>stderr</code>, and <code>exitCode</code>.</p>
+        <h3>Git Integration</h3>
+        <p>When the capability includes a <code>GIT_ASKPASS</code> credential, Janee automatically configures Git authentication. The agent can run <code>git push</code>, <code>git pull</code>, etc. without seeing the underlying token.</p>
       </div>
 
       <div class="tool-card">
