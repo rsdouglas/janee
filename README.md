@@ -10,6 +10,7 @@
 > Your AI agents need API access to be useful. But they shouldn't have your raw API keys.
 > Janee sits between your agents and your APIs — injecting credentials, enforcing policies, and logging everything.
 
+**📖 [Documentation](https://janee.io/docs/) · [Quickstart](https://janee.io/docs/quickstart.html) · [Security Model](https://janee.io/docs/security-model.html) · [Blog](https://janee.io/blog/)**
 
 ### ✨ Features
 

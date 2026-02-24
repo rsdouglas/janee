@@ -1,6 +1,6 @@
 # Janee Examples
 
-Real-world configuration examples for common use cases.
+Real-world configuration examples for common use cases. See the [full documentation](https://janee.io/docs/) for detailed guides.
 
 ## Quick Start
 
