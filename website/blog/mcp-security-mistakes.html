@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5 MCP Security Mistakes Every AI Agent Builder Makes — Janee Blog</title>
+  <meta name="description" content="MCP makes AI agents powerful, but most deployments have critical security gaps. Here are the 5 most common mistakes and how to fix them.">
+  <link rel="canonical" href="https://janee.io/blog/mcp-security-mistakes">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://janee.io/blog/mcp-security-mistakes">
+  <meta property="og:title" content="5 MCP Security Mistakes Every AI Agent Builder Makes">
+  <meta property="og:description" content="MCP makes AI agents powerful, but most deployments have critical security gaps. Here are the 5 most common mistakes and how to fix them.">
+  <meta property="og:image" content="https://janee.io/og-image.png">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+
+    :root {
+      --bg: #ffffff;
+      --bg-subtle: #f8f9fa;
+      --bg-card: #ffffff;
+      --fg: #1a1a2e;
+      --fg-muted: #6b7280;
+      --fg-dim: #9ca3af;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --accent-subtle: rgba(16, 185, 129, 0.08);
+      --accent-glow: rgba(16, 185, 129, 0.12);
+      --border: #e5e7eb;
+      --border-subtle: #f3f4f6;
+      --code-bg: #f4f5f7;
+      --code-fg: #1a1a2e;
+    }
+
+    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ── Nav ── */
+    nav {
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    nav .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--fg);
+      text-decoration: none;
+    }
+    nav .logo span { color: var(--accent); }
+    nav .links { display: flex; gap: 1.5rem; align-items: center; }
+    nav .links a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    nav .links a:hover { color: var(--accent); }
+    nav .links .gh-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    /* ── Blog ── */
+    .blog-header {
+      padding: 3rem 0 1rem;
+      text-align: center;
+    }
+    .blog-header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 0.75rem;
+    }
+    .blog-meta {
+      color: var(--fg-muted);
+      font-size: 0.9rem;
+    }
+
+    .blog-content {
+      padding: 2rem 0 4rem;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .blog-content h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 2.5rem 0 1rem;
+      color: var(--fg);
+    }
+    .blog-content h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 2rem 0 0.75rem;
+      color: var(--fg);
+    }
+    .blog-content p {
+      margin-bottom: 1.25rem;
+      color: var(--fg);
+      line-height: 1.75;
+    }
+    .blog-content ul, .blog-content ol {
+      margin: 0 0 1.25rem 1.5rem;
+      line-height: 1.75;
+    }
+    .blog-content li { margin-bottom: 0.5rem; }
+    .blog-content code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--code-bg);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.88rem;
+    }
+    .blog-content pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+    .blog-content pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.85rem;
+    }
+    .blog-content blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 0.75rem 1.25rem;
+      margin: 1.5rem 0;
+      background: var(--accent-subtle);
+      border-radius: 0 8px 8px 0;
+      color: var(--fg);
+    }
+    .blog-content a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .blog-content a:hover { text-decoration: underline; }
+
+    .mistake-num {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 2rem;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+
+    .fix-box {
+      background: var(--accent-subtle);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin: 1rem 0 1.5rem;
+    }
+    .fix-box strong {
+      color: var(--accent);
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border-subtle);
+      padding: 2rem 0;
+      text-align: center;
+      color: var(--fg-dim);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">🔐 Janee<span>.io</span></a>
+      <div class="links">
+        <a href="/docs/">Docs</a>
+        <a href="/docs/quickstart">Quickstart</a>
+        <a href="/blog/">Blog</a>
+        <a href="https://github.com/rsdouglas/janee" class="gh-link" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <header class="blog-header">
+      <h1>5 MCP Security Mistakes Every AI Agent Builder Makes</h1>
+      <p class="blog-meta">February 25, 2026 · 8 min read</p>
+    </header>
+
+    <article class="blog-content">
+
+      <p>The <a href="https://modelcontextprotocol.io">Model Context Protocol</a> is transforming how AI agents interact with external services. But with great power comes great attack surface. Most MCP deployments we've seen have at least three of these five security gaps.</p>
+
+      <p>Here's what's going wrong — and how to fix each one.</p>
+
+      <h2><span class="mistake-num">1</span> Hardcoding API Keys in MCP Server Config</h2>
+
+      <p>This is the most common mistake by far. The typical MCP setup guide tells you to put your API key directly in the server configuration:</p>
+
+<pre><code>{
+  "mcpServers": {
+    "my-api": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "STRIPE_KEY": "sk_live_abc123...",
+        "OPENAI_KEY": "sk-def456..."
+      }
+    }
+  }
+}</code></pre>
+
+      <p>The problem? That config file is readable by every process on your machine. It's probably in a git repo somewhere. And worst of all — the MCP server (and the AI agent using it) has your raw API key in its process environment.</p>
+
+      <p>One prompt injection and that key is exfiltrated in a tool call to an attacker-controlled URL.</p>
+
+      <div class="fix-box">
+        <strong>✅ Fix:</strong> Use a secrets manager that injects credentials at request time, not at startup. The agent should never have the raw key in memory. <a href="/docs/how-it-works">Janee's proxy approach</a> passes requests through a credential-injecting proxy — the agent sees a <code>baseUrl</code> but never the key itself.
+      </div>
+
+      <h2><span class="mistake-num">2</span> No Audit Trail for Agent API Calls</h2>
+
+      <p>When your AI agent makes 47 API calls in a session, can you tell me:</p>
+      <ul>
+        <li>Which endpoints were hit?</li>
+        <li>What HTTP methods were used?</li>
+        <li>What was the response status?</li>
+        <li>Was any data modified or deleted?</li>
+      </ul>
+
+      <p>Most MCP setups have zero visibility here. The agent calls a tool, the tool hits an API, and nobody knows what happened unless you go digging through provider dashboards after the fact.</p>
+
+      <p>This matters most when things go wrong. A billing spike, unexpected data changes, or a rate limit hit — without audit logs, you're flying blind.</p>
+
+      <div class="fix-box">
+        <strong>✅ Fix:</strong> Route agent API traffic through a logging proxy. Every request should be captured with timestamp, method, path, and response status. Janee's <code>audit log</code> records all of this automatically — <code>janee sessions</code> shows exactly what each agent session did.
+      </div>
+
+      <h2><span class="mistake-num">3</span> Giving Agents Full API Access (No Policies)</h2>
+
+      <p>Your coding agent needs to read GitHub repos. So you give it a GitHub token with <code>repo</code> scope. Now it can also:</p>
+      <ul>
+        <li>Delete repositories</li>
+        <li>Push to <code>main</code></li>
+        <li>Create webhooks</li>
+        <li>Modify branch protection rules</li>
+        <li>Access private repos it doesn't need</li>
+      </ul>
+
+      <p>This is the principle of least privilege, and almost nobody applies it to AI agents. The common excuse: "The token scope is as narrow as I can make it." But API providers give coarse-grained scopes. <code>repo</code> means everything.</p>
+
+      <div class="fix-box">
+        <strong>✅ Fix:</strong> Layer <strong>request-level policies</strong> on top of API tokens. Even if the underlying token has broad permissions, your proxy should enforce rules like "only GET requests to <code>/repos/myorg/*</code>" or "no DELETE methods." Janee's <a href="/docs/policies">policy engine</a> lets you define allow/deny rules per service at the HTTP method and path level.
+      </div>
+
+      <h2><span class="mistake-num">4</span> No Session Timeouts or Kill Switch</h2>
+
+      <p>Once an agent has API access, how long does it keep it? In most MCP setups: forever. The API key is in the config, so the agent has permanent access until you manually rotate the key.</p>
+
+      <p>This is especially dangerous for autonomous agents that run unattended. If an agent enters a bad loop and starts making hundreds of API calls per minute, you need a way to cut it off <em>immediately</em> — not in 30 minutes when you notice your bill.</p>
+
+      <div class="fix-box">
+        <strong>✅ Fix:</strong> Use session-based access with TTLs. Agent gets a time-limited session (e.g., 1 hour). When the session expires, access is gone — no key rotation needed. Janee supports <a href="/docs/cli#session-management">session TTLs</a> with instant revocation: <code>janee sessions revoke &lt;id&gt;</code> kills access in under a second.
+      </div>
+
+      <h2><span class="mistake-num">5</span> Running MCP Servers Over HTTP Without Authentication</h2>
+
+      <p>The MCP spec supports both <code>stdio</code> (local) and <code>SSE</code>/<code>Streamable HTTP</code> (remote) transports. When you move to HTTP-based transport for remote agents, you need authentication on the MCP server itself.</p>
+
+      <p>We've seen MCP servers deployed on internal networks with no auth — just an open HTTP endpoint that any process can connect to. This means any compromised service on that network can control your AI agent's tools.</p>
+
+      <p>The MCP spec <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization">now includes OAuth 2.1 authorization</a>, but many server implementations haven't caught up.</p>
+
+      <div class="fix-box">
+        <strong>✅ Fix:</strong> For local agents, prefer <code>stdio</code> transport (no network exposure). For remote agents, always require authentication on your MCP server. If your server doesn't support auth natively, put it behind an authenticating reverse proxy.
+      </div>
+
+      <h2>The Pattern</h2>
+
+      <p>Notice the common thread? All five mistakes come from treating AI agents like trusted internal services. They're not. They're executing untrusted instructions (user prompts) with access to your real infrastructure.</p>
+
+      <p>The security model for AI agents should look more like a <strong>zero-trust network</strong>:</p>
+      <ul>
+        <li>Never trust the agent with raw credentials</li>
+        <li>Log everything</li>
+        <li>Enforce least-privilege at the request level</li>
+        <li>Time-limit all access</li>
+        <li>Authenticate all connections</li>
+      </ul>
+
+      <p>This is exactly the model Janee was built around. It's open source, local-first, and works with any MCP client.</p>
+
+      <p><a href="/docs/quickstart">Get started in 5 minutes →</a></p>
+
+    </article>
+  </div>
+
+  <footer>
+    <div class="container">
+      <p>© 2026 Janee · <a href="https://github.com/rsdouglas/janee" style="color:var(--accent)">GitHub</a> · <a href="/docs/" style="color:var(--accent)">Docs</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>

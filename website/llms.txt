@@ -101,3 +101,4 @@ capabilities:
 ---
 
 Built by the team behind OpenClaw. Open source, MIT licensed. Available on npm.
+- [5 MCP Security Mistakes Every AI Agent Builder Makes](https://janee.io/blog/mcp-security-mistakes): Common MCP security gaps and how to fix them with Janee
