@@ -7,6 +7,9 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import http from 'http';
 import https from 'https';
+import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
+import { canAgentAccess, resolveAgentIdentity, CredentialOwnership } from './agent-scope.js';
+import { MetricsCollector } from './metrics.js';
 import { join } from 'path';
 import { URL } from 'url';
 
@@ -152,6 +155,8 @@ export interface MCPServerOptions {
   /** When true, janee_exec is hidden from the tool list. Used in authority/HTTP mode
    * where exec would run in the wrong context. */
   hideExecTool?: boolean;
+  /** Optional metrics collector for tracking tool call statistics */
+  metrics?: MetricsCollector;
 }
 
 /**
@@ -186,7 +191,7 @@ export interface MCPServerResult {
  * Create and start MCP server
  */
 export function createMCPServer(options: MCPServerOptions): MCPServerResult {
-  const { sessionManager, auditLogger, defaultAccess, onExecute, onExecCommand, onReloadConfig, onPersistOwnership, onForwardToolCall } = options;
+  const { sessionManager, auditLogger, defaultAccess, onExecute, onExecCommand, onReloadConfig, onPersistOwnership, onForwardToolCall, metrics } = options;
   
   // Store as mutable to support hot-reloading
   let capabilities = options.capabilities;
@@ -370,6 +375,21 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     if (onReloadConfig) {
       tools.push(reloadConfigTool);
     }
+    if (metrics) {
+      tools.push({
+        name: 'janee_metrics',
+        description: 'View tool call metrics and statistics for this Janee instance',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            window_seconds: {
+              type: 'number',
+              description: 'Only include metrics from the last N seconds (default: all time)'
+            }
+          }
+        }
+      });
+    }
     return { tools };
   });
 
@@ -385,7 +405,33 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
         return result as any;
       }
 
+      // Record metrics (exclude janee_metrics itself)
+      if (metrics && name !== 'janee_metrics') {
+        const metricsAgentId = resolveAgentFromRequest(extra, args);
+        metrics.record({
+          tool: name,
+          agentId: metricsAgentId,
+          service: 'janee',
+          duration: 0,
+          success: true
+        });
+      }
+
       switch (name) {
+        case 'janee_metrics': {
+          if (!metrics) {
+            return {
+              content: [{ type: 'text', text: 'Metrics collection is not enabled' }],
+              isError: true
+            };
+          }
+          const windowSeconds = (args as any)?.window_seconds;
+          const summary = metrics.summarize(windowSeconds);
+          return {
+            content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }]
+          };
+        }
+
         case 'list_services': {
           const listAgentId = resolveAgentFromRequest(extra, args);
           return {
