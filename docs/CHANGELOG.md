@@ -2,6 +2,21 @@
 
 All notable changes to Janee will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **`janee test [service]`** — CLI command to test service connectivity and authentication. Tests one service or all configured services, verifying that Janee can reach the endpoint and that credentials are accepted. Supports `--json` and `--timeout`.
+- **`test_service` MCP tool** — Agents can test service connections via MCP. Works in both standalone and runner mode (forwarded to Authority).
+- **`POST /v1/test` REST endpoint** — Authority mode REST endpoint for testing services, authenticated via runner key.
+- **`testPath` in service config and templates** — Each service now stores an auth-required GET endpoint for meaningful credential testing (e.g. `/v1/balance` for Stripe, `/user` for GitHub, `/v1/models` for OpenAI). `janee add` prompts for it (pre-populated from template). Existing configs without `testPath` gracefully fall back to template directory lookup, then base URL.
+- **`src/core/auth.ts`** — Extracted shared auth header injection from `serve-mcp.ts` into a reusable module. All interfaces (CLI test, MCP proxy, REST) now use the same auth injection path.
+
+### Changed
+
+- **`serve-mcp.ts`** — Refactored `onExecute` to use shared `buildAuthHeaders()` from `src/core/auth.ts`, eliminating ~80 lines of duplicated auth logic.
+- **`health.ts`** — Added `testServiceConnection()` for authenticated health checks (the existing `checkServiceHealth()` only does unauthenticated HEAD requests). Uses template directory to resolve the best test endpoint per service.
+
 ## [0.11.0] - 2026-02-18
 
 ### Added

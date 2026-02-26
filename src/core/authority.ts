@@ -1,7 +1,22 @@
+import {
+  randomUUID,
+  timingSafeEqual,
+} from 'crypto';
 import express from 'express';
-import { randomUUID, timingSafeEqual } from 'crypto';
-import { validateCommand, buildExecEnv, hashPolicyFingerprint } from './exec.js';
-import { getInstallationToken, GitHubAppCredentials } from './github-app.js';
+
+import {
+  buildExecEnv,
+  hashPolicyFingerprint,
+  validateCommand,
+} from './exec.js';
+import {
+  getInstallationToken,
+  GitHubAppCredentials,
+} from './github-app.js';
+import {
+  ServiceTestResult,
+  testServiceConnection,
+} from './health.js';
 
 export interface RunnerIdentity {
   runnerId: string;
@@ -48,6 +63,7 @@ export interface ExecCompleteRequest {
 export interface AuthorityExecHooks {
   authorizeExec: (req: ExecAuthorizeRequest) => Promise<ExecAuthorizeResponse>;
   completeExec: (req: ExecCompleteRequest) => Promise<void>;
+  testService?: (serviceName?: string) => Promise<ServiceTestResult | ServiceTestResult[]>;
 }
 
 export function createAuthorityApp(apiKey: string, hooks: AuthorityExecHooks): express.Express {
@@ -101,6 +117,17 @@ export function createAuthorityApp(apiKey: string, hooks: AuthorityExecHooks): e
     }
   });
 
+  if (hooks.testService) {
+    app.post('/v1/test', async (req, res) => {
+      try {
+        const result = await hooks.testService!(req.body?.service);
+        res.status(200).json(result);
+      } catch (error) {
+        res.status(500).json({ error: error instanceof Error ? error.message : 'Test failed' });
+      }
+    });
+  }
+
   return app;
 }
 
@@ -115,6 +142,17 @@ export function buildAuthorityHooks(
   const grantCache = new Map<string, { startedAt: number; capabilityId: string }>();
 
   return {
+    testService: async (serviceName?: string): Promise<ServiceTestResult | ServiceTestResult[]> => {
+      if (serviceName) {
+        const svc = config.services[serviceName];
+        if (!svc) throw new Error(`Unknown service: ${serviceName}`);
+        return testServiceConnection(serviceName, svc);
+      }
+      const results = await Promise.all(
+        Object.entries(config.services).map(([name, svc]) => testServiceConnection(name, svc))
+      );
+      return results;
+    },
     authorizeExec: async (req: ExecAuthorizeRequest): Promise<ExecAuthorizeResponse> => {
       const cap = config.capabilities.find((c) => c.name === req.capabilityId);
       if (!cap) throw new Error(`Unknown capability: ${req.capabilityId}`);

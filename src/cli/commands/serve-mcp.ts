@@ -1,16 +1,40 @@
-import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import { startMCPServer, startMCPServerHTTP, MCPServerOptions, Capability, ServiceConfig, makeAPIRequest, ReloadResult } from '../../core/mcp-server';
-import { SessionManager } from '../../core/sessions';
-import { AuditLogger } from '../../core/audit';
-import { getAuditDir } from '../config-yaml';
-import { signBybit, signOKX, signMEXC } from '../../core/signing';
-import { getAccessToken, validateServiceAccountCredentials, ServiceAccountCredentials, clearCachedToken } from '../../core/service-account';
-import { getInstallationToken, clearCachedInstallationToken, GitHubAppCredentials } from '../../core/github-app';
-import { URL } from 'url';
-import { buildExecEnv, executeCommand } from '../../core/exec.js';
-import { authorityAuthorizeExec, authorityCompleteExec, buildAuthorityHooks } from '../../core/authority.js';
-import { forwardToolCall, resetAuthoritySession } from '../../core/runner-proxy.js';
 import { randomUUID } from 'crypto';
+import { URL } from 'url';
+
+import { AuditLogger } from '../../core/audit';
+import { buildAuthHeaders } from '../../core/auth.js';
+import {
+  authorityAuthorizeExec,
+  authorityCompleteExec,
+  buildAuthorityHooks,
+} from '../../core/authority.js';
+import {
+  buildExecEnv,
+  executeCommand,
+} from '../../core/exec.js';
+import {
+  getInstallationToken,
+  GitHubAppCredentials,
+} from '../../core/github-app';
+import {
+  Capability,
+  makeAPIRequest,
+  MCPServerOptions,
+  ReloadResult,
+  ServiceConfig,
+  startMCPServer,
+  startMCPServerHTTP,
+} from '../../core/mcp-server';
+import {
+  forwardToolCall,
+  resetAuthoritySession,
+} from '../../core/runner-proxy.js';
+import { SessionManager } from '../../core/sessions';
+import {
+  getAuditDir,
+  hasYAMLConfig,
+  loadYAMLConfig,
+} from '../config-yaml';
 
 /**
  * Load config and convert to MCP format
@@ -242,93 +266,17 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
           throw new Error(`Request blocked: URL origin ${targetUrl.origin} does not match service origin ${serviceOrigin}`);
         }
 
-        // Build headers
+        // Build headers with auth injection
         const headers: Record<string, string> = { ...request.headers };
-
-        // Inject auth
-        if (serviceConfig.auth.type === 'bearer' && serviceConfig.auth.key) {
-          headers['Authorization'] = `Bearer ${serviceConfig.auth.key}`;
-        } else if (serviceConfig.auth.type === 'headers' && serviceConfig.auth.headers) {
-          Object.assign(headers, serviceConfig.auth.headers);
-        } else if (serviceConfig.auth.type === 'hmac-mexc' && serviceConfig.auth.apiKey && serviceConfig.auth.apiSecret) {
-          // MEXC HMAC - signs query string, adds signature as URL param
-          const result = signMEXC({
-            apiKey: serviceConfig.auth.apiKey,
-            apiSecret: serviceConfig.auth.apiSecret,
-            queryString: targetUrl.searchParams.toString()
-          });
-          Object.assign(headers, result.headers);
-          if (result.urlParams) {
-            for (const [key, value] of Object.entries(result.urlParams)) {
-              targetUrl.searchParams.set(key, value);
-            }
-          }
-        } else if (serviceConfig.auth.type === 'hmac-bybit' && serviceConfig.auth.apiKey && serviceConfig.auth.apiSecret) {
-          // Bybit-style HMAC - signature in headers
-          const result = signBybit({
-            apiKey: serviceConfig.auth.apiKey,
-            apiSecret: serviceConfig.auth.apiSecret,
-            method: request.method,
-            queryString: targetUrl.searchParams.toString(),
-            body: request.body
-          });
-          Object.assign(headers, result.headers);
-        } else if (serviceConfig.auth.type === 'hmac-okx' && serviceConfig.auth.apiKey && serviceConfig.auth.apiSecret && serviceConfig.auth.passphrase) {
-          // OKX-style HMAC - signature with passphrase, base64 encoded
-          const result = signOKX({
-            apiKey: serviceConfig.auth.apiKey,
-            apiSecret: serviceConfig.auth.apiSecret,
-            passphrase: serviceConfig.auth.passphrase,
-            method: request.method,
-            requestPath: '/' + reqPath + (targetUrl.search || ''),
-            body: request.body
-          });
-          Object.assign(headers, result.headers);
-        } else if (serviceConfig.auth.type === 'service-account' && serviceConfig.auth.credentials && serviceConfig.auth.scopes) {
-          // Google service account OAuth2
-          try {
-            const credentials = JSON.parse(serviceConfig.auth.credentials) as ServiceAccountCredentials;
-            validateServiceAccountCredentials(credentials);
-
-            const accessToken = await getAccessToken(
-              request.service,
-              credentials,
-              serviceConfig.auth.scopes
-            );
-
-            headers['Authorization'] = `Bearer ${accessToken}`;
-          } catch (error) {
-            // If we get a 401, clear cache and retry once
-            if (error instanceof Error && error.message.includes('401')) {
-              clearCachedToken(request.service, serviceConfig.auth.scopes);
-              const credentials = JSON.parse(serviceConfig.auth.credentials) as ServiceAccountCredentials;
-              const accessToken = await getAccessToken(
-                request.service,
-                credentials,
-                serviceConfig.auth.scopes
-              );
-              headers['Authorization'] = `Bearer ${accessToken}`;
-            } else {
-              throw error;
-            }
-          }
-        } else if (serviceConfig.auth.type === 'github-app' && serviceConfig.auth.appId && serviceConfig.auth.privateKey && serviceConfig.auth.installationId) {
-          const ghCreds: GitHubAppCredentials = {
-            appId: serviceConfig.auth.appId,
-            privateKey: serviceConfig.auth.privateKey,
-            installationId: serviceConfig.auth.installationId,
-          };
-          try {
-            const installationToken = await getInstallationToken(request.service, ghCreds);
-            headers['Authorization'] = `Bearer ${installationToken}`;
-          } catch (error) {
-            if (error instanceof Error && error.message.includes('401')) {
-              clearCachedInstallationToken(request.service);
-              const installationToken = await getInstallationToken(request.service, ghCreds);
-              headers['Authorization'] = `Bearer ${installationToken}`;
-            } else {
-              throw error;
-            }
+        const authResult = await buildAuthHeaders(request.service, serviceConfig, {
+          method: request.method,
+          targetUrl,
+          body: request.body,
+        });
+        Object.assign(headers, authResult.headers);
+        if (authResult.urlParams) {
+          for (const [key, value] of Object.entries(authResult.urlParams)) {
+            targetUrl.searchParams.set(key, value);
           }
         }
 

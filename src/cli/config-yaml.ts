@@ -4,11 +4,20 @@
  */
 
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import yaml from 'js-yaml';
-import { encryptSecret, decryptSecret, generateMasterKey } from '../core/crypto';
-import { CredentialOwnership, agentCreatedOwnership, cliCreatedOwnership } from '../core/agent-scope';
+import os from 'os';
+import path from 'path';
+
+import {
+  agentCreatedOwnership,
+  cliCreatedOwnership,
+  CredentialOwnership,
+} from '../core/agent-scope';
+import {
+  decryptSecret,
+  encryptSecret,
+  generateMasterKey,
+} from '../core/crypto';
 
 export interface AuthConfig {
   type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
@@ -27,6 +36,8 @@ export interface AuthConfig {
 export interface ServiceConfig {
   baseUrl: string;
   auth: AuthConfig;
+  /** Auth-required GET path used by `janee test` to verify credentials (e.g. "/v1/balance") */
+  testPath?: string;
   /** Ownership metadata for agent-scoped credential access control */
   ownership?: CredentialOwnership;
 }
