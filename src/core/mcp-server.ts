@@ -7,8 +7,6 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import http from 'http';
 import https from 'https';
-import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
-import { canAgentAccess, resolveAgentIdentity, CredentialOwnership } from './agent-scope.js';
 import { MetricsCollector } from './metrics.js';
 import { join } from 'path';
 import { URL } from 'url';
@@ -34,7 +32,10 @@ import {
 } from './agent-scope.js';
 import { AuditLogger } from './audit.js';
 import {
+  buildExecEnv,
   ExecResult,
+  executeCommand,
+  scrubCredentials,
   validateCommand,
 } from './exec.js';
 import {
