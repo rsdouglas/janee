@@ -4,9 +4,13 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+_(empty)_
+
+## [0.12.0] - 2026-02-27
+
 ### Added
 
-- **Library exports** — Added `agentCreatedOwnership`, `cliCreatedOwnership`, and `createServiceWithOwnership` to the public barrel file so orchestrators can construct ownership metadata programmatically.
+- **Library exports** — New `src/index.ts` barrel file exposes Janee's config and agent-scope APIs for programmatic use. Exports include `loadYAMLConfig`, `saveYAMLConfig`, `addServiceYAML`, `createServiceWithOwnership`, ownership factories (`agentCreatedOwnership`, `cliCreatedOwnership`), access control (`canAgentAccess`, `grantAccess`, `revokeAccess`), and all config types.
 - **`janee test [service]`** — CLI command to test service connectivity and authentication. Tests one service or all configured services, verifying that Janee can reach the endpoint and that credentials are accepted. Supports `--json` and `--timeout`.
 - **`test_service` MCP tool** — Agents can test service connections via MCP. Works in both standalone and runner mode (forwarded to Authority).
 - **`POST /v1/test` REST endpoint** — Authority mode REST endpoint for testing services, authenticated via runner key.
