@@ -229,7 +229,7 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
 }
 
 /**
- * Save YAML configuration
+ * Save config to disk. Send SIGHUP to a running Janee process to reload.
  */
 export function saveYAMLConfig(config: JaneeYAMLConfig): void {
   // Encrypt service auth keys before saving

@@ -20,6 +20,7 @@ export type {
 export {
   addCapabilityYAML,
   addServiceYAML,
+  createServiceWithOwnership,
   getConfigDir,
   hasYAMLConfig,
   initYAMLConfig,
@@ -35,7 +36,9 @@ export type {
 } from './core/agent-scope';
 
 export {
+  agentCreatedOwnership,
   canAgentAccess,
+  cliCreatedOwnership,
   grantAccess,
   revokeAccess,
 } from './core/agent-scope';
