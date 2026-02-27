@@ -580,6 +580,8 @@ You can also edit `~/.janee/config.yaml` directly if you prefer.
 
 Agent never touches the real key.
 
+> 📐 **Deep dive:** See [Architecture & Security Model](docs/architecture.md) for detailed diagrams, threat model, and comparison with alternatives.
+
 ---
 
 ## Security
