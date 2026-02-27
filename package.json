@@ -4,6 +4,13 @@
   "version": "0.11.3",
   "description": "Secrets management for AI agents via MCP",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "bin": {
     "janee": "dist/cli/index.js"
   },
