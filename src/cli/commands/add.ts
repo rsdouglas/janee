@@ -1,14 +1,35 @@
-import * as readline from 'readline/promises';
-import { stdin as input, stdout as output } from 'process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import {
+  stdin as input,
+  stdout as output,
+} from 'process';
+import * as readline from 'readline/promises';
+
 import { select } from '@inquirer/prompts';
-import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import type { AuthConfig, ServiceConfig, CapabilityConfig } from '../config-yaml';
-import { getService, searchDirectory, ServiceTemplate } from '../../core/directory';
-import { validateServiceAccountCredentials, testServiceAccountAuth } from '../../core/service-account';
-import { validateGitHubAppCredentials, testGitHubAppAuth } from '../../core/github-app';
+
+import {
+  getService,
+  searchDirectory,
+} from '../../core/directory';
+import {
+  testGitHubAppAuth,
+  validateGitHubAppCredentials,
+} from '../../core/github-app';
+import {
+  testServiceAccountAuth,
+  validateServiceAccountCredentials,
+} from '../../core/service-account';
+import type {
+  AuthConfig,
+  CapabilityConfig,
+} from '../config-yaml';
+import {
+  hasYAMLConfig,
+  loadYAMLConfig,
+  saveYAMLConfig,
+} from '../config-yaml';
 
 function resolveEnvVar(varName: string, label: string): string {
   const value = process.env[varName];
@@ -57,6 +78,7 @@ export async function addCommand(
     passphraseFromEnv?: string;
     credentialsFile?: string;
     scope?: string | string[];
+    testPath?: string;
     exec?: boolean;
     allowCommands?: string[];
     envMap?: string[];
@@ -585,10 +607,27 @@ export async function addCommand(
       };
     }
 
+    // Resolve test path: CLI flag > template default > prompt
+    let testPath = options.testPath;
+    if (!testPath && !options.exec) {
+      const templateDefault = template?.testPath;
+      if (options.json && !prompted) {
+        // Non-interactive JSON mode: use template default if available
+        testPath = templateDefault;
+      } else if (templateDefault) {
+        const answer = await getRL().question(`Test endpoint [${templateDefault}]: `);
+        testPath = answer.trim() || templateDefault;
+      } else {
+        const answer = await getRL().question('Test endpoint (auth-required GET path, e.g. /v1/balance): ');
+        testPath = answer.trim() || undefined;
+      }
+    }
+
     // Add service to config
     config.services[serviceName] = {
       baseUrl,
-      auth
+      auth,
+      ...(testPath && { testPath }),
     };
 
     saveYAMLConfig(config);

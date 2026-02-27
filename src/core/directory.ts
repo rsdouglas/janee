@@ -12,6 +12,8 @@ export interface ServiceTemplate {
     type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
     fields: string[];  // Required fields to prompt for
   };
+  /** Lightweight GET path that requires auth — used by `janee test` to verify credentials */
+  testPath?: string;
   docs?: string;
   tags: string[];
 }
@@ -32,6 +34,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Payment processing platform',
     baseUrl: 'https://api.stripe.com',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/v1/balance',
     docs: 'https://stripe.com/docs/api',
     tags: ['payment', 'finance']
   },
@@ -42,6 +45,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Code hosting and collaboration',
     baseUrl: 'https://api.github.com',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/user',
     docs: 'https://docs.github.com/en/rest',
     tags: ['developer', 'git', 'code']
   },
@@ -50,6 +54,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'GitHub App with installation tokens (for autonomous agents)',
     baseUrl: 'https://api.github.com',
     auth: { type: 'github-app', fields: ['appId', 'pemFile', 'installationId'] },
+    testPath: '/app',
     docs: 'https://docs.github.com/en/apps',
     tags: ['developer', 'git', 'code']
   },
@@ -58,6 +63,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Issue tracking for software teams',
     baseUrl: 'https://api.linear.app',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/graphql',
     docs: 'https://developers.linear.app/docs',
     tags: ['developer', 'project-management', 'issues']
   },
@@ -66,6 +72,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Frontend deployment platform',
     baseUrl: 'https://api.vercel.com',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/v9/projects',
     docs: 'https://vercel.com/docs/rest-api',
     tags: ['developer', 'deployment', 'hosting']
   },
@@ -74,6 +81,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'CDN and edge computing platform',
     baseUrl: 'https://api.cloudflare.com/client/v4',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/zones',
     docs: 'https://developers.cloudflare.com/api',
     tags: ['developer', 'cdn', 'dns']
   },
@@ -84,6 +92,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'OpenAI API for GPT and DALL-E',
     baseUrl: 'https://api.openai.com/v1',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/models',
     docs: 'https://platform.openai.com/docs/api-reference',
     tags: ['ai', 'llm', 'ml']
   },
@@ -92,6 +101,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Anthropic Claude API',
     baseUrl: 'https://api.anthropic.com',
     auth: { type: 'headers', fields: ['x-api-key'] },
+    testPath: '/v1/models',
     docs: 'https://docs.anthropic.com/en/api',
     tags: ['ai', 'llm', 'ml']
   },
@@ -100,6 +110,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Run ML models in the cloud',
     baseUrl: 'https://api.replicate.com/v1',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/models',
     docs: 'https://replicate.com/docs/reference/http',
     tags: ['ai', 'ml', 'models']
   },
@@ -110,6 +121,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Cryptocurrency derivatives exchange',
     baseUrl: 'https://api.bybit.com',
     auth: { type: 'hmac-bybit', fields: ['apiKey', 'apiSecret'] },
+    testPath: '/v5/account/wallet-balance?accountType=UNIFIED',
     docs: 'https://bybit-exchange.github.io/docs',
     tags: ['crypto', 'exchange', 'trading']
   },
@@ -118,6 +130,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Cryptocurrency exchange',
     baseUrl: 'https://www.okx.com',
     auth: { type: 'hmac-okx', fields: ['apiKey', 'apiSecret', 'passphrase'] },
+    testPath: '/api/v5/account/balance',
     docs: 'https://www.okx.com/docs-v5',
     tags: ['crypto', 'exchange', 'trading']
   },
@@ -126,6 +139,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Cryptocurrency exchange',
     baseUrl: 'https://api.mexc.com',
     auth: { type: 'hmac-mexc', fields: ['apiKey', 'apiSecret'] },
+    testPath: '/api/v3/account',
     docs: 'https://mexcdevelop.github.io/apidocs',
     tags: ['crypto', 'exchange', 'trading']
   },
@@ -134,6 +148,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Cryptocurrency exchange (Advanced Trade API)',
     baseUrl: 'https://api.coinbase.com',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/api/v3/brokerage/accounts',
     docs: 'https://docs.cloud.coinbase.com/advanced-trade-api',
     tags: ['crypto', 'exchange', 'trading']
   },
@@ -144,6 +159,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Team communication platform',
     baseUrl: 'https://slack.com/api',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/auth.test',
     docs: 'https://api.slack.com/methods',
     tags: ['communication', 'messaging', 'team']
   },
@@ -152,6 +168,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Chat platform for communities',
     baseUrl: 'https://discord.com/api/v10',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/users/@me',
     docs: 'https://discord.com/developers/docs',
     tags: ['communication', 'messaging', 'community']
   },
@@ -160,6 +177,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Email delivery service',
     baseUrl: 'https://api.sendgrid.com/v3',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/scopes',
     docs: 'https://docs.sendgrid.com/api-reference',
     tags: ['email', 'communication']
   },
@@ -168,6 +186,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Communication APIs (SMS, Voice)',
     baseUrl: 'https://api.twilio.com/2010-04-01',
     auth: { type: 'basic', fields: ['accountSid', 'authToken'] },
+    testPath: '/Accounts.json',
     docs: 'https://www.twilio.com/docs/usage/api',
     tags: ['sms', 'voice', 'communication']
   },
@@ -176,6 +195,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Modern email API',
     baseUrl: 'https://api.resend.com',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/domains',
     docs: 'https://resend.com/docs/api-reference',
     tags: ['email', 'communication']
   },
@@ -194,6 +214,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Product analytics platform',
     baseUrl: 'https://app.posthog.com/api',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/projects/',
     docs: 'https://posthog.com/docs/api',
     tags: ['analytics', 'data']
   },
@@ -220,6 +241,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Serverless MySQL platform',
     baseUrl: 'https://api.planetscale.com/v1',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/organizations',
     docs: 'https://api-docs.planetscale.com',
     tags: ['database', 'mysql']
   },
@@ -230,6 +252,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'All-in-one workspace',
     baseUrl: 'https://api.notion.com/v1',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/users/me',
     docs: 'https://developers.notion.com/reference',
     tags: ['productivity', 'notes', 'wiki']
   },
@@ -238,6 +261,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Spreadsheet-database hybrid',
     baseUrl: 'https://api.airtable.com/v0',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/meta/bases',
     docs: 'https://airtable.com/developers/web/api',
     tags: ['database', 'spreadsheet', 'productivity']
   },
@@ -246,6 +270,7 @@ export const serviceDirectory: ServiceTemplate[] = [
     description: 'Cal.com scheduling API',
     baseUrl: 'https://api.cal.com/v1',
     auth: { type: 'bearer', fields: ['key'] },
+    testPath: '/event-types',
     docs: 'https://cal.com/docs/enterprise-features/api',
     tags: ['calendar', 'scheduling']
   }

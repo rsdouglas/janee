@@ -3,27 +3,46 @@
  * Exposes capabilities to AI agents via Model Context Protocol
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-  isInitializeRequest
-} from '@modelcontextprotocol/sdk/types.js';
-import { SessionManager } from './sessions.js';
-import { checkRules, Rules } from './rules.js';
-import { AuditLogger } from './audit.js';
+import express from 'express';
+import { readFileSync } from 'fs';
 import http from 'http';
 import https from 'https';
-import { URL } from 'url';
-import express from 'express';
-import { validateCommand, buildExecEnv, executeCommand, scrubCredentials, ExecResult } from './exec.js';
-import { readFileSync } from 'fs';
-import { canAgentAccess, resolveAgentIdentity, CredentialOwnership } from './agent-scope.js';
 import { join } from 'path';
+import { URL } from 'url';
 
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import {
+  StdioServerTransport,
+} from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  StreamableHTTPServerTransport,
+} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {
+  CallToolRequestSchema,
+  isInitializeRequest,
+  ListToolsRequestSchema,
+  Tool,
+} from '@modelcontextprotocol/sdk/types.js';
+
+import {
+  canAgentAccess,
+  CredentialOwnership,
+  resolveAgentIdentity,
+} from './agent-scope.js';
+import { AuditLogger } from './audit.js';
+import {
+  ExecResult,
+  validateCommand,
+} from './exec.js';
+import {
+  ServiceTestResult,
+  testServiceConnection,
+} from './health.js';
+import {
+  checkRules,
+  Rules,
+} from './rules.js';
+import { SessionManager } from './sessions.js';
 
 // Read version from package.json
 const packageJsonPath = join(__dirname, '../../package.json');
@@ -86,6 +105,8 @@ export interface ServiceConfig {
     privateKey?: string;      // For github-app: encrypted PEM
     installationId?: string;  // For github-app
   };
+  /** Auth-required GET path used by `janee test` to verify credentials (e.g. "/v1/balance") */
+  testPath?: string;
   /** Ownership metadata for agent-scoped credential access control */
   ownership?: CredentialOwnership;
 }
@@ -324,9 +345,25 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     }
   };
 
+  // Tool: test_service
+  const testServiceTool: Tool = {
+    name: 'test_service',
+    description: 'Test connectivity and authentication for a configured service. Verifies that Janee can reach the service and that credentials are valid.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        service: {
+          type: 'string',
+          description: 'Service name to test (from list_services). Omit to test all services.'
+        }
+      },
+      required: []
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools: Tool[] = [listServicesTool, executeTool, manageCredentialTool];
+    const tools: Tool[] = [listServicesTool, executeTool, manageCredentialTool, testServiceTool];
     if (onExecCommand && !options.hideExecTool) {
       tools.push(execTool);
     }
@@ -699,6 +736,36 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           throw new Error(`Unknown action: ${credAction}. Use 'view', 'grant', or 'revoke'.`);
         }
 
+        case 'test_service': {
+          const { service: testSvcName } = (args || {}) as { service?: string };
+
+          let targets: [string, ServiceConfig][];
+          if (testSvcName) {
+            const svc = services.get(testSvcName);
+            if (!svc) {
+              throw new Error(`Unknown service: ${testSvcName}. Use list_services to see available services.`);
+            }
+            targets = [[testSvcName, svc]];
+          } else {
+            targets = Array.from(services.entries());
+          }
+
+          if (targets.length === 0) {
+            throw new Error('No services configured');
+          }
+
+          const results: ServiceTestResult[] = await Promise.all(
+            targets.map(([name, config]) => testServiceConnection(name, config))
+          );
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(results.length === 1 ? results[0] : results, null, 2)
+            }]
+          };
+        }
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -888,6 +955,17 @@ export async function startMCPServerHTTP(
         res.status(500).json({ error: error instanceof Error ? error.message : 'completion failed' });
       }
     });
+
+    if (hooks.testService) {
+      app.post('/v1/test', authMiddleware, async (req, res) => {
+        try {
+          const result = await hooks.testService!(req.body?.service);
+          res.status(200).json(result);
+        } catch (error) {
+          res.status(500).json({ error: error instanceof Error ? error.message : 'Test failed' });
+        }
+      });
+    }
   }
 
   // Sweep idle sessions every 60 seconds

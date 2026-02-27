@@ -6,25 +6,27 @@
  */
 
 import { Command } from 'commander';
-import { initCommand } from './commands/init';
-import { addCommand } from './commands/add';
-import { removeCommand } from './commands/remove';
-import { serveCommand } from './commands/serve';
-import { listCommand } from './commands/list';
-import { logsCommand } from './commands/logs';
-import { sessionsCommand } from './commands/sessions';
-import { revokeCommand } from './commands/revoke';
-import { searchCommand } from './commands/search';
-import { statusCommand } from './commands/status';
-import { authorityCommand } from './commands/authority';
-import {
-  capabilityListCommand,
-  capabilityAddCommand,
-  capabilityEditCommand,
-  capabilityRemoveCommand
-} from './commands/capability';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+
+import { addCommand } from './commands/add';
+import { authorityCommand } from './commands/authority';
+import {
+  capabilityAddCommand,
+  capabilityEditCommand,
+  capabilityListCommand,
+  capabilityRemoveCommand,
+} from './commands/capability';
+import { initCommand } from './commands/init';
+import { listCommand } from './commands/list';
+import { logsCommand } from './commands/logs';
+import { removeCommand } from './commands/remove';
+import { revokeCommand } from './commands/revoke';
+import { searchCommand } from './commands/search';
+import { serveCommand } from './commands/serve';
+import { sessionsCommand } from './commands/sessions';
+import { statusCommand } from './commands/status';
+import { testCommand } from './commands/test';
 
 // Read version from package.json
 const packageJsonPath = join(__dirname, '../../package.json');
@@ -61,6 +63,7 @@ program
   .option('--pem-file <path>', 'Path to private key PEM file (for github-app auth type)')
   .option('--app-id <id>', 'GitHub App ID (for github-app auth type)')
   .option('--installation-id <id>', 'GitHub App installation ID (for github-app auth type)')
+  .option('--test-path <path>', 'Auth-required GET endpoint for testing credentials (e.g. /v1/balance)')
   .option('--exec', 'Add as exec-mode service (CLI tool wrapper, RFC 0001)')
   .option('--allow-commands <cmds...>', 'Allowed executables for exec mode (e.g., bird gh)')
   .option('--env-map <mappings...>', 'Env var mappings (KEY=value or KEY={{credential}})')
@@ -129,6 +132,13 @@ program
   .description('Show Janee configuration and health status')
   .option('--json', 'Output as JSON')
   .action(statusCommand);
+
+program
+  .command('test [service]')
+  .description('Test service connectivity and authentication')
+  .option('--timeout <ms>', 'Request timeout in ms (default: 10000)')
+  .option('--json', 'Output as JSON')
+  .action((service, options) => testCommand(service, options));
 
 program
   .command('search [query]')
