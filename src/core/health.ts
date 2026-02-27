@@ -3,14 +3,11 @@
  * Provides connectivity and latency checks for configured API backends
  */
 
-import { URL } from 'url';
+import { URL } from "url";
 
-import { buildAuthHeaders } from './auth.js';
-import {
-  getService,
-  serviceDirectory,
-} from './directory.js';
-import { ServiceConfig } from './mcp-server.js';
+import { buildAuthHeaders } from "./auth.js";
+import { getService, serviceDirectory } from "./directory.js";
+import { ServiceConfig } from "./mcp-server.js";
 
 export interface HealthCheckResult {
   service: string;
@@ -36,7 +33,7 @@ export interface HealthCheckOptions {
 export async function checkServiceHealth(
   serviceName: string,
   baseUrl: string,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<HealthCheckResult> {
   const { timeout = 5000, fetchFn = fetch } = options;
   const checkedAt = new Date().toISOString();
@@ -46,8 +43,8 @@ export async function checkServiceHealth(
       service: serviceName,
       healthy: false,
       latencyMs: 0,
-      error: 'No base URL configured',
-      checkedAt
+      error: "No base URL configured",
+      checkedAt,
     };
   }
 
@@ -58,23 +55,24 @@ export async function checkServiceHealth(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     const response = await fetchFn(baseUrl, {
-      method: 'HEAD',
-      signal: controller.signal
+      method: "HEAD",
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
     const latencyMs = Date.now() - start;
 
     // 2xx = healthy, 401/403 = reachable (auth expected), 4xx = unhealthy, 5xx = unhealthy
-    const isReachable = response.ok || response.status === 401 || response.status === 403;
-    
+    const isReachable =
+      response.ok || response.status === 401 || response.status === 403;
+
     if (isReachable) {
       return {
         service: serviceName,
         healthy: true,
         statusCode: response.status,
         latencyMs,
-        checkedAt
+        checkedAt,
       };
     }
 
@@ -84,7 +82,7 @@ export async function checkServiceHealth(
       statusCode: response.status,
       latencyMs,
       error: `HTTP ${response.status} ${response.statusText}`,
-      checkedAt
+      checkedAt,
     };
   } catch (err) {
     const latencyMs = Date.now() - start;
@@ -95,7 +93,7 @@ export async function checkServiceHealth(
       healthy: false,
       latencyMs,
       error: message,
-      checkedAt
+      checkedAt,
     };
   }
 }
@@ -105,14 +103,13 @@ export async function checkServiceHealth(
  */
 export async function checkAllServicesHealth(
   services: Map<string, { baseUrl: string }>,
-  options: HealthCheckOptions = {}
+  options: HealthCheckOptions = {},
 ): Promise<HealthCheckResult[]> {
   const checks = Array.from(services.entries()).map(([name, config]) =>
-    checkServiceHealth(name, config.baseUrl, options)
+    checkServiceHealth(name, config.baseUrl, options),
   );
   return Promise.all(checks);
 }
-
 
 export interface ServiceTestResult {
   service: string;
@@ -140,12 +137,17 @@ export interface ServiceTestOptions {
  * Resolve the best testPath for a service by matching against the template directory.
  * Returns undefined if no template match is found.
  */
-export function resolveTestPath(serviceName: string, baseUrl: string): string | undefined {
+export function resolveTestPath(
+  serviceName: string,
+  baseUrl: string,
+): string | undefined {
   const byName = getService(serviceName);
   if (byName?.testPath) return byName.testPath;
 
   // Fall back to matching by baseUrl
-  const byUrl = serviceDirectory.find(t => t.testPath && baseUrl.startsWith(t.baseUrl));
+  const byUrl = serviceDirectory.find(
+    (t) => t.testPath && baseUrl.startsWith(t.baseUrl),
+  );
   return byUrl?.testPath;
 }
 
@@ -159,7 +161,7 @@ export function resolveTestPath(serviceName: string, baseUrl: string): string | 
 export async function testServiceConnection(
   serviceName: string,
   serviceConfig: ServiceConfig,
-  options: ServiceTestOptions = {}
+  options: ServiceTestOptions = {},
 ): Promise<ServiceTestResult> {
   const { timeout = 10000, fetchFn = fetch } = options;
   const checkedAt = new Date().toISOString();
@@ -168,29 +170,32 @@ export async function testServiceConnection(
   if (!serviceConfig.baseUrl) {
     return {
       service: serviceName,
-      baseUrl: '',
-      testUrl: '',
+      baseUrl: "",
+      testUrl: "",
       reachable: false,
       authOk: false,
       latencyMs: 0,
       authType,
-      error: 'No base URL configured',
-      checkedAt
+      error: "No base URL configured",
+      checkedAt,
     };
   }
 
-  const testPath = options.testPath || serviceConfig.testPath || resolveTestPath(serviceName, serviceConfig.baseUrl);
+  const testPath =
+    options.testPath ||
+    serviceConfig.testPath ||
+    resolveTestPath(serviceName, serviceConfig.baseUrl);
   const start = Date.now();
 
   try {
     let baseUrl = serviceConfig.baseUrl;
-    if (!baseUrl.endsWith('/')) baseUrl += '/';
-    let reqPath = testPath || '';
-    if (reqPath.startsWith('/')) reqPath = reqPath.slice(1);
+    if (!baseUrl.endsWith("/")) baseUrl += "/";
+    let reqPath = testPath || "";
+    if (reqPath.startsWith("/")) reqPath = reqPath.slice(1);
     const targetUrl = new URL(reqPath, baseUrl);
 
     const authResult = await buildAuthHeaders(serviceName, serviceConfig, {
-      method: 'GET',
+      method: "GET",
       targetUrl,
       body: undefined,
     });
@@ -205,7 +210,7 @@ export async function testServiceConnection(
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     const response = await fetchFn(targetUrl.toString(), {
-      method: 'GET',
+      method: "GET",
       headers: authResult.headers,
       signal: controller.signal,
     });
@@ -221,7 +226,7 @@ export async function testServiceConnection(
     if (!authOk) {
       try {
         const raw = await response.text();
-        responseBody = raw.length > 512 ? raw.slice(0, 512) + '…' : raw;
+        responseBody = raw.length > 512 ? raw.slice(0, 512) + "…" : raw;
       } catch {
         // best-effort
       }
@@ -236,23 +241,27 @@ export async function testServiceConnection(
       statusCode: response.status,
       latencyMs,
       authType,
-      ...(response.status === 401 && { error: 'Authentication failed (401)' }),
-      ...(response.status === 403 && { error: 'Forbidden (403) — credentials may lack required permissions' }),
-      ...(!response.ok && response.status !== 401 && response.status !== 403 && {
-        error: `HTTP ${response.status} ${response.statusText}`
+      ...(response.status === 401 && { error: "Authentication failed (401)" }),
+      ...(response.status === 403 && {
+        error: "Forbidden (403) — credentials may lack required permissions",
       }),
+      ...(!response.ok &&
+        response.status !== 401 &&
+        response.status !== 403 && {
+          error: `HTTP ${response.status} ${response.statusText}`,
+        }),
       responseBody,
       checkedAt,
     };
   } catch (err) {
     const latencyMs = Date.now() - start;
     const message = err instanceof Error ? err.message : String(err);
-    const isTimeout = message.includes('abort');
+    const isTimeout = message.includes("abort");
 
     return {
       service: serviceName,
       baseUrl: serviceConfig.baseUrl,
-      testUrl: serviceConfig.baseUrl + (testPath || ''),
+      testUrl: serviceConfig.baseUrl + (testPath || ""),
       reachable: false,
       authOk: false,
       latencyMs,
@@ -261,4 +270,111 @@ export async function testServiceConnection(
       checkedAt,
     };
   }
+}
+
+// --- Exec-mode health checks ---
+
+export interface ExecHealthCheckResult {
+  service: string;
+  capability: string;
+  healthy: boolean;
+  checks: {
+    binaryExists: boolean;
+    binaryPath?: string;
+    envResolvable: boolean;
+    unresolvedVars?: string[];
+  };
+  latencyMs: number;
+  error?: string;
+  checkedAt: string;
+}
+
+/**
+ * Check if an exec-mode capability is functional:
+ * - Binary specified in allowCommands exists and is executable
+ * - Credential env vars can be resolved (without leaking values)
+ */
+export async function checkExecHealth(
+  serviceName: string,
+  capabilityName: string,
+  capability: {
+    allowCommands?: string[];
+    env?: Record<string, string>;
+  },
+  credentialAvailable: boolean,
+): Promise<ExecHealthCheckResult> {
+  const checkedAt = new Date().toISOString();
+  const start = Date.now();
+
+  const checks = {
+    binaryExists: false,
+    binaryPath: undefined as string | undefined,
+    envResolvable: false,
+    unresolvedVars: undefined as string[] | undefined,
+  };
+
+  // Check binary existence for first allowed command
+  if (capability.allowCommands && capability.allowCommands.length > 0) {
+    const binary = capability.allowCommands[0];
+    try {
+      const { execSync } = await import("child_process");
+      const whichResult = execSync(`command -v ${binary} 2>/dev/null`, {
+        encoding: "utf-8",
+        timeout: 5000,
+      }).trim();
+      checks.binaryExists = true;
+      checks.binaryPath = whichResult;
+    } catch {
+      checks.binaryExists = false;
+    }
+  }
+
+  // Check env var template resolution
+  if (capability.env) {
+    const templateVars = Object.values(capability.env)
+      .flatMap((v) => [...v.matchAll(/\{\{(\w+)\}\}/g)])
+      .map((m) => m[1]);
+
+    const unresolved: string[] = [];
+    for (const varName of templateVars) {
+      if (varName === "credential" && !credentialAvailable) {
+        unresolved.push("credential");
+      }
+      if (
+        ["apiKey", "apiSecret", "passphrase"].includes(varName) &&
+        !credentialAvailable
+      ) {
+        unresolved.push(varName);
+      }
+    }
+
+    checks.envResolvable = unresolved.length === 0;
+    if (unresolved.length > 0) checks.unresolvedVars = unresolved;
+  } else {
+    checks.envResolvable = true;
+  }
+
+  const latencyMs = Date.now() - start;
+  const healthy = checks.binaryExists && checks.envResolvable;
+
+  const errors: string[] = [];
+  if (!checks.binaryExists) {
+    const binary = capability.allowCommands?.[0] || "unknown";
+    errors.push(`Binary '${binary}' not found in PATH`);
+  }
+  if (!checks.envResolvable && checks.unresolvedVars?.length) {
+    errors.push(
+      `Unresolved template vars: ${checks.unresolvedVars.join(", ")}`,
+    );
+  }
+
+  return {
+    service: serviceName,
+    capability: capabilityName,
+    healthy,
+    checks,
+    latencyMs,
+    error: errors.length > 0 ? errors.join("; ") : undefined,
+    checkedAt,
+  };
 }
