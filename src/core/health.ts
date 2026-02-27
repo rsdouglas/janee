@@ -27,7 +27,11 @@ export interface HealthCheckOptions {
 }
 
 /**
- * Check if a service endpoint is reachable and responding (unauthenticated HEAD).
+ * Quick reachability check — unauthenticated HEAD against the base URL.
+ * Use for uptime monitoring where you just care "is the endpoint up?"
+ * Considers 401/403 as reachable (the server answered, auth is just expected).
+ *
+ * For verifying credentials actually work, use testServiceConnection() instead.
  */
 export async function checkServiceHealth(
   serviceName: string,
@@ -120,6 +124,8 @@ export interface ServiceTestResult {
   latencyMs: number;
   authType: string;
   error?: string;
+  /** Truncated upstream response body on failure — helps agents diagnose issues */
+  responseBody?: string;
   checkedAt: string;
 }
 
@@ -144,8 +150,11 @@ export function resolveTestPath(serviceName: string, baseUrl: string): string | 
 }
 
 /**
- * Test a service connection with full auth injection.
- * Hits an auth-required endpoint (from testPath or template directory) and verifies credentials.
+ * Full credential test — authenticated GET against an auth-required endpoint.
+ * Use when you need to verify that stored credentials are actually valid.
+ * Injects auth headers via buildAuthHeaders() (same path as the proxy).
+ *
+ * For simple reachability without auth, use checkServiceHealth() instead.
  */
 export async function testServiceConnection(
   serviceName: string,
@@ -207,6 +216,17 @@ export async function testServiceConnection(
     const reachable = true;
     const authOk = response.ok;
 
+    // On failure, capture upstream response body so agents can diagnose
+    let responseBody: string | undefined;
+    if (!authOk) {
+      try {
+        const raw = await response.text();
+        responseBody = raw.length > 512 ? raw.slice(0, 512) + '…' : raw;
+      } catch {
+        // best-effort
+      }
+    }
+
     return {
       service: serviceName,
       baseUrl: serviceConfig.baseUrl,
@@ -221,6 +241,7 @@ export async function testServiceConnection(
       ...(!response.ok && response.status !== 401 && response.status !== 403 && {
         error: `HTTP ${response.status} ${response.statusText}`
       }),
+      responseBody,
       checkedAt,
     };
   } catch (err) {

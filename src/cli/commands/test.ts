@@ -82,6 +82,11 @@ export async function testCommand(service: string | undefined, options: TestComm
       if (r.error) {
         console.log(`     ${r.error}`);
       }
+      if (r.responseBody) {
+        // Show first line of response body for quick diagnostics
+        const firstLine = r.responseBody.split('\n')[0].slice(0, 120);
+        console.log(`     ${firstLine}`);
+      }
       console.log('');
     }
 
