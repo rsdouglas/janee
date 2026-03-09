@@ -1,22 +1,13 @@
-import {
-  randomUUID,
-  timingSafeEqual,
-} from 'crypto';
-import express from 'express';
+import { randomUUID, timingSafeEqual } from "crypto";
+import express from "express";
 
 import {
   buildExecEnv,
   hashPolicyFingerprint,
   validateCommand,
-} from './exec.js';
-import {
-  getInstallationToken,
-  GitHubAppCredentials,
-} from './github-app.js';
-import {
-  ServiceTestResult,
-  testServiceConnection,
-} from './health.js';
+} from "./exec.js";
+import { getInstallationToken, GitHubAppCredentials } from "./github-app.js";
+import { ServiceTestResult, testServiceConnection } from "./health.js";
 
 export interface RunnerIdentity {
   runnerId: string;
@@ -63,67 +54,96 @@ export interface ExecCompleteRequest {
 export interface AuthorityExecHooks {
   authorizeExec: (req: ExecAuthorizeRequest) => Promise<ExecAuthorizeResponse>;
   completeExec: (req: ExecCompleteRequest) => Promise<void>;
-  testService?: (serviceName?: string) => Promise<ServiceTestResult | ServiceTestResult[]>;
+  testService?: (
+    serviceName?: string,
+    options?: { timeout?: number },
+  ) => Promise<ServiceTestResult | ServiceTestResult[]>;
 }
 
-export function createAuthorityApp(apiKey: string, hooks: AuthorityExecHooks): express.Express {
+export function createAuthorityApp(
+  apiKey: string,
+  hooks: AuthorityExecHooks,
+): express.Express {
   const app = express();
-  app.use(express.json({ limit: '512kb' }));
+  app.use(express.json({ limit: "512kb" }));
 
   app.use((req, res, next) => {
-    if (req.path === '/v1/health') {
+    if (req.path === "/v1/health") {
       next();
       return;
     }
 
-    const provided = req.header('x-janee-runner-key');
-    if (!provided || provided.length !== apiKey.length ||
-        !timingSafeEqual(Buffer.from(provided), Buffer.from(apiKey))) {
-      res.status(401).json({ error: 'Unauthorized runner request' });
+    const provided = req.header("x-janee-runner-key");
+    if (
+      !provided ||
+      provided.length !== apiKey.length ||
+      !timingSafeEqual(Buffer.from(provided), Buffer.from(apiKey))
+    ) {
+      res.status(401).json({ error: "Unauthorized runner request" });
       return;
     }
     next();
   });
 
-  app.get('/v1/health', (_req, res) => {
-    res.status(200).json({ ok: true, mode: 'authority' });
+  app.get("/v1/health", (_req, res) => {
+    res.status(200).json({ ok: true, mode: "authority" });
   });
 
-  app.post('/v1/exec/authorize', async (req, res) => {
+  app.post("/v1/exec/authorize", async (req, res) => {
     try {
       const body = req.body as ExecAuthorizeRequest;
-      if (!body?.runner?.runnerId || !Array.isArray(body?.command) || body.command.length === 0 || !body.capabilityId) {
-        res.status(400).json({ error: 'Invalid authorize request' });
+      if (
+        !body?.runner?.runnerId ||
+        !Array.isArray(body?.command) ||
+        body.command.length === 0 ||
+        !body.capabilityId
+      ) {
+        res.status(400).json({ error: "Invalid authorize request" });
         return;
       }
       const response = await hooks.authorizeExec(body);
       res.status(200).json(response);
     } catch (error) {
-      res.status(403).json({ error: error instanceof Error ? error.message : 'Authorization failed' });
+      res
+        .status(403)
+        .json({
+          error:
+            error instanceof Error ? error.message : "Authorization failed",
+        });
     }
   });
 
-  app.post('/v1/exec/complete', async (req, res) => {
+  app.post("/v1/exec/complete", async (req, res) => {
     try {
       const body = req.body as ExecCompleteRequest;
       if (!body?.grantId) {
-        res.status(400).json({ error: 'grantId is required' });
+        res.status(400).json({ error: "grantId is required" });
         return;
       }
       await hooks.completeExec(body);
       res.status(200).json({ ok: true });
     } catch (error) {
-      res.status(500).json({ error: error instanceof Error ? error.message : 'completion failed' });
+      res
+        .status(500)
+        .json({
+          error: error instanceof Error ? error.message : "completion failed",
+        });
     }
   });
 
   if (hooks.testService) {
-    app.post('/v1/test', async (req, res) => {
+    app.post("/v1/test", async (req, res) => {
       try {
-        const result = await hooks.testService!(req.body?.service);
+        const result = await hooks.testService!(req.body?.service, {
+          timeout: req.body?.timeout,
+        });
         res.status(200).json(result);
       } catch (error) {
-        res.status(500).json({ error: error instanceof Error ? error.message : 'Test failed' });
+        res
+          .status(500)
+          .json({
+            error: error instanceof Error ? error.message : "Test failed",
+          });
       }
     });
   }
@@ -136,52 +156,92 @@ export function createAuthorityApp(apiKey: string, hooks: AuthorityExecHooks): e
  * Used by both standalone `janee authority` and integrated HTTP serve.
  */
 export function buildAuthorityHooks(
-  config: { services: Record<string, any>; capabilities: Array<{ name: string; service: string; mode?: string; allowCommands?: string[]; env?: Record<string, string>; workDir?: string; timeout?: number; allowedAgents?: string[] }> },
+  config: {
+    services: Record<string, any>;
+    capabilities: Array<{
+      name: string;
+      service: string;
+      mode?: string;
+      allowCommands?: string[];
+      env?: Record<string, string>;
+      workDir?: string;
+      timeout?: number;
+      allowedAgents?: string[];
+    }>;
+  },
   auditLogger: { log: (req: any, res: any, duration?: number) => void },
 ): AuthorityExecHooks {
-  const grantCache = new Map<string, { startedAt: number; capabilityId: string }>();
+  const grantCache = new Map<
+    string,
+    { startedAt: number; capabilityId: string }
+  >();
 
   return {
-    testService: async (serviceName?: string): Promise<ServiceTestResult | ServiceTestResult[]> => {
+    testService: async (
+      serviceName?: string,
+      options?: { timeout?: number },
+    ): Promise<ServiceTestResult | ServiceTestResult[]> => {
       if (serviceName) {
         const svc = config.services[serviceName];
         if (!svc) throw new Error(`Unknown service: ${serviceName}`);
-        return testServiceConnection(serviceName, svc);
+        return testServiceConnection(serviceName, svc, options || {});
       }
       const results = await Promise.all(
-        Object.entries(config.services).map(([name, svc]) => testServiceConnection(name, svc))
+        Object.entries(config.services).map(([name, svc]) =>
+          testServiceConnection(name, svc, options || {}),
+        ),
       );
       return results;
     },
-    authorizeExec: async (req: ExecAuthorizeRequest): Promise<ExecAuthorizeResponse> => {
+    authorizeExec: async (
+      req: ExecAuthorizeRequest,
+    ): Promise<ExecAuthorizeResponse> => {
       const cap = config.capabilities.find((c) => c.name === req.capabilityId);
       if (!cap) throw new Error(`Unknown capability: ${req.capabilityId}`);
-      if (cap.mode !== 'exec') throw new Error('Capability is not exec-mode');
+      if (cap.mode !== "exec") throw new Error("Capability is not exec-mode");
 
-      if (cap.allowedAgents && cap.allowedAgents.length > 0 && req.agentId && !cap.allowedAgents.includes(req.agentId)) {
-        throw new Error(`Agent ${req.agentId} is not allowed for capability ${cap.name}`);
+      if (
+        cap.allowedAgents &&
+        cap.allowedAgents.length > 0 &&
+        req.agentId &&
+        !cap.allowedAgents.includes(req.agentId)
+      ) {
+        throw new Error(
+          `Agent ${req.agentId} is not allowed for capability ${cap.name}`,
+        );
       }
 
       const cmdCheck = validateCommand(req.command, cap.allowCommands || []);
       if (!cmdCheck.allowed) {
-        throw new Error(cmdCheck.reason || 'Command denied by policy');
+        throw new Error(cmdCheck.reason || "Command denied by policy");
       }
 
       const service = config.services[cap.service];
       if (!service) throw new Error(`Service not found: ${cap.service}`);
 
-      let credential = '';
-      let extraCredentials: { apiKey?: string; apiSecret?: string; passphrase?: string } | undefined;
-      if (service.auth.type === 'bearer') {
-        credential = service.auth.key || '';
-      } else if (service.auth.type === 'github-app' && service.auth.appId && service.auth.privateKey && service.auth.installationId) {
+      let credential = "";
+      let extraCredentials:
+        | { apiKey?: string; apiSecret?: string; passphrase?: string }
+        | undefined;
+      if (service.auth.type === "bearer") {
+        credential = service.auth.key || "";
+      } else if (
+        service.auth.type === "github-app" &&
+        service.auth.appId &&
+        service.auth.privateKey &&
+        service.auth.installationId
+      ) {
         const ghCreds: GitHubAppCredentials = {
           appId: service.auth.appId,
           privateKey: service.auth.privateKey,
           installationId: service.auth.installationId,
         };
         credential = await getInstallationToken(cap.service, ghCreds);
-      } else if (service.auth.type === 'hmac-mexc' || service.auth.type === 'hmac-bybit' || service.auth.type === 'hmac-okx') {
+      } else if (
+        service.auth.type === "hmac-mexc" ||
+        service.auth.type === "hmac-bybit" ||
+        service.auth.type === "hmac-okx"
+      ) {
         extraCredentials = {
           apiKey: service.auth.apiKey,
           apiSecret: service.auth.apiSecret,
@@ -189,13 +249,27 @@ export function buildAuthorityHooks(
         };
       }
 
-      const envInjections = buildExecEnv(cap.env || {}, credential, extraCredentials);
-      const scrubValues = [credential, extraCredentials?.apiKey, extraCredentials?.apiSecret, extraCredentials?.passphrase]
-        .filter((v): v is string => Boolean(v));
+      const envInjections = buildExecEnv(
+        cap.env || {},
+        credential,
+        extraCredentials,
+      );
+      const scrubValues = [
+        credential,
+        extraCredentials?.apiKey,
+        extraCredentials?.apiSecret,
+        extraCredentials?.passphrase,
+      ].filter((v): v is string => Boolean(v));
 
       const grantId = randomUUID();
-      grantCache.set(grantId, { startedAt: Date.now(), capabilityId: cap.name });
-      const effectiveTimeoutMs = Math.min(req.timeoutMs || cap.timeout || 30000, cap.timeout || 30000);
+      grantCache.set(grantId, {
+        startedAt: Date.now(),
+        capabilityId: cap.name,
+      });
+      const effectiveTimeoutMs = Math.min(
+        req.timeoutMs || cap.timeout || 30000,
+        cap.timeout || 30000,
+      );
 
       return {
         grantId,
@@ -214,23 +288,27 @@ export function buildAuthorityHooks(
     completeExec: async (req) => {
       const grant = grantCache.get(req.grantId);
       grantCache.delete(req.grantId);
-      auditLogger.log({
-        service: grant?.capabilityId || 'unknown',
-        method: 'EXEC_COMPLETE',
-        path: req.grantId,
-        headers: {},
-        body: undefined,
-      }, {
-        statusCode: req.exitCode === 0 ? 200 : 500,
-        headers: {},
-        body: JSON.stringify({
-          durationMs: req.durationMs,
-          stdoutBytes: req.stdoutBytes,
-          stderrBytes: req.stderrBytes,
-          scrubbedStdoutHits: req.scrubbedStdoutHits,
-          scrubbedStderrHits: req.scrubbedStderrHits,
-        }),
-      }, req.durationMs);
+      auditLogger.log(
+        {
+          service: grant?.capabilityId || "unknown",
+          method: "EXEC_COMPLETE",
+          path: req.grantId,
+          headers: {},
+          body: undefined,
+        },
+        {
+          statusCode: req.exitCode === 0 ? 200 : 500,
+          headers: {},
+          body: JSON.stringify({
+            durationMs: req.durationMs,
+            stdoutBytes: req.stdoutBytes,
+            stderrBytes: req.stderrBytes,
+            scrubbedStdoutHits: req.scrubbedStdoutHits,
+            scrubbedStderrHits: req.scrubbedStderrHits,
+          }),
+        },
+        req.durationMs,
+      );
     },
   };
 }
@@ -238,17 +316,20 @@ export function buildAuthorityHooks(
 export async function authorityAuthorizeExec(
   authorityUrl: string,
   runnerKey: string,
-  request: ExecAuthorizeRequest
+  request: ExecAuthorizeRequest,
 ): Promise<ExecAuthorizeResponse> {
-  const res = await fetch(`${authorityUrl.replace(/\/$/, '')}/v1/exec/authorize`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-janee-runner-key': runnerKey,
-      'x-janee-request-id': request.requestId || randomUUID(),
+  const res = await fetch(
+    `${authorityUrl.replace(/\/$/, "")}/v1/exec/authorize`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-janee-runner-key": runnerKey,
+        "x-janee-request-id": request.requestId || randomUUID(),
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request),
-  });
+  );
 
   if (!res.ok) {
     const body = await res.text();
@@ -261,16 +342,19 @@ export async function authorityAuthorizeExec(
 export async function authorityCompleteExec(
   authorityUrl: string,
   runnerKey: string,
-  request: ExecCompleteRequest
+  request: ExecCompleteRequest,
 ): Promise<void> {
-  const res = await fetch(`${authorityUrl.replace(/\/$/, '')}/v1/exec/complete`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-janee-runner-key': runnerKey,
+  const res = await fetch(
+    `${authorityUrl.replace(/\/$/, "")}/v1/exec/complete`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-janee-runner-key": runnerKey,
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request),
-  });
+  );
 
   if (!res.ok) {
     const body = await res.text();
