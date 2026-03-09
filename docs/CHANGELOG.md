@@ -4,6 +4,10 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+_(empty)_
+
+## [0.14.0] - 2026-03-09
+
 ### Added
 
 - **Twitter/X OAuth 1.0a auth type (`oauth1a-twitter`)** — New auth type for Twitter/X API v2. Janee computes per-request OAuth 1.0a signatures (HMAC-SHA1) server-side, keeping all 4 secrets encrypted at rest. Supports `janee add twitter` (template pre-fills `api.x.com`), `janee service edit --consumer-key/--consumer-secret/--access-token/--access-token-secret` for rotation, and the standard `execute` MCP tool for posting tweets.
