@@ -16,11 +16,13 @@ import {
   initConfig,
   loadConfig,
   saveConfig,
+  _resetMigrationFlag,
   JaneeConfig,
 } from './config-store';
 
 describe('config-store (SQLite)', () => {
   beforeEach(() => {
+    _resetMigrationFlag();
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true });
     }

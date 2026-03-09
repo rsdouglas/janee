@@ -2,10 +2,7 @@ import {
   ServiceTestResult,
   testServiceConnection,
 } from '../../core/health';
-import {
-  hasYAMLConfig,
-  loadYAMLConfig,
-} from '../config-yaml';
+import { hasConfig, loadConfig } from '../config-store';
 
 export interface TestCommandOptions {
   json?: boolean;
@@ -14,7 +11,7 @@ export interface TestCommandOptions {
 
 export async function testCommand(service: string | undefined, options: TestCommandOptions = {}): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
+    if (!hasConfig()) {
       if (options.json) {
         console.log(JSON.stringify({ error: 'No config found' }, null, 2));
       } else {
@@ -23,7 +20,7 @@ export async function testCommand(service: string | undefined, options: TestComm
       process.exit(1);
     }
 
-    const config = loadYAMLConfig();
+    const config = loadConfig();
     const serviceNames = Object.keys(config.services);
 
     if (serviceNames.length === 0) {

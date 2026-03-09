@@ -238,21 +238,26 @@ function encryptServiceAuth(svc: ServiceConfig, masterKey: string): ServiceConfi
   return copy;
 }
 
+let _yamlMigrationChecked = false;
+
 // ---------------------------------------------------------------------------
 // YAML migration
 // ---------------------------------------------------------------------------
 
 function migrateFromYAML(db: Database.Database): void {
+  if (_yamlMigrationChecked) return;
+  _yamlMigrationChecked = true;
+
   const yamlPath = getYamlPath();
   if (!fs.existsSync(yamlPath)) return;
 
   // Only migrate if the database is empty (no master key yet)
   const existingKey = readMeta(db, 'master_key');
   if (existingKey) {
-    // DB already has data. If YAML reappeared, merge new services/capabilities
-    // that don't already exist in the DB.
-    console.log('SQLite config already populated. Checking for new entries in config.yaml...');
-    mergeYAMLIntoDb(db, yamlPath);
+    // DB already populated — YAML is stale. Rename it to avoid confusion.
+    const stalePath = yamlPath + '.stale-' + Date.now();
+    fs.renameSync(yamlPath, stalePath);
+    console.log(`SQLite config already populated. Renamed stale config.yaml to ${path.basename(stalePath)}`);
     return;
   }
 
@@ -288,45 +293,6 @@ function migrateFromYAML(db: Database.Database): void {
   console.log(`Migration complete. Old config saved as ${backupPath}`);
 }
 
-function mergeYAMLIntoDb(db: Database.Database, yamlPath: string): void {
-  const content = fs.readFileSync(yamlPath, 'utf8');
-  const config = yaml.load(content) as JaneeConfig;
-  config.services = config.services || {};
-  config.capabilities = config.capabilities || {};
-
-  let merged = 0;
-
-  // Merge services that don't exist in DB
-  const existingService = db.prepare('SELECT 1 FROM services WHERE name = ?');
-  const insertService = db.prepare('INSERT INTO services (name, config) VALUES (?, ?)');
-  for (const [name, svc] of Object.entries(config.services)) {
-    if (!existingService.get(name)) {
-      insertService.run(name, JSON.stringify(svc));
-      merged++;
-      console.log(`  Merged service: ${name}`);
-    }
-  }
-
-  // Merge capabilities that don't exist in DB
-  const existingCap = db.prepare('SELECT 1 FROM capabilities WHERE name = ?');
-  const insertCap = db.prepare('INSERT INTO capabilities (name, config) VALUES (?, ?)');
-  for (const [name, cap] of Object.entries(config.capabilities)) {
-    if (!existingCap.get(name)) {
-      insertCap.run(name, JSON.stringify(cap));
-      merged++;
-      console.log(`  Merged capability: ${name}`);
-    }
-  }
-
-  if (merged > 0) {
-    const backupPath = yamlPath + '.merged-' + Date.now();
-    fs.renameSync(yamlPath, backupPath);
-    console.log(`Merged ${merged} entries. YAML backed up to ${backupPath}`);
-  } else {
-    fs.unlinkSync(yamlPath);
-    console.log('No new entries in YAML. Deleted stale config.yaml.');
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Public API — drop-in replacements for config-yaml.ts exports
@@ -337,6 +303,11 @@ function mergeYAMLIntoDb(db: Database.Database, yamlPath: string): void {
  */
 export function hasConfig(): boolean {
   return fs.existsSync(getDbPath()) || fs.existsSync(getYamlPath());
+}
+
+/** @internal — reset migration flag for tests */
+export function _resetMigrationFlag(): void {
+  _yamlMigrationChecked = false;
 }
 
 /** @deprecated Use hasConfig() */

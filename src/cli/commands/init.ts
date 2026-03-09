@@ -33,7 +33,8 @@ export async function initCommand(): Promise<void> {
     console.log();
     console.log(`Config database: ${path.join(configDir, 'config.db')}`);
     console.log(`Logs directory: ${logsDir}`);
-    console.log(`Master key: ${config.masterKey}`);
+    console.log(`\nMaster key: ${config.masterKey}`);
+    console.log(`\n⚠️  Save this key somewhere safe — you will need it to recover\n   your config if you move to another machine or lose ~/.janee/`);
     console.log();
     console.log('Next steps:');
     console.log('  1. Add services:    janee add <service-name>');
