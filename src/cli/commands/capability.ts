@@ -19,7 +19,6 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
     const capabilityNames = Object.keys(config.capabilities);
 
     if (options.json) {
-      // JSON output
       const capabilities = capabilityNames.map(name => {
         const cap = config.capabilities[name];
         return {
@@ -29,7 +28,13 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
           autoApprove: cap.autoApprove,
           requiresReason: cap.requiresReason,
           allowRules: cap.rules?.allow || [],
-          denyRules: cap.rules?.deny || []
+          denyRules: cap.rules?.deny || [],
+          mode: cap.mode,
+          allowedAgents: cap.allowedAgents,
+          allowCommands: cap.allowCommands,
+          env: cap.env,
+          workDir: cap.workDir,
+          timeout: cap.timeout,
         };
       });
 
@@ -37,7 +42,6 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
       return;
     }
 
-    // Human-readable output
     if (capabilityNames.length === 0) {
       console.log('No capabilities configured yet.');
       console.log('');
@@ -57,15 +61,15 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
       console.log(`  ${name}`);
       console.log(`    Service: ${cap.service}`);
       console.log(`    TTL: ${cap.ttl}`);
-      if (cap.autoApprove !== undefined) {
-        console.log(`    Auto-approve: ${cap.autoApprove}`);
-      }
-      if (cap.requiresReason !== undefined) {
-        console.log(`    Requires reason: ${cap.requiresReason}`);
-      }
-      if (rules) {
-        console.log(`    Rules: ${rules}`);
-      }
+      if (cap.mode) console.log(`    Mode: ${cap.mode}`);
+      if (cap.autoApprove !== undefined) console.log(`    Auto-approve: ${cap.autoApprove}`);
+      if (cap.requiresReason !== undefined) console.log(`    Requires reason: ${cap.requiresReason}`);
+      if (rules) console.log(`    Rules:${rules}`);
+      if (cap.allowedAgents?.length) console.log(`    Allowed agents: ${cap.allowedAgents.join(', ')}`);
+      if (cap.allowCommands?.length) console.log(`    Allow commands: ${cap.allowCommands.join(', ')}`);
+      if (cap.env) console.log(`    Env: ${Object.entries(cap.env).map(([k,v]) => `${k}=${v}`).join(', ')}`);
+      if (cap.workDir) console.log(`    Work dir: ${cap.workDir}`);
+      if (cap.timeout) console.log(`    Timeout: ${cap.timeout}ms`);
       console.log('');
     }
   } catch (error) {
@@ -86,17 +90,65 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
   }
 }
 
+interface CapAddEditOptions {
+  service?: string;
+  ttl?: string;
+  autoApprove?: boolean;
+  requiresReason?: boolean;
+  allow?: string[];
+  deny?: string[];
+  clearRules?: boolean;
+  allowedAgents?: string[];
+  clearAgents?: boolean;
+  mode?: string;
+  allowCommands?: string[];
+  envMap?: string[];
+  workDir?: string;
+  timeout?: string;
+  json?: boolean;
+}
+
+function parseEnvMap(mappings: string[]): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const m of mappings) {
+    const eq = m.indexOf('=');
+    if (eq <= 0) throw new Error(`Invalid env mapping "${m}" — expected KEY=value`);
+    env[m.substring(0, eq)] = m.substring(eq + 1);
+  }
+  return env;
+}
+
+function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOptions): void {
+  if (options.allowedAgents) {
+    cap.allowedAgents = options.allowedAgents;
+  }
+  if (options.clearAgents) {
+    delete cap.allowedAgents;
+  }
+  if (options.mode) {
+    if (options.mode !== 'proxy' && options.mode !== 'exec') {
+      throw new Error(`Invalid mode "${options.mode}" — must be "proxy" or "exec"`);
+    }
+    cap.mode = options.mode;
+  }
+  if (options.allowCommands) {
+    cap.allowCommands = options.allowCommands;
+  }
+  if (options.envMap) {
+    cap.env = parseEnvMap(options.envMap);
+  }
+  if (options.workDir) {
+    cap.workDir = options.workDir;
+  }
+  if (options.timeout) {
+    cap.timeout = parseInt(options.timeout, 10);
+    if (isNaN(cap.timeout)) throw new Error(`Invalid timeout "${options.timeout}"`);
+  }
+}
+
 export async function capabilityAddCommand(
   name: string,
-  options: {
-    service?: string;
-    ttl?: string;
-    autoApprove?: boolean;
-    requiresReason?: boolean;
-    allow?: string[];
-    deny?: string[];
-    json?: boolean;
-  }
+  options: CapAddEditOptions
 ): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
@@ -110,7 +162,6 @@ export async function capabilityAddCommand(
 
     const config = loadYAMLConfig();
 
-    // Check if capability already exists
     if (config.capabilities[name]) {
       if (options.json) {
         console.log(JSON.stringify({ ok: false, error: `Capability "${name}" already exists. Use 'janee cap edit' to modify it.` }));
@@ -120,7 +171,6 @@ export async function capabilityAddCommand(
       process.exit(1);
     }
 
-    // Service is required
     if (!options.service) {
       if (options.json) {
         console.log(JSON.stringify({ ok: false, error: '--service is required' }));
@@ -130,7 +180,6 @@ export async function capabilityAddCommand(
       process.exit(1);
     }
 
-    // Check if service exists
     if (!config.services[options.service]) {
       if (options.json) {
         console.log(JSON.stringify({ ok: false, error: `Service "${options.service}" not found. Add it first with 'janee add'.` }));
@@ -140,24 +189,20 @@ export async function capabilityAddCommand(
       process.exit(1);
     }
 
-    // Create capability
     const capability: CapabilityConfig = {
       service: options.service,
       ttl: options.ttl || '1h',
       autoApprove: options.autoApprove,
-      requiresReason: options.requiresReason
+      requiresReason: options.requiresReason,
     };
 
-    // Add rules if provided
     if (options.allow || options.deny) {
       capability.rules = {};
-      if (options.allow) {
-        capability.rules.allow = options.allow;
-      }
-      if (options.deny) {
-        capability.rules.deny = options.deny;
-      }
+      if (options.allow) capability.rules.allow = options.allow;
+      if (options.deny) capability.rules.deny = options.deny;
     }
+
+    applyCapabilityOptions(capability, options);
 
     config.capabilities[name] = capability;
     saveYAMLConfig(config);
@@ -174,6 +219,8 @@ export async function capabilityAddCommand(
       console.log(`✅ Added capability "${name}"`);
       console.log(`   Service: ${capability.service}`);
       console.log(`   TTL: ${capability.ttl}`);
+      if (capability.mode) console.log(`   Mode: ${capability.mode}`);
+      if (capability.allowedAgents) console.log(`   Allowed agents: ${capability.allowedAgents.join(', ')}`);
     }
 
   } catch (error) {
@@ -196,15 +243,7 @@ export async function capabilityAddCommand(
 
 export async function capabilityEditCommand(
   name: string,
-  options: {
-    ttl?: string;
-    autoApprove?: boolean;
-    requiresReason?: boolean;
-    allow?: string[];
-    deny?: string[];
-    clearRules?: boolean;
-    json?: boolean;
-  }
+  options: CapAddEditOptions
 ): Promise<void> {
   try {
     if (!hasYAMLConfig()) {
@@ -218,7 +257,6 @@ export async function capabilityEditCommand(
 
     const config = loadYAMLConfig();
 
-    // Check if capability exists
     if (!config.capabilities[name]) {
       if (options.json) {
         console.log(JSON.stringify({ ok: false, error: `Capability "${name}" not found` }));
@@ -230,40 +268,24 @@ export async function capabilityEditCommand(
 
     const capability = config.capabilities[name];
 
-    // Update fields if provided
-    if (options.ttl) {
-      capability.ttl = options.ttl;
-    }
-    if (options.autoApprove !== undefined) {
-      capability.autoApprove = options.autoApprove;
-    }
-    if (options.requiresReason !== undefined) {
-      capability.requiresReason = options.requiresReason;
-    }
+    if (options.ttl) capability.ttl = options.ttl;
+    if (options.autoApprove !== undefined) capability.autoApprove = options.autoApprove;
+    if (options.requiresReason !== undefined) capability.requiresReason = options.requiresReason;
 
-    // Handle rules
     if (options.clearRules) {
       delete capability.rules;
     } else if (options.allow || options.deny) {
-      if (!capability.rules) {
-        capability.rules = {};
-      }
-      if (options.allow) {
-        capability.rules.allow = options.allow;
-      }
-      if (options.deny) {
-        capability.rules.deny = options.deny;
-      }
+      if (!capability.rules) capability.rules = {};
+      if (options.allow) capability.rules.allow = options.allow;
+      if (options.deny) capability.rules.deny = options.deny;
     }
+
+    applyCapabilityOptions(capability, options);
 
     saveYAMLConfig(config);
 
     if (options.json) {
-      console.log(JSON.stringify({
-        ok: true,
-        capability: name,
-        message: `Updated capability "${name}"`
-      }));
+      console.log(JSON.stringify({ ok: true, capability: name, message: `Updated capability "${name}"` }));
     } else {
       console.log(`✅ Updated capability "${name}"`);
     }

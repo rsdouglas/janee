@@ -2,19 +2,28 @@
  * Tests for config split (config.yaml + credentials.json)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { 
-  loadYAMLConfig, 
-  saveYAMLConfig, 
-  JaneeYAMLConfig,
-  initYAMLConfig,
-  hasYAMLConfig
-} from './config-yaml';
-import { encryptSecret, generateMasterKey } from '../core/crypto';
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import yaml from 'js-yaml';
+import os from 'os';
+import path from 'path';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+
+import {
+  encryptSecret,
+  generateMasterKey,
+} from '../core/crypto';
+import {
+  initYAMLConfig,
+  JaneeYAMLConfig,
+  loadYAMLConfig,
+  saveYAMLConfig,
+} from './config-yaml';
 
 describe('Config YAML', () => {
   let testConfigDir: string;
