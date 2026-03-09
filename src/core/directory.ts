@@ -9,7 +9,7 @@ export interface ServiceTemplate {
   description: string;
   baseUrl: string;
   auth: {
-    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
+    type: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app' | 'oauth1a-twitter';
     fields: string[];  // Required fields to prompt for
   };
   /** Lightweight GET path that requires auth — used by `janee test` to verify credentials */
@@ -151,6 +151,17 @@ export const serviceDirectory: ServiceTemplate[] = [
     testPath: '/api/v3/brokerage/accounts',
     docs: 'https://docs.cloud.coinbase.com/advanced-trade-api',
     tags: ['crypto', 'exchange', 'trading']
+  },
+  
+  // Social / Communication
+  {
+    name: 'twitter',
+    description: 'Twitter/X API v2 — post tweets, read timeline',
+    baseUrl: 'https://api.x.com',
+    auth: { type: 'oauth1a-twitter', fields: ['consumerKey', 'consumerSecret', 'accessToken', 'accessTokenSecret'] },
+    testPath: '/2/users/me',
+    docs: 'https://developer.x.com/en/docs/x-api',
+    tags: ['social', 'communication', 'twitter']
   },
   
   // Communication

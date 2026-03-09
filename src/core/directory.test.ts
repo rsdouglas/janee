@@ -2,8 +2,18 @@
  * Tests for service directory
  */
 
-import { describe, it, expect } from 'vitest';
-import { searchDirectory, getService, listByCategory, serviceDirectory } from './directory';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+
+import {
+  getService,
+  listByCategory,
+  searchDirectory,
+  serviceDirectory,
+} from './directory';
 
 describe('Service Directory', () => {
   describe('searchDirectory', () => {
@@ -88,7 +98,7 @@ describe('Service Directory', () => {
     });
 
     it('all services should have valid auth types', () => {
-      const validTypes = ['bearer', 'basic', 'hmac-mexc', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account', 'github-app'];
+      const validTypes = ['bearer', 'basic', 'hmac-mexc', 'hmac-bybit', 'hmac-okx', 'headers', 'service-account', 'github-app', 'oauth1a-twitter'];
       for (const service of serviceDirectory) {
         expect(validTypes).toContain(service.auth.type);
       }

@@ -2,7 +2,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { hasYAMLConfig, loadYAMLConfig, saveYAMLConfig } from '../config-yaml';
+import {
+  hasYAMLConfig,
+  loadYAMLConfig,
+  saveYAMLConfig,
+} from '../config-yaml';
 
 function cliError(msg: string, json?: boolean): never {
   if (json) {
@@ -40,6 +44,10 @@ export interface ServiceEditOptions {
   secretFromEnv?: string;
   passphraseFromEnv?: string;
   header?: string[];
+  consumerKey?: string;
+  consumerSecret?: string;
+  accessToken?: string;
+  accessTokenSecret?: string;
   json?: boolean;
 }
 
@@ -133,6 +141,27 @@ export async function serviceEditCommand(
         auth.headers[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
       }
       changes.push('custom headers updated');
+    }
+
+    if (options.consumerKey) {
+      if (auth.type !== 'oauth1a-twitter') return cliError(`--consumer-key is only applicable to oauth1a-twitter auth`, options.json);
+      auth.consumerKey = options.consumerKey;
+      changes.push('consumer key rotated');
+    }
+    if (options.consumerSecret) {
+      if (auth.type !== 'oauth1a-twitter') return cliError(`--consumer-secret is only applicable to oauth1a-twitter auth`, options.json);
+      auth.consumerSecret = options.consumerSecret;
+      changes.push('consumer secret rotated');
+    }
+    if (options.accessToken) {
+      if (auth.type !== 'oauth1a-twitter') return cliError(`--access-token is only applicable to oauth1a-twitter auth`, options.json);
+      auth.accessToken = options.accessToken;
+      changes.push('access token rotated');
+    }
+    if (options.accessTokenSecret) {
+      if (auth.type !== 'oauth1a-twitter') return cliError(`--access-token-secret is only applicable to oauth1a-twitter auth`, options.json);
+      auth.accessTokenSecret = options.accessTokenSecret;
+      changes.push('access token secret rotated');
     }
 
     if (changes.length === 0) {

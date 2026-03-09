@@ -2,7 +2,10 @@
  * HMAC Signing implementations for various exchanges/APIs
  */
 
-import { createHmac } from 'crypto';
+import {
+  createHmac,
+  randomBytes,
+} from 'crypto';
 
 export interface SigningResult {
   headers: Record<string, string>;
@@ -116,5 +119,78 @@ export function signMEXC(params: MEXCSigningParams): SigningResult {
       timestamp,
       signature
     }
+  };
+}
+
+export interface TwitterOAuth1aParams {
+  consumerKey: string;
+  consumerSecret: string;
+  accessToken: string;
+  accessTokenSecret: string;
+  method: string;
+  /** Full URL including scheme and host, without query string */
+  baseUrl: string;
+  /** Override for deterministic tests */
+  nonce?: string;
+  timestamp?: string;
+}
+
+function percentEncode(str: string): string {
+  return encodeURIComponent(str).replace(/[!'()*]/g, c =>
+    '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+}
+
+/**
+ * OAuth 1.0a signing for Twitter/X API.
+ *
+ * Builds the signature base string per RFC 5849:
+ *   METHOD&percent_encode(base_url)&percent_encode(sorted_params)
+ *
+ * JSON request bodies are NOT included in the signature (only
+ * application/x-www-form-urlencoded params would be, per spec).
+ */
+export function signTwitterOAuth1a(params: TwitterOAuth1aParams): SigningResult {
+  const nonce = params.nonce || randomBytes(16).toString('hex');
+  const timestamp = params.timestamp || Math.floor(Date.now() / 1000).toString();
+
+  const oauthParams: Record<string, string> = {
+    oauth_consumer_key: params.consumerKey,
+    oauth_nonce: nonce,
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: timestamp,
+    oauth_token: params.accessToken,
+    oauth_version: '1.0',
+  };
+
+  // Sort parameters alphabetically and build the parameter string
+  const paramString = Object.keys(oauthParams)
+    .sort()
+    .map(k => `${percentEncode(k)}=${percentEncode(oauthParams[k])}`)
+    .join('&');
+
+  const signatureBaseString = [
+    params.method.toUpperCase(),
+    percentEncode(params.baseUrl),
+    percentEncode(paramString),
+  ].join('&');
+
+  const signingKey = percentEncode(params.consumerSecret) + '&' + percentEncode(params.accessTokenSecret);
+
+  const signature = createHmac('sha1', signingKey)
+    .update(signatureBaseString)
+    .digest('base64');
+
+  // Build the Authorization header value
+  const authParams: Record<string, string> = { ...oauthParams, oauth_signature: signature };
+  const headerValue = 'OAuth ' + Object.keys(authParams)
+    .sort()
+    .map(k => `${percentEncode(k)}="${percentEncode(authParams[k])}"`)
+    .join(', ');
+
+  return {
+    headers: {
+      'Authorization': headerValue,
+    },
   };
 }

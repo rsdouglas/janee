@@ -149,6 +149,63 @@ describe('Config YAML', () => {
       expect(loaded.services.ghApp.auth.appId).toBe('123');
       expect(loaded.services.ghApp.auth.installationId).toBe('456');
       expect(loaded.services.okx.auth.passphrase).toBe('p');
+    });
+
+    it('should handle oauth1a-twitter auth type', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
+        services: {
+          twitter: {
+            baseUrl: 'https://api.x.com',
+            auth: {
+              type: 'oauth1a-twitter',
+              consumerKey: 'ck-123',
+              consumerSecret: 'cs-456',
+              accessToken: 'at-789',
+              accessTokenSecret: 'ats-abc',
+            }
+          }
+        },
+        capabilities: {}
+      };
+
+      saveYAMLConfig(config);
+      const loaded = loadYAMLConfig();
+
+      expect(loaded.services.twitter.auth.type).toBe('oauth1a-twitter');
+      expect(loaded.services.twitter.auth.consumerKey).toBe('ck-123');
+      expect(loaded.services.twitter.auth.consumerSecret).toBe('cs-456');
+      expect(loaded.services.twitter.auth.accessToken).toBe('at-789');
+      expect(loaded.services.twitter.auth.accessTokenSecret).toBe('ats-abc');
+
+      // Secrets should NOT be in YAML
+      const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');
+      expect(yamlOnDisk).not.toContain('ck-123');
+      expect(yamlOnDisk).not.toContain('cs-456');
+      expect(yamlOnDisk).not.toContain('at-789');
+      expect(yamlOnDisk).not.toContain('ats-abc');
+      expect(yamlOnDisk).toContain('oauth1a-twitter');
+    });
+
+    it('should not store non-secret metadata in credentials for github-app', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
+        services: {
+          ghApp: {
+            baseUrl: 'https://api.github.com',
+            auth: { type: 'github-app', appId: '123', privateKey: 'PEM-DATA', installationId: '456' }
+          }
+        },
+        capabilities: {}
+      };
+
+      saveYAMLConfig(config);
 
       // Non-secret metadata should be in YAML
       const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');

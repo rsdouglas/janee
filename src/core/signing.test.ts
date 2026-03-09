@@ -2,9 +2,19 @@
  * Tests for HMAC signing implementations
  */
 
-import { describe, it, expect } from 'vitest';
-import { signBybit, signOKX, signMEXC } from './signing';
 import { createHmac } from 'crypto';
+import {
+  describe,
+  expect,
+  it,
+} from 'vitest';
+
+import {
+  signBybit,
+  signMEXC,
+  signOKX,
+  signTwitterOAuth1a,
+} from './signing';
 
 describe('signBybit', () => {
   const apiKey = 'test-api-key';
@@ -231,5 +241,124 @@ describe('signMEXC', () => {
     const expectedPayload = 'timestamp=' + timestamp;
     const expectedSig = createHmac('sha256', apiSecret).update(expectedPayload).digest('hex');
     expect(result.urlParams?.signature).toBe(expectedSig);
+  });
+});
+
+describe('signTwitterOAuth1a', () => {
+  // Known-good test vector: deterministic nonce + timestamp so we can verify exact output
+  const consumerKey = 'xvz1evFS4wEEPTGEFPHBog';
+  const consumerSecret = 'kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw';
+  const accessToken = '370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb';
+  const accessTokenSecret = 'LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE';
+  const nonce = 'kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg';
+  const timestamp = '1318622958';
+
+  it('should produce correct Authorization header', () => {
+    const result = signTwitterOAuth1a({
+      consumerKey,
+      consumerSecret,
+      accessToken,
+      accessTokenSecret,
+      method: 'POST',
+      baseUrl: 'https://api.twitter.com/1.1/statuses/update.json',
+      nonce,
+      timestamp,
+    });
+
+    expect(result.headers['Authorization']).toContain('OAuth ');
+    expect(result.headers['Authorization']).toContain(`oauth_consumer_key="${consumerKey}"`);
+    expect(result.headers['Authorization']).toContain(`oauth_token="${accessToken}"`);
+    expect(result.headers['Authorization']).toContain(`oauth_nonce="${nonce}"`);
+    expect(result.headers['Authorization']).toContain('oauth_signature_method="HMAC-SHA1"');
+    expect(result.headers['Authorization']).toContain(`oauth_timestamp="${timestamp}"`);
+    expect(result.headers['Authorization']).toContain('oauth_version="1.0"');
+    expect(result.headers['Authorization']).toContain('oauth_signature=');
+  });
+
+  it('should compute a deterministic signature with fixed nonce/timestamp', () => {
+    const result1 = signTwitterOAuth1a({
+      consumerKey: 'ck',
+      consumerSecret: 'cs',
+      accessToken: 'at',
+      accessTokenSecret: 'ats',
+      method: 'POST',
+      baseUrl: 'https://api.x.com/2/tweets',
+      nonce: 'testnonce',
+      timestamp: '1700000000',
+    });
+
+    const result2 = signTwitterOAuth1a({
+      consumerKey: 'ck',
+      consumerSecret: 'cs',
+      accessToken: 'at',
+      accessTokenSecret: 'ats',
+      method: 'POST',
+      baseUrl: 'https://api.x.com/2/tweets',
+      nonce: 'testnonce',
+      timestamp: '1700000000',
+    });
+
+    expect(result1.headers['Authorization']).toBe(result2.headers['Authorization']);
+  });
+
+  it('should manually verify signature base string and HMAC-SHA1', () => {
+    const result = signTwitterOAuth1a({
+      consumerKey: 'mykey',
+      consumerSecret: 'mysecret',
+      accessToken: 'mytoken',
+      accessTokenSecret: 'mytokensecret',
+      method: 'POST',
+      baseUrl: 'https://api.x.com/2/tweets',
+      nonce: 'abc123',
+      timestamp: '1700000000',
+    });
+
+    // Reconstruct the expected signature
+    const params = [
+      'oauth_consumer_key=mykey',
+      'oauth_nonce=abc123',
+      'oauth_signature_method=HMAC-SHA1',
+      'oauth_timestamp=1700000000',
+      'oauth_token=mytoken',
+      'oauth_version=1.0',
+    ].join('&');
+
+    const baseString = 'POST&' +
+      encodeURIComponent('https://api.x.com/2/tweets') + '&' +
+      encodeURIComponent(params);
+
+    const signingKey = encodeURIComponent('mysecret') + '&' + encodeURIComponent('mytokensecret');
+    const expectedSig = createHmac('sha1', signingKey).update(baseString).digest('base64');
+
+    expect(result.headers['Authorization']).toContain(
+      `oauth_signature="${encodeURIComponent(expectedSig)}"`
+    );
+  });
+
+  it('should generate random nonce when not provided', () => {
+    const result1 = signTwitterOAuth1a({
+      consumerKey: 'k', consumerSecret: 's',
+      accessToken: 't', accessTokenSecret: 'ts',
+      method: 'POST', baseUrl: 'https://api.x.com/2/tweets',
+    });
+    const result2 = signTwitterOAuth1a({
+      consumerKey: 'k', consumerSecret: 's',
+      accessToken: 't', accessTokenSecret: 'ts',
+      method: 'POST', baseUrl: 'https://api.x.com/2/tweets',
+    });
+    // Different nonces should produce different signatures
+    expect(result1.headers['Authorization']).not.toBe(result2.headers['Authorization']);
+  });
+
+  it('should handle case-insensitive method', () => {
+    const params = {
+      consumerKey: 'k', consumerSecret: 's',
+      accessToken: 't', accessTokenSecret: 'ts',
+      baseUrl: 'https://api.x.com/2/tweets',
+      nonce: 'n', timestamp: '1',
+    };
+    const lower = signTwitterOAuth1a({ ...params, method: 'post' });
+    const upper = signTwitterOAuth1a({ ...params, method: 'POST' });
+    expect(lower.headers['Authorization']).toBe(upper.headers['Authorization']);
   });
 });

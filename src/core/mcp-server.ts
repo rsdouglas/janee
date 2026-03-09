@@ -168,7 +168,8 @@ export interface ServiceConfig {
       | "hmac-okx"
       | "headers"
       | "service-account"
-      | "github-app";
+      | "github-app"
+      | "oauth1a-twitter";
     key?: string;
     apiKey?: string;
     apiSecret?: string;
@@ -179,6 +180,10 @@ export interface ServiceConfig {
     appId?: string; // For github-app
     privateKey?: string; // For github-app: encrypted PEM
     installationId?: string; // For github-app
+    consumerKey?: string; // For oauth1a-twitter
+    consumerSecret?: string; // For oauth1a-twitter
+    accessToken?: string; // For oauth1a-twitter
+    accessTokenSecret?: string; // For oauth1a-twitter
   };
   /** Auth-required GET path used by `janee test` to verify credentials (e.g. "/v1/balance") */
   testPath?: string;

@@ -94,6 +94,19 @@ export async function buildAuthHeaders(
       }
     }
 
+  } else if (serviceConfig.auth.type === 'oauth1a-twitter' && serviceConfig.auth.consumerKey && serviceConfig.auth.consumerSecret && serviceConfig.auth.accessToken && serviceConfig.auth.accessTokenSecret) {
+    const { signTwitterOAuth1a } = await import('./signing.js');
+    const baseUrl = ctx.targetUrl.origin + ctx.targetUrl.pathname;
+    const result: SigningResult = signTwitterOAuth1a({
+      consumerKey: serviceConfig.auth.consumerKey,
+      consumerSecret: serviceConfig.auth.consumerSecret,
+      accessToken: serviceConfig.auth.accessToken,
+      accessTokenSecret: serviceConfig.auth.accessTokenSecret,
+      method: ctx.method,
+      baseUrl,
+    });
+    Object.assign(headers, result.headers);
+
   } else if (serviceConfig.auth.type === 'github-app' && serviceConfig.auth.appId && serviceConfig.auth.privateKey && serviceConfig.auth.installationId) {
     const { getInstallationToken, clearCachedInstallationToken } = await import('./github-app.js');
     type GHC = import('./github-app.js').GitHubAppCredentials;

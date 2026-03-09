@@ -78,6 +78,10 @@ export async function addCommand(
     passphraseFromEnv?: string;
     credentialsFile?: string;
     scope?: string | string[];
+    consumerKey?: string;
+    consumerSecret?: string;
+    accessToken?: string;
+    accessTokenSecret?: string;
     testPath?: string;
     exec?: boolean;
     allowCommands?: string[];
@@ -211,7 +215,7 @@ export async function addCommand(
     }
 
     let baseUrl: string;
-    let authType: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
+    let authType: 'bearer' | 'basic' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app' | 'oauth1a-twitter';
 
     if (template) {
       // Use template from directory
@@ -288,6 +292,11 @@ export async function addCommand(
               name: 'hmac-okx — OKX exchange HMAC',
               value: 'hmac-okx',
               description: 'OKX-specific HMAC with passphrase'
+            },
+            {
+              name: 'oauth1a-twitter — Twitter/X OAuth 1.0a',
+              value: 'oauth1a-twitter',
+              description: 'OAuth 1.0a per-request signing for Twitter/X API'
             },
             {
               name: 'basic — HTTP Basic Auth',
@@ -385,6 +394,29 @@ export async function addCommand(
         apiKey: apiKey.trim(),
         apiSecret: apiSecret.trim(),
         passphrase: passphrase.trim()
+      };
+    } else if (authType === 'oauth1a-twitter') {
+      let consumerKey = options.consumerKey;
+      let consumerSecret = options.consumerSecret;
+      let accessToken = options.accessToken;
+      let accessTokenSecret = options.accessTokenSecret;
+
+      if (!consumerKey) consumerKey = await getRL().question('Consumer API key: ');
+      if (!consumerSecret) consumerSecret = await getRL().question('Consumer API secret: ');
+      if (!accessToken) accessToken = await getRL().question('Access token: ');
+      if (!accessTokenSecret) accessTokenSecret = await getRL().question('Access token secret: ');
+
+      if (!consumerKey || !consumerSecret || !accessToken || !accessTokenSecret) {
+        console.error('❌ All four OAuth 1.0a credentials are required for Twitter/X');
+        process.exit(1);
+      }
+
+      auth = {
+        type: 'oauth1a-twitter',
+        consumerKey: consumerKey.trim(),
+        consumerSecret: consumerSecret.trim(),
+        accessToken: accessToken.trim(),
+        accessTokenSecret: accessTokenSecret.trim(),
       };
     } else if (authType === 'service-account') {
       if (!options.json) console.log('\n📋 Service Account Setup');

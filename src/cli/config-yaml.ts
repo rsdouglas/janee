@@ -25,7 +25,7 @@ import {
 } from '../core/crypto';
 
 export interface AuthConfig {
-  type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app';
+  type: 'bearer' | 'hmac-mexc' | 'hmac-bybit' | 'hmac-okx' | 'headers' | 'service-account' | 'github-app' | 'oauth1a-twitter';
   key?: string;
   apiKey?: string;
   apiSecret?: string;
@@ -36,6 +36,10 @@ export interface AuthConfig {
   appId?: string;
   privateKey?: string;
   installationId?: string;
+  consumerKey?: string;
+  consumerSecret?: string;
+  accessToken?: string;
+  accessTokenSecret?: string;
 }
 
 export interface ServiceConfig {
@@ -164,6 +168,11 @@ function extractSecrets(auth: AuthConfig): ServiceSecrets {
     secrets.credentials = auth.credentials;
   } else if (auth.type === 'github-app' && auth.privateKey) {
     secrets.privateKey = auth.privateKey;
+  } else if (auth.type === 'oauth1a-twitter') {
+    if (auth.consumerKey) secrets.consumerKey = auth.consumerKey;
+    if (auth.consumerSecret) secrets.consumerSecret = auth.consumerSecret;
+    if (auth.accessToken) secrets.accessToken = auth.accessToken;
+    if (auth.accessTokenSecret) secrets.accessTokenSecret = auth.accessTokenSecret;
   }
   return secrets;
 }
@@ -178,6 +187,10 @@ function stripSecrets(auth: AuthConfig): AuthConfig {
   delete clean.privateKey;
   delete clean.credentials;
   delete clean.headers;
+  delete clean.consumerKey;
+  delete clean.consumerSecret;
+  delete clean.accessToken;
+  delete clean.accessTokenSecret;
   return clean;
 }
 
@@ -195,6 +208,11 @@ function injectSecrets(auth: AuthConfig, secrets: ServiceSecrets): void {
     auth.credentials = secrets.credentials;
   } else if (auth.type === 'github-app' && typeof secrets.privateKey === 'string') {
     auth.privateKey = secrets.privateKey;
+  } else if (auth.type === 'oauth1a-twitter') {
+    if (typeof secrets.consumerKey === 'string') auth.consumerKey = secrets.consumerKey;
+    if (typeof secrets.consumerSecret === 'string') auth.consumerSecret = secrets.consumerSecret;
+    if (typeof secrets.accessToken === 'string') auth.accessToken = secrets.accessToken;
+    if (typeof secrets.accessTokenSecret === 'string') auth.accessTokenSecret = secrets.accessTokenSecret;
   }
 }
 
