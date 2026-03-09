@@ -4,6 +4,10 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+_(empty)_
+
+## [0.13.0] - 2026-03-09
+
 ### Added
 
 - **`janee cap add/edit` — exec & agent scoping flags** — Both commands now accept `--allowed-agents`, `--mode`, `--allow-commands`, `--env-map`, `--work-dir`, and `--timeout`. `cap edit` also accepts `--clear-agents`. All 6 previously missing CapabilityConfig fields are now fully CLI-manageable.
