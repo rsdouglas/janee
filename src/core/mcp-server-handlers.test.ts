@@ -18,6 +18,7 @@ async function createTestPair(overrides: {
   services?: Map<string, ServiceConfig>;
   defaultAccess?: 'open' | 'restricted';
   onPersistOwnership?: (service: string, ownership: CredentialOwnership) => void;
+  onForwardToolCall?: (toolName: string, args: Record<string, unknown>, agentId?: string) => Promise<unknown>;
 } = {}) {
   const capabilities = overrides.capabilities ?? [{
     name: 'test-cap',
@@ -45,6 +46,7 @@ async function createTestPair(overrides: {
       body: '{"ok":true}'
     }),
     onPersistOwnership: overrides.onPersistOwnership,
+    onForwardToolCall: overrides.onForwardToolCall,
   });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -768,6 +770,24 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       expect(parsed.agentId).toBe('agent-x');
       expect(parsed.defaultAccessPolicy).toBe('restricted');
       expect(parsed.capabilities.denied).toContain('cap');
+    });
+
+    it('should forward whoami in runner mode', async () => {
+      const forwardResult = {
+        content: [{ type: 'text', text: JSON.stringify({ agentId: 'authority-agent' }) }],
+      };
+      const onForwardToolCall = vi.fn().mockResolvedValue(forwardResult);
+
+      const { client } = await createTestPair({
+        clientName: 'runner-agent',
+        onForwardToolCall,
+      });
+
+      const result = await client.callTool({ name: 'whoami', arguments: {} });
+      const parsed = extractJSON(result);
+
+      expect(parsed.agentId).toBe('authority-agent');
+      expect(onForwardToolCall).toHaveBeenCalledWith('whoami', {}, 'runner-agent');
     });
   });
 });

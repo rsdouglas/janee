@@ -430,8 +430,8 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     const { name, arguments: args } = request.params;
 
     try {
-      // Runner proxy: forward non-exec/non-local tools to the Authority
-      if (onForwardToolCall && name !== "janee_exec" && name !== "whoami") {
+      // Runner proxy: forward all non-exec tools to the Authority
+      if (onForwardToolCall && name !== "janee_exec") {
         const forwardAgentId = resolveAgentFromRequest(extra, args);
         const result = await onForwardToolCall(
           name,

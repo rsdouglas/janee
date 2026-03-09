@@ -9,7 +9,7 @@ All notable changes to Janee will be documented in this file.
 - **`janee cap add/edit` — exec & agent scoping flags** — Both commands now accept `--allowed-agents`, `--mode`, `--allow-commands`, `--env-map`, `--work-dir`, and `--timeout`. `cap edit` also accepts `--clear-agents`. All 6 previously missing CapabilityConfig fields are now fully CLI-manageable.
 - **`janee service edit <name>`** — Edit an existing service in-place: update `--url`, `--test-path`, or rotate secrets (`--key`, `--api-secret`, `--passphrase`, `--pem-file`, `--credentials-file`, `--header`). Supports `--*-from-env` variants and `--json`.
 - **`janee config get/set`** — View and update server settings (`server.port`, `server.host`, `server.logBodies`, `server.strictDecryption`, `server.defaultAccess`) without editing YAML. Values are type-validated (boolean, number, enum).
-- **`whoami` MCP tool + `janee whoami` CLI command** — Agents can discover their resolved identity as Janee sees it, which capabilities they can access vs. are denied, and the server's default access policy. CLI supports `--agent <name>` to preview what a specific agent would see. Handled locally (not forwarded to Authority in runner mode) since identity is session-local.
+- **`whoami` MCP tool + `janee whoami` CLI command** — Agents can discover their resolved identity as Janee sees it, which capabilities they can access vs. are denied, and the server's default access policy. CLI supports `--agent <name>` to preview what a specific agent would see. In runner mode, MCP `whoami` resolves via Authority (source of truth).
 
 ### Changed
 
