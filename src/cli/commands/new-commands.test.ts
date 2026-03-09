@@ -471,14 +471,15 @@ describe('configSetCommand', () => {
     expect(cap.logs.join(' ')).toContain('Invalid boolean');
   });
 
-  it('should create llm section if missing', async () => {
+  it('should reject llm keys (not currently supported)', async () => {
     mockHas.mockReturnValue(true);
     mockLoad.mockReturnValue(baseConfig());
     const cap = captureConsole();
-    await configSetCommand('llm.provider', 'openai', { json: true });
+    try {
+      await configSetCommand('llm.provider', 'openai', { json: true });
+    } catch {}
     cap.restore();
-    const saved = mockSave.mock.calls[0][0] as any;
-    expect(saved.llm.provider).toBe('openai');
+    expect(cap.logs.join(' ')).toContain('Unknown config key');
   });
 
   it('should reject unknown key', async () => {

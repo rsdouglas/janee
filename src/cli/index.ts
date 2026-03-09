@@ -103,7 +103,7 @@ service
   .action(serviceEditCommand);
 
 // Config get/set
-const configCmd = program.command('config').description('View or update server and LLM settings');
+const configCmd = program.command('config').description('View or update server settings');
 
 configCmd
   .command('get [key]')
@@ -113,7 +113,7 @@ configCmd
 
 configCmd
   .command('set <key> <value>')
-  .description('Set a config value (e.g. server.port 9200, llm.model gpt-4o)')
+  .description('Set a config value (e.g. server.port 9200)')
   .option('--json', 'Output as JSON')
   .action(configSetCommand);
 

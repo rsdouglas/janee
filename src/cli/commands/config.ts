@@ -15,9 +15,6 @@ const VALID_KEYS: Record<string, { type: 'string' | 'number' | 'boolean'; enum?:
   'server.logBodies': { type: 'boolean' },
   'server.strictDecryption': { type: 'boolean' },
   'server.defaultAccess': { type: 'string', enum: ['open', 'restricted'] },
-  'llm.provider': { type: 'string', enum: ['openai', 'anthropic'] },
-  'llm.apiKey': { type: 'string' },
-  'llm.model': { type: 'string' },
 };
 
 function getNestedValue(obj: any, dotPath: string): unknown {
@@ -60,8 +57,7 @@ export async function configGetCommand(
         console.log(JSON.stringify(result, null, 2));
       } else {
         for (const [k, v] of Object.entries(result)) {
-          const display = k === 'llm.apiKey' && typeof v === 'string' ? `${v.slice(0, 8)}...` : v;
-          console.log(`  ${k} = ${display ?? '(not set)'}`);
+          console.log(`  ${k} = ${v ?? '(not set)'}`);
         }
       }
       return;
@@ -75,8 +71,7 @@ export async function configGetCommand(
     if (options.json) {
       console.log(JSON.stringify({ key, value }));
     } else {
-      const display = key === 'llm.apiKey' && typeof value === 'string' ? `${value.slice(0, 8)}...` : value;
-      console.log(`${key} = ${display ?? '(not set)'}`);
+      console.log(`${key} = ${value ?? '(not set)'}`);
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
