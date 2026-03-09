@@ -1,6 +1,11 @@
 /**
- * YAML configuration for Janee (new format)
- * Supports capabilities + services model
+ * YAML configuration for Janee
+ *
+ * Config is split across two files:
+ *   config.yaml        — human-readable policy (services metadata, capabilities, server settings)
+ *   credentials.json   — encrypted secrets + master key (never hand-edited)
+ *
+ * Old v0.2.0 configs with inline masterKey + encrypted blobs are auto-migrated on first load.
  */
 
 import fs from 'fs';
@@ -24,13 +29,13 @@ export interface AuthConfig {
   key?: string;
   apiKey?: string;
   apiSecret?: string;
-  passphrase?: string;  // For OKX
+  passphrase?: string;
   headers?: Record<string, string>;
-  credentials?: string;  // For service-account: encrypted JSON blob
-  scopes?: string[];     // For service-account: OAuth scopes
-  appId?: string;           // For github-app
-  privateKey?: string;      // For github-app: encrypted PEM
-  installationId?: string;  // For github-app
+  credentials?: string;
+  scopes?: string[];
+  appId?: string;
+  privateKey?: string;
+  installationId?: string;
 }
 
 export interface ServiceConfig {
@@ -51,14 +56,12 @@ export interface CapabilityConfig {
     allow?: string[];
     deny?: string[];
   };
-  /** Restrict this capability to specific agent IDs (e.g. ["myapp:worker-1"]) */
   allowedAgents?: string[];
-  // Exec mode fields (RFC 0001)
-  mode?: 'proxy' | 'exec';  // Default: 'proxy' (HTTP proxy mode)
-  allowCommands?: string[];  // Whitelist of allowed executables
-  env?: Record<string, string>;  // Env var mapping with {{credential}} placeholders
-  workDir?: string;  // Working directory for command execution
-  timeout?: number;  // Max execution time in ms (default: 30000)
+  mode?: 'proxy' | 'exec';
+  allowCommands?: string[];
+  env?: Record<string, string>;
+  workDir?: string;
+  timeout?: number;
 }
 
 export interface LLMConfig {
@@ -70,9 +73,8 @@ export interface LLMConfig {
 export interface ServerConfig {
   port: number;
   host: string;
-  logBodies?: boolean;  // Log request bodies in audit trail (default: true)
-  strictDecryption?: boolean;  // Fail hard on decryption errors (default: true)
-  /** Default access policy for capabilities without allowedAgents: "open" (any agent) or "restricted" (admin-only) */
+  logBodies?: boolean;
+  strictDecryption?: boolean;
   defaultAccess?: 'open' | 'restricted';
 }
 
@@ -85,44 +87,121 @@ export interface JaneeYAMLConfig {
   capabilities: Record<string, CapabilityConfig>;
 }
 
-/**
- * Get config directory path (dynamically computed for testability)
- */
+/** Shape of secrets stored per service in credentials.json */
+type ServiceSecrets = Record<string, string | Record<string, string>>;
+
+interface CredentialsFile {
+  masterKey: string;
+  secrets: Record<string, ServiceSecrets>;
+}
+
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
+
 export function getConfigDir(): string {
   return process.env.JANEE_HOME || path.join(os.homedir(), '.janee');
 }
 
-/**
- * Get YAML config file path
- */
 function getConfigFileYAML(): string {
   return path.join(getConfigDir(), 'config.yaml');
 }
 
-/**
- * Get JSON config file path
- */
+function getCredentialsFile(): string {
+  return path.join(getConfigDir(), 'credentials.json');
+}
+
 function getConfigFileJSON(): string {
   return path.join(getConfigDir(), 'config.json');
 }
 
-/**
- * Get audit directory path
- */
 export function getAuditDir(): string {
   return path.join(getConfigDir(), 'logs');
 }
 
-/**
- * Check if using YAML config
- */
 export function hasYAMLConfig(): boolean {
   return fs.existsSync(getConfigFileYAML());
 }
 
-/**
- * Helper to decrypt a secret with strict/lenient mode
- */
+// ---------------------------------------------------------------------------
+// Credentials file I/O (atomic writes)
+// ---------------------------------------------------------------------------
+
+function loadCredentials(): CredentialsFile {
+  const credPath = getCredentialsFile();
+  if (!fs.existsSync(credPath)) {
+    throw new Error('No credentials file found. Run `janee init` to create one.');
+  }
+  return JSON.parse(fs.readFileSync(credPath, 'utf8'));
+}
+
+function saveCredentials(creds: CredentialsFile): void {
+  const credPath = getCredentialsFile();
+  const tmpPath = credPath + '.tmp.' + process.pid;
+  fs.writeFileSync(tmpPath, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  fs.renameSync(tmpPath, credPath);
+}
+
+// ---------------------------------------------------------------------------
+// Secret extraction / injection
+//
+// These functions move secret fields between ServiceConfig.auth and the
+// credentials.json secrets map, so the YAML file stays human-readable.
+// ---------------------------------------------------------------------------
+
+/** Extract secret fields from a service's auth config, returning them separately. */
+function extractSecrets(auth: AuthConfig): ServiceSecrets {
+  const secrets: ServiceSecrets = {};
+  if (auth.type === 'bearer' && auth.key) {
+    secrets.key = auth.key;
+  } else if (auth.type === 'hmac-mexc' || auth.type === 'hmac-bybit' || auth.type === 'hmac-okx') {
+    if (auth.apiKey) secrets.apiKey = auth.apiKey;
+    if (auth.apiSecret) secrets.apiSecret = auth.apiSecret;
+    if (auth.passphrase) secrets.passphrase = auth.passphrase;
+  } else if (auth.type === 'headers' && auth.headers) {
+    secrets.headers = { ...auth.headers };
+  } else if (auth.type === 'service-account' && auth.credentials) {
+    secrets.credentials = auth.credentials;
+  } else if (auth.type === 'github-app' && auth.privateKey) {
+    secrets.privateKey = auth.privateKey;
+  }
+  return secrets;
+}
+
+/** Remove secret fields from an auth config (for writing clean YAML). */
+function stripSecrets(auth: AuthConfig): AuthConfig {
+  const clean = { ...auth };
+  delete clean.key;
+  delete clean.apiKey;
+  delete clean.apiSecret;
+  delete clean.passphrase;
+  delete clean.privateKey;
+  delete clean.credentials;
+  delete clean.headers;
+  return clean;
+}
+
+/** Merge secrets back into a service's auth config. */
+function injectSecrets(auth: AuthConfig, secrets: ServiceSecrets): void {
+  if (auth.type === 'bearer' && typeof secrets.key === 'string') {
+    auth.key = secrets.key;
+  } else if (auth.type === 'hmac-mexc' || auth.type === 'hmac-bybit' || auth.type === 'hmac-okx') {
+    if (typeof secrets.apiKey === 'string') auth.apiKey = secrets.apiKey;
+    if (typeof secrets.apiSecret === 'string') auth.apiSecret = secrets.apiSecret;
+    if (typeof secrets.passphrase === 'string') auth.passphrase = secrets.passphrase;
+  } else if (auth.type === 'headers' && typeof secrets.headers === 'object') {
+    auth.headers = secrets.headers as Record<string, string>;
+  } else if (auth.type === 'service-account' && typeof secrets.credentials === 'string') {
+    auth.credentials = secrets.credentials;
+  } else if (auth.type === 'github-app' && typeof secrets.privateKey === 'string') {
+    auth.privateKey = secrets.privateKey;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Encrypt / decrypt helpers
+// ---------------------------------------------------------------------------
+
 function tryDecrypt(
   encrypted: string,
   masterKey: string,
@@ -139,89 +218,130 @@ function tryDecrypt(
         `To allow plaintext values (not recommended), set server.strictDecryption: false in config.yaml`
       );
     }
-    // Lenient mode: assume plaintext
     return encrypted;
   }
 }
 
+function decryptServiceSecrets(
+  name: string,
+  secrets: ServiceSecrets,
+  masterKey: string,
+  strict: boolean
+): ServiceSecrets {
+  const decrypted: ServiceSecrets = {};
+  for (const [field, value] of Object.entries(secrets)) {
+    if (field === 'headers' && typeof value === 'object') {
+      const hdrs: Record<string, string> = {};
+      for (const [hdr, enc] of Object.entries(value)) {
+        hdrs[hdr] = tryDecrypt(enc, masterKey, strict, `header "${hdr}" for service "${name}"`);
+      }
+      decrypted.headers = hdrs;
+    } else if (typeof value === 'string') {
+      decrypted[field] = tryDecrypt(value, masterKey, strict, `${field} for service "${name}"`);
+    }
+  }
+  return decrypted;
+}
+
+function encryptServiceSecrets(secrets: ServiceSecrets, masterKey: string): ServiceSecrets {
+  const encrypted: ServiceSecrets = {};
+  for (const [field, value] of Object.entries(secrets)) {
+    if (field === 'headers' && typeof value === 'object') {
+      const hdrs: Record<string, string> = {};
+      for (const [hdr, plain] of Object.entries(value)) {
+        hdrs[hdr] = encryptSecret(plain, masterKey);
+      }
+      encrypted.headers = hdrs;
+    } else if (typeof value === 'string') {
+      encrypted[field] = encryptSecret(value, masterKey);
+    }
+  }
+  return encrypted;
+}
+
+// ---------------------------------------------------------------------------
+// Migration: v0.2.0 (inline secrets) → v0.3.0 (split credentials.json)
+// ---------------------------------------------------------------------------
+
+function isLegacyFormat(rawConfig: any): boolean {
+  return typeof rawConfig.masterKey === 'string' && rawConfig.masterKey.length > 0;
+}
+
+function migrateLegacyConfig(): void {
+  const yamlPath = getConfigFileYAML();
+  const content = fs.readFileSync(yamlPath, 'utf8');
+  const raw = yaml.load(content) as any;
+
+  if (!isLegacyFormat(raw)) return;
+
+  const masterKey: string = raw.masterKey;
+  const services: Record<string, any> = raw.services || {};
+
+  // Build credentials file from inline encrypted values
+  const creds: CredentialsFile = { masterKey, secrets: {} };
+  for (const [name, svc] of Object.entries(services)) {
+    const auth = (svc as any).auth;
+    if (!auth) continue;
+    const secrets = extractSecrets(auth as AuthConfig);
+    if (Object.keys(secrets).length > 0) {
+      creds.secrets[name] = secrets;
+    }
+  }
+
+  // Write credentials.json atomically
+  saveCredentials(creds);
+
+  // Rewrite config.yaml without masterKey and without secret fields
+  delete raw.masterKey;
+  raw.version = '0.3.0';
+  for (const [name, svc] of Object.entries(services)) {
+    const auth = (svc as any).auth;
+    if (!auth) continue;
+    (svc as any).auth = stripSecrets(auth as AuthConfig);
+  }
+
+  const cleanYaml = yaml.dump(raw, { indent: 2, lineWidth: 120 });
+  fs.writeFileSync(yamlPath, cleanYaml, { mode: 0o600 });
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /**
- * Load YAML configuration
+ * Load config from disk. Automatically migrates v0.2.0 legacy format on first load.
+ * Returns the full config with secrets decrypted in memory.
  */
 export function loadYAMLConfig(): JaneeYAMLConfig {
   if (!fs.existsSync(getConfigFileYAML())) {
     throw new Error('No YAML config found. Run migration or init.');
   }
 
+  // Auto-migrate legacy inline-secrets format
+  const rawContent = fs.readFileSync(getConfigFileYAML(), 'utf8');
+  const rawConfig = yaml.load(rawContent) as any;
+  if (isLegacyFormat(rawConfig)) {
+    migrateLegacyConfig();
+  }
+
+  // Read the (possibly freshly migrated) YAML
   const content = fs.readFileSync(getConfigFileYAML(), 'utf8');
   const config = yaml.load(content) as JaneeYAMLConfig;
-
-  // Ensure services and capabilities are objects (YAML parses empty sections as null)
   config.services = config.services || {};
   config.capabilities = config.capabilities || {};
 
-  // Strict decryption mode (default: true)
+  // Load credentials
+  const creds = loadCredentials();
+  config.masterKey = creds.masterKey;
+
   const strictDecryption = config.server?.strictDecryption ?? true;
 
-  // Decrypt service auth keys
-  for (const [name, service] of Object.entries(config.services)) {
-    const svc = service as ServiceConfig;
-    
-    if (svc.auth.type === 'bearer' && svc.auth.key) {
-      svc.auth.key = tryDecrypt(
-        svc.auth.key,
-        config.masterKey,
-        strictDecryption,
-        `bearer token for service "${name}"`
-      );
-    } else if (svc.auth.type === 'hmac-mexc' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
-      if (svc.auth.apiKey) {
-        svc.auth.apiKey = tryDecrypt(
-          svc.auth.apiKey,
-          config.masterKey,
-          strictDecryption,
-          `API key for service "${name}"`
-        );
-      }
-      if (svc.auth.apiSecret) {
-        svc.auth.apiSecret = tryDecrypt(
-          svc.auth.apiSecret,
-          config.masterKey,
-          strictDecryption,
-          `API secret for service "${name}"`
-        );
-      }
-      if (svc.auth.passphrase) {
-        svc.auth.passphrase = tryDecrypt(
-          svc.auth.passphrase,
-          config.masterKey,
-          strictDecryption,
-          `passphrase for service "${name}"`
-        );
-      }
-    } else if (svc.auth.type === 'headers' && svc.auth.headers) {
-      // Decrypt each header value
-      for (const [headerName, headerValue] of Object.entries(svc.auth.headers)) {
-        svc.auth.headers[headerName] = tryDecrypt(
-          headerValue,
-          config.masterKey,
-          strictDecryption,
-          `header "${headerName}" for service "${name}"`
-        );
-      }
-    } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
-      svc.auth.credentials = tryDecrypt(
-        svc.auth.credentials,
-        config.masterKey,
-        strictDecryption,
-        `service account credentials for service "${name}"`
-      );
-    } else if (svc.auth.type === 'github-app' && svc.auth.privateKey) {
-      svc.auth.privateKey = tryDecrypt(
-        svc.auth.privateKey,
-        config.masterKey,
-        strictDecryption,
-        `GitHub App private key for service "${name}"`
-      );
+  // Decrypt and inject secrets into each service
+  for (const [name, svc] of Object.entries(config.services)) {
+    const encSecrets = creds.secrets[name];
+    if (encSecrets) {
+      const decSecrets = decryptServiceSecrets(name, encSecrets, creds.masterKey, strictDecryption);
+      injectSecrets(svc.auth, decSecrets);
     }
   }
 
@@ -230,42 +350,33 @@ export function loadYAMLConfig(): JaneeYAMLConfig {
 
 /**
  * Save config to disk. Send SIGHUP to a running Janee process to reload.
+ *
+ * Splits the config: secrets go to credentials.json (encrypted, atomic write),
+ * everything else goes to config.yaml (human-readable).
  */
 export function saveYAMLConfig(config: JaneeYAMLConfig): void {
-  // Encrypt service auth keys before saving
-  const configCopy = JSON.parse(JSON.stringify(config));
+  const configCopy: any = JSON.parse(JSON.stringify(config));
 
-  for (const [name, service] of Object.entries(configCopy.services)) {
-    const svc = service as ServiceConfig;
-    if (svc.auth.type === 'bearer' && svc.auth.key) {
-      svc.auth.key = encryptSecret(svc.auth.key, config.masterKey);
-    } else if (svc.auth.type === 'hmac-mexc' || svc.auth.type === 'hmac-bybit' || svc.auth.type === 'hmac-okx') {
-      if (svc.auth.apiKey) {
-        svc.auth.apiKey = encryptSecret(svc.auth.apiKey, config.masterKey);
-      }
-      if (svc.auth.apiSecret) {
-        svc.auth.apiSecret = encryptSecret(svc.auth.apiSecret, config.masterKey);
-      }
-      if (svc.auth.passphrase) {
-        svc.auth.passphrase = encryptSecret(svc.auth.passphrase, config.masterKey);
-      }
-    } else if (svc.auth.type === 'headers' && svc.auth.headers) {
-      // Encrypt each header value
-      for (const headerName of Object.keys(svc.auth.headers)) {
-        svc.auth.headers[headerName] = encryptSecret(svc.auth.headers[headerName], config.masterKey);
-      }
-    } else if (svc.auth.type === 'service-account' && svc.auth.credentials) {
-      svc.auth.credentials = encryptSecret(svc.auth.credentials, config.masterKey);
-    } else if (svc.auth.type === 'github-app' && svc.auth.privateKey) {
-      svc.auth.privateKey = encryptSecret(svc.auth.privateKey, config.masterKey);
+  // Build credentials from the decrypted in-memory config
+  const creds: CredentialsFile = { masterKey: config.masterKey, secrets: {} };
+
+  for (const [name, service] of Object.entries(configCopy.services as Record<string, ServiceConfig>)) {
+    const plainSecrets = extractSecrets(service.auth);
+    if (Object.keys(plainSecrets).length > 0) {
+      creds.secrets[name] = encryptServiceSecrets(plainSecrets, config.masterKey);
     }
+    // Strip secrets from YAML copy
+    configCopy.services[name].auth = stripSecrets(service.auth);
   }
 
-  const yamlContent = yaml.dump(configCopy, {
-    indent: 2,
-    lineWidth: 120
-  });
+  // Remove masterKey from YAML (lives in credentials.json now)
+  delete configCopy.masterKey;
+  configCopy.version = '0.3.0';
 
+  // Write credentials atomically, then YAML
+  saveCredentials(creds);
+
+  const yamlContent = yaml.dump(configCopy, { indent: 2, lineWidth: 120 });
   fs.writeFileSync(getConfigFileYAML(), yamlContent, { mode: 0o600 });
 }
 
@@ -312,15 +423,15 @@ export function initYAMLConfig(): JaneeYAMLConfig {
   }
 
   const config: JaneeYAMLConfig = {
-    version: '0.2.0',
+    version: '0.3.0',
     masterKey: generateMasterKey(),
     server: {
       port: 9119,
       host: 'localhost',
-      strictDecryption: true  // Fail hard on decryption errors (recommended)
+      strictDecryption: true,
     },
     services: {},
-    capabilities: {}
+    capabilities: {},
   };
 
   saveYAMLConfig(config);

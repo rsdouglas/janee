@@ -4,7 +4,9 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
-_(empty)_
+### Changed
+
+- **Config secrets separation** — Encrypted secrets and the master key are now stored in `~/.janee/credentials.json` instead of inline in `config.yaml`. This makes `config.yaml` human-readable (~150 lines vs 392) so you can `vim` it for capability tweaks and agent scoping. Existing v0.2.0 configs with inline secrets are auto-migrated on first load. `credentials.json` is written atomically (temp + rename). No new dependencies.
 
 ## [0.12.0] - 2026-02-27
 

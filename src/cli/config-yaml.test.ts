@@ -1,5 +1,5 @@
 /**
- * Tests for YAML config encryption and strict mode
+ * Tests for config split (config.yaml + credentials.json)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -14,323 +14,299 @@ import { encryptSecret, generateMasterKey } from '../core/crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import yaml from 'js-yaml';
 
 describe('Config YAML', () => {
   let testConfigDir: string;
+  let testJaneeDir: string;
   let testConfigFile: string;
+  let testCredentialsFile: string;
   let originalHomedir: () => string;
   
   beforeEach(() => {
-    // Create unique test directory for each test
     testConfigDir = path.join(os.tmpdir(), `janee-test-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-    testConfigFile = path.join(testConfigDir, '.janee', 'config.yaml');
+    testJaneeDir = path.join(testConfigDir, '.janee');
+    testConfigFile = path.join(testJaneeDir, 'config.yaml');
+    testCredentialsFile = path.join(testJaneeDir, 'credentials.json');
     
-    // Create test directory structure
-    fs.mkdirSync(path.join(testConfigDir, '.janee'), { recursive: true });
+    fs.mkdirSync(testJaneeDir, { recursive: true });
     
-    // Mock homedir to use test directory
     originalHomedir = os.homedir;
     os.homedir = () => testConfigDir;
   });
   
   afterEach(() => {
-    // Restore original homedir
     os.homedir = originalHomedir;
-    
-    // Clean up test directory
     if (fs.existsSync(testConfigDir)) {
       fs.rmSync(testConfigDir, { recursive: true, force: true });
     }
   });
 
-  describe('Strict Decryption Mode', () => {
-    it('should throw error on decryption failure when strictDecryption is true', () => {
+  describe('Split file format', () => {
+    it('should write secrets to credentials.json, not config.yaml', () => {
       const masterKey = generateMasterKey();
-      
-      // Create config with strictDecryption: true
       const config: JaneeYAMLConfig = {
-        version: '0.2.0',
+        version: '0.3.0',
         masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: true
-        },
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
         services: {
-          testService: {
+          testSvc: {
             baseUrl: 'https://api.test.com',
-            auth: {
-              type: 'bearer',
-              key: encryptSecret('test-key', masterKey)
-            }
+            auth: { type: 'bearer', key: 'my-secret-key' }
           }
         },
         capabilities: {}
       };
-      
+
       saveYAMLConfig(config);
-      
-      // Corrupt the encrypted key by changing master key to a different one
-      const wrongMasterKey = generateMasterKey();
-      const corruptedConfig = fs.readFileSync(testConfigFile, 'utf8')
-        .replace(masterKey, wrongMasterKey);
-      fs.writeFileSync(testConfigFile, corruptedConfig, 'utf8');
-      
-      // Should throw with strict mode
-      expect(() => loadYAMLConfig()).toThrow(/Failed to decrypt bearer token for service "testService"/);
+
+      // YAML should NOT contain the secret or masterKey
+      const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');
+      expect(yamlOnDisk).not.toContain('my-secret-key');
+      expect(yamlOnDisk).not.toContain(masterKey);
+      expect(yamlOnDisk).toContain('type: bearer');
+      expect(yamlOnDisk).toContain('baseUrl: https://api.test.com');
+
+      // credentials.json should exist with masterKey and encrypted secret
+      expect(fs.existsSync(testCredentialsFile)).toBe(true);
+      const creds = JSON.parse(fs.readFileSync(testCredentialsFile, 'utf8'));
+      expect(creds.masterKey).toBe(masterKey);
+      expect(creds.secrets.testSvc.key).toBeDefined();
+      expect(creds.secrets.testSvc.key).not.toBe('my-secret-key');
+    });
+
+    it('should round-trip save and load correctly', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
+        services: {
+          bearer: {
+            baseUrl: 'https://api1.com',
+            auth: { type: 'bearer', key: 'bearer-key' }
+          },
+          hmac: {
+            baseUrl: 'https://api2.com',
+            auth: { type: 'hmac-mexc', apiKey: 'hk', apiSecret: 'hs' }
+          },
+          hdrs: {
+            baseUrl: 'https://api3.com',
+            auth: { type: 'headers', headers: { 'X-Key': 'hv' } }
+          }
+        },
+        capabilities: {}
+      };
+
+      saveYAMLConfig(config);
+      const loaded = loadYAMLConfig();
+
+      expect(loaded.masterKey).toBe(masterKey);
+      expect(loaded.services.bearer.auth.key).toBe('bearer-key');
+      expect(loaded.services.hmac.auth.apiKey).toBe('hk');
+      expect(loaded.services.hmac.auth.apiSecret).toBe('hs');
+      expect(loaded.services.hdrs.auth.headers?.['X-Key']).toBe('hv');
+    });
+
+    it('should handle all auth types correctly', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
+        services: {
+          svcAccount: {
+            baseUrl: 'https://api4.com',
+            auth: { type: 'service-account', credentials: '{"key":"val"}', scopes: ['read'] }
+          },
+          ghApp: {
+            baseUrl: 'https://api.github.com',
+            auth: { type: 'github-app', appId: '123', privateKey: 'PEM-DATA', installationId: '456' }
+          },
+          okx: {
+            baseUrl: 'https://www.okx.com',
+            auth: { type: 'hmac-okx', apiKey: 'k', apiSecret: 's', passphrase: 'p' }
+          }
+        },
+        capabilities: {}
+      };
+
+      saveYAMLConfig(config);
+      const loaded = loadYAMLConfig();
+
+      expect(loaded.services.svcAccount.auth.credentials).toBe('{"key":"val"}');
+      expect(loaded.services.svcAccount.auth.scopes).toEqual(['read']);
+      expect(loaded.services.ghApp.auth.privateKey).toBe('PEM-DATA');
+      expect(loaded.services.ghApp.auth.appId).toBe('123');
+      expect(loaded.services.ghApp.auth.installationId).toBe('456');
+      expect(loaded.services.okx.auth.passphrase).toBe('p');
+
+      // Non-secret metadata should be in YAML
+      const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');
+      expect(yamlOnDisk).toContain("appId: '123'");
+      expect(yamlOnDisk).toContain("installationId: '456'");
+      expect(yamlOnDisk).not.toContain('PEM-DATA');
+    });
+
+    it('should preserve capabilities and server config', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true, defaultAccess: 'restricted' },
+        services: {
+          api: {
+            baseUrl: 'https://api.com',
+            auth: { type: 'bearer', key: 'k' }
+          }
+        },
+        capabilities: {
+          api_ro: { service: 'api', ttl: '1h', autoApprove: true, rules: { allow: ['GET *'], deny: ['POST *'] } }
+        }
+      };
+
+      saveYAMLConfig(config);
+      const loaded = loadYAMLConfig();
+
+      expect(loaded.server.defaultAccess).toBe('restricted');
+      expect(loaded.capabilities.api_ro.rules?.allow).toEqual(['GET *']);
+    });
+  });
+
+  describe('Strict Decryption Mode', () => {
+    it('should throw error on decryption failure when strictDecryption is true', () => {
+      const masterKey = generateMasterKey();
+      const config: JaneeYAMLConfig = {
+        version: '0.3.0',
+        masterKey,
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
+        services: {
+          testService: {
+            baseUrl: 'https://api.test.com',
+            auth: { type: 'bearer', key: 'test-key' }
+          }
+        },
+        capabilities: {}
+      };
+
+      saveYAMLConfig(config);
+
+      // Corrupt credentials by swapping to a different master key
+      const wrongKey = generateMasterKey();
+      const creds = JSON.parse(fs.readFileSync(testCredentialsFile, 'utf8'));
+      creds.masterKey = wrongKey;
+      fs.writeFileSync(testCredentialsFile, JSON.stringify(creds));
+
+      expect(() => loadYAMLConfig()).toThrow(/Failed to decrypt/);
     });
 
     it('should fall back to plaintext when strictDecryption is false', () => {
       const masterKey = generateMasterKey();
-      const plaintextKey = 'plaintext-api-key';
-      
-      // Create config with strictDecryption: false and plaintext key
       const config: JaneeYAMLConfig = {
-        version: '0.2.0',
+        version: '0.3.0',
         masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: false
-        },
+        server: { port: 9119, host: 'localhost', strictDecryption: false },
         services: {
           testService: {
             baseUrl: 'https://api.test.com',
-            auth: {
-              type: 'bearer',
-              key: plaintextKey  // Not encrypted
-            }
+            auth: { type: 'bearer', key: 'test-key' }
           }
         },
         capabilities: {}
       };
-      
-      // Write directly to file as YAML (bypassing encryption)
-      const yaml = require('js-yaml');
-      fs.writeFileSync(testConfigFile, yaml.dump(config), 'utf8');
-      
-      // Should load plaintext value without error
-      const loaded = loadYAMLConfig();
-      expect(loaded.services.testService.auth.key).toBe(plaintextKey);
-    });
 
-    it('should default to strict mode when not specified', () => {
-      const masterKey = generateMasterKey();
-      
-      // Create config without strictDecryption setting
-      const config: JaneeYAMLConfig = {
-        version: '0.2.0',
-        masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost'
-          // strictDecryption not set
-        },
-        services: {
-          testService: {
-            baseUrl: 'https://api.test.com',
-            auth: {
-              type: 'bearer',
-              key: encryptSecret('test-key', masterKey)
-            }
-          }
-        },
-        capabilities: {}
-      };
-      
       saveYAMLConfig(config);
-      
-      // Corrupt the encrypted key by changing to wrong master key
-      const wrongMasterKey = generateMasterKey();
-      const corruptedConfig = fs.readFileSync(testConfigFile, 'utf8')
-        .replace(masterKey, wrongMasterKey);
-      fs.writeFileSync(testConfigFile, corruptedConfig, 'utf8');
-      
-      // Should throw (default is strict)
-      expect(() => loadYAMLConfig()).toThrow(/Failed to decrypt/);
+
+      // Replace encrypted value with plaintext in credentials.json
+      const creds = JSON.parse(fs.readFileSync(testCredentialsFile, 'utf8'));
+      creds.secrets.testService.key = 'plaintext-value';
+      fs.writeFileSync(testCredentialsFile, JSON.stringify(creds));
+
+      const loaded = loadYAMLConfig();
+      expect(loaded.services.testService.auth.key).toBe('plaintext-value');
     });
   });
 
-  describe('Headers Auth Type Encryption', () => {
-    it('should encrypt and decrypt headers auth values', () => {
+  describe('Legacy migration (v0.2.0 → v0.3.0)', () => {
+    it('should auto-migrate inline masterKey + secrets on first load', () => {
       const masterKey = generateMasterKey();
-      
-      const config: JaneeYAMLConfig = {
+      const encKey = encryptSecret('my-bearer-token', masterKey);
+
+      // Write a legacy v0.2.0 config with inline masterKey and encrypted secrets
+      const legacyConfig = {
         version: '0.2.0',
         masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: true
-        },
+        server: { port: 9119, host: 'localhost', strictDecryption: true },
         services: {
-          testService: {
-            baseUrl: 'https://api.test.com',
-            auth: {
-              type: 'headers',
-              headers: {
-                'X-API-Key': 'secret-api-key-123',
-                'X-Custom-Header': 'another-secret'
-              }
-            }
+          myapi: {
+            baseUrl: 'https://api.example.com',
+            auth: { type: 'bearer', key: encKey }
           }
         },
-        capabilities: {}
+        capabilities: {
+          myapi: { service: 'myapi', ttl: '1h', autoApprove: true }
+        }
       };
-      
-      // Save and reload
-      saveYAMLConfig(config);
+      fs.writeFileSync(testConfigFile, yaml.dump(legacyConfig), { mode: 0o600 });
+
+      // Load should trigger migration and return decrypted config
       const loaded = loadYAMLConfig();
-      
-      // Values should be decrypted correctly
-      expect(loaded.services.testService.auth.headers?.['X-API-Key']).toBe('secret-api-key-123');
-      expect(loaded.services.testService.auth.headers?.['X-Custom-Header']).toBe('another-secret');
-      
-      // Check that values are encrypted on disk
-      const onDisk = fs.readFileSync(testConfigFile, 'utf8');
-      expect(onDisk).not.toContain('secret-api-key-123');
-      expect(onDisk).not.toContain('another-secret');
+      expect(loaded.masterKey).toBe(masterKey);
+      expect(loaded.services.myapi.auth.key).toBe('my-bearer-token');
+      expect(loaded.capabilities.myapi.ttl).toBe('1h');
+
+      // After migration, config.yaml should NOT have masterKey
+      const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');
+      expect(yamlOnDisk).not.toContain(masterKey);
+      const parsedYaml = yaml.load(yamlOnDisk) as any;
+      expect(parsedYaml.masterKey).toBeUndefined();
+      expect(parsedYaml.version).toBe('0.3.0');
+
+      // credentials.json should exist
+      expect(fs.existsSync(testCredentialsFile)).toBe(true);
+      const creds = JSON.parse(fs.readFileSync(testCredentialsFile, 'utf8'));
+      expect(creds.masterKey).toBe(masterKey);
+      expect(creds.secrets.myapi).toBeDefined();
     });
 
-    it('should encrypt all header values independently', () => {
+    it('should migrate HMAC services correctly', () => {
       const masterKey = generateMasterKey();
-      
-      const config: JaneeYAMLConfig = {
+      const legacyConfig = {
         version: '0.2.0',
         masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: true
-        },
+        server: { port: 9119, host: 'localhost' },
         services: {
-          testService: {
-            baseUrl: 'https://api.test.com',
+          exchange: {
+            baseUrl: 'https://api.exchange.com',
             auth: {
-              type: 'headers',
-              headers: {
-                'Authorization': 'Bearer secret-token',
-                'X-API-Key': 'another-key',
-                'X-Signature': 'signature-value'
-              }
+              type: 'hmac-bybit',
+              apiKey: encryptSecret('ak', masterKey),
+              apiSecret: encryptSecret('as', masterKey)
             }
           }
         },
         capabilities: {}
       };
-      
-      saveYAMLConfig(config);
-      
-      // Verify all values are encrypted on disk (should not contain plaintext)
-      const onDisk = fs.readFileSync(testConfigFile, 'utf8');
-      expect(onDisk).not.toContain('Bearer secret-token');
-      expect(onDisk).not.toContain('another-key');
-      expect(onDisk).not.toContain('signature-value');
-      
-      // Reload and verify all decrypted correctly
-      const loaded = loadYAMLConfig();
-      expect(loaded.services.testService.auth.headers?.['Authorization']).toBe('Bearer secret-token');
-      expect(loaded.services.testService.auth.headers?.['X-API-Key']).toBe('another-key');
-      expect(loaded.services.testService.auth.headers?.['X-Signature']).toBe('signature-value');
-    });
+      fs.writeFileSync(testConfigFile, yaml.dump(legacyConfig), { mode: 0o600 });
 
-    it('should throw on corrupted header value in strict mode', () => {
-      const masterKey = generateMasterKey();
-      
-      const config: JaneeYAMLConfig = {
-        version: '0.2.0',
-        masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: true
-        },
-        services: {
-          testService: {
-            baseUrl: 'https://api.test.com',
-            auth: {
-              type: 'headers',
-              headers: {
-                'X-API-Key': 'secret-key'
-              }
-            }
-          }
-        },
-        capabilities: {}
-      };
-      
-      saveYAMLConfig(config);
-      
-      // Corrupt one header value (replace first base64 value with invalid base64)
-      let onDisk = fs.readFileSync(testConfigFile, 'utf8');
-      // Find the first base64-like value after X-API-Key and corrupt it
-      onDisk = onDisk.replace(/(X-API-Key:\s+)([A-Za-z0-9+/=]+)/, '$1corrupted-not-base64!!!');
-      fs.writeFileSync(testConfigFile, onDisk, 'utf8');
-      
-      // Should throw with descriptive error
-      expect(() => loadYAMLConfig()).toThrow(/Failed to decrypt header "X-API-Key" for service "testService"/);
+      const loaded = loadYAMLConfig();
+      expect(loaded.services.exchange.auth.apiKey).toBe('ak');
+      expect(loaded.services.exchange.auth.apiSecret).toBe('as');
     });
   });
 
   describe('initYAMLConfig', () => {
-    it('should create config with strictDecryption enabled by default', () => {
+    it('should create split config with v0.3.0', () => {
       const config = initYAMLConfig();
-      
-      expect(config.server.strictDecryption).toBe(true);
-    });
-  });
 
-  describe('Multiple Auth Types', () => {
-    it('should encrypt all auth types correctly', () => {
-      const masterKey = generateMasterKey();
-      
-      const config: JaneeYAMLConfig = {
-        version: '0.2.0',
-        masterKey,
-        server: {
-          port: 9119,
-          host: 'localhost',
-          strictDecryption: true
-        },
-        services: {
-          bearerService: {
-            baseUrl: 'https://api1.com',
-            auth: { type: 'bearer', key: 'bearer-key' }
-          },
-          hmacService: {
-            baseUrl: 'https://api2.com',
-            auth: { 
-              type: 'hmac-mexc', 
-              apiKey: 'hmac-key',
-              apiSecret: 'hmac-secret'
-            }
-          },
-          headersService: {
-            baseUrl: 'https://api3.com',
-            auth: {
-              type: 'headers',
-              headers: { 'X-Key': 'header-value' }
-            }
-          }
-        },
-        capabilities: {}
-      };
-      
-      saveYAMLConfig(config);
-      const loaded = loadYAMLConfig();
-      
-      // All values should decrypt correctly
-      expect(loaded.services.bearerService.auth.key).toBe('bearer-key');
-      expect(loaded.services.hmacService.auth.apiKey).toBe('hmac-key');
-      expect(loaded.services.hmacService.auth.apiSecret).toBe('hmac-secret');
-      expect(loaded.services.headersService.auth.headers?.['X-Key']).toBe('header-value');
-      
-      // All values should be encrypted on disk
-      const onDisk = fs.readFileSync(testConfigFile, 'utf8');
-      expect(onDisk).not.toContain('bearer-key');
-      expect(onDisk).not.toContain('hmac-key');
-      expect(onDisk).not.toContain('hmac-secret');
-      expect(onDisk).not.toContain('header-value');
+      expect(config.server.strictDecryption).toBe(true);
+      expect(config.version).toBe('0.3.0');
+      expect(fs.existsSync(testConfigFile)).toBe(true);
+      expect(fs.existsSync(testCredentialsFile)).toBe(true);
+
+      // YAML should not contain masterKey
+      const yamlOnDisk = fs.readFileSync(testConfigFile, 'utf8');
+      expect(yamlOnDisk).not.toContain(config.masterKey);
     });
   });
 });
