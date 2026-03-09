@@ -711,4 +711,63 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
       expect(accessible('cap-a')).toBe(false);
     });
   });
+
+  describe('whoami', () => {
+    it('should return the resolved agent identity and accessible capabilities', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.example.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+
+      const capabilities: Capability[] = [
+        { name: 'open-cap', service: 'svc', ttl: '1h', autoApprove: true },
+        { name: 'restricted-cap', service: 'svc', ttl: '1h', autoApprove: true, allowedAgents: ['agent-a'] },
+      ];
+
+      const { client } = await createTestPair({ clientName: 'agent-a', services, capabilities });
+      const result = await client.callTool({ name: 'whoami', arguments: {} });
+      const parsed = extractJSON(result);
+
+      expect(parsed.agentId).toBe('agent-a');
+      expect(parsed.identitySource).toBe('transport (clientInfo.name)');
+      expect(parsed.capabilities.accessible).toContain('open-cap');
+      expect(parsed.capabilities.accessible).toContain('restricted-cap');
+      expect(parsed.capabilities.denied).toHaveLength(0);
+    });
+
+    it('should show denied capabilities for an unrecognized agent', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.example.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+
+      const capabilities: Capability[] = [
+        { name: 'open-cap', service: 'svc', ttl: '1h', autoApprove: true },
+        { name: 'restricted-cap', service: 'svc', ttl: '1h', autoApprove: true, allowedAgents: ['agent-a'] },
+      ];
+
+      const { client } = await createTestPair({ clientName: 'agent-b', services, capabilities });
+      const result = await client.callTool({ name: 'whoami', arguments: {} });
+      const parsed = extractJSON(result);
+
+      expect(parsed.agentId).toBe('agent-b');
+      expect(parsed.capabilities.accessible).toContain('open-cap');
+      expect(parsed.capabilities.denied).toContain('restricted-cap');
+    });
+
+    it('should report defaultAccessPolicy', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.example.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [
+        { name: 'cap', service: 'svc', ttl: '1h', autoApprove: true },
+      ];
+
+      const { client } = await createTestPair({ clientName: 'agent-x', services, capabilities, defaultAccess: 'restricted' });
+      const result = await client.callTool({ name: 'whoami', arguments: {} });
+      const parsed = extractJSON(result);
+
+      expect(parsed.agentId).toBe('agent-x');
+      expect(parsed.defaultAccessPolicy).toBe('restricted');
+      expect(parsed.capabilities.denied).toContain('cap');
+    });
+  });
 });

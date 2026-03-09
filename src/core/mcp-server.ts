@@ -396,6 +396,17 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     },
   };
 
+  // Tool: whoami — lets agents discover their resolved identity
+  const whoamiTool: Tool = {
+    name: 'whoami',
+    description: 'Show your resolved agent identity as Janee sees it, which capabilities you can access, and the server access policy. Useful for understanding allowedAgents restrictions.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
@@ -403,6 +414,7 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
       executeTool,
       manageCredentialTool,
       testServiceTool,
+      whoamiTool,
     ];
     if (onExecCommand && !options.hideExecTool) {
       tools.push(execTool);
@@ -418,8 +430,8 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     const { name, arguments: args } = request.params;
 
     try {
-      // Runner proxy: forward non-exec tools to the Authority
-      if (onForwardToolCall && name !== "janee_exec") {
+      // Runner proxy: forward non-exec/non-local tools to the Authority
+      if (onForwardToolCall && name !== "janee_exec" && name !== "whoami") {
         const forwardAgentId = resolveAgentFromRequest(extra, args);
         const result = await onForwardToolCall(
           name,
@@ -920,6 +932,37 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
                 ),
               },
             ],
+          };
+        }
+
+        case 'whoami': {
+          const whoamiAgentId = resolveAgentFromRequest(extra, args);
+
+          const accessibleCaps = capabilities
+            .filter(cap => canAccessCapability(whoamiAgentId, cap, services.get(cap.service), defaultAccess))
+            .map(cap => cap.name);
+
+          const deniedCaps = capabilities
+            .filter(cap => !canAccessCapability(whoamiAgentId, cap, services.get(cap.service), defaultAccess))
+            .map(cap => cap.name);
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                agentId: whoamiAgentId ?? null,
+                identitySource: whoamiAgentId
+                  ? ((extra?.sessionId && clientSessions.has(extra.sessionId)) || clientSessions.has('__default__')
+                    ? 'transport (clientInfo.name)'
+                    : 'client-asserted (untrusted)')
+                  : 'none',
+                defaultAccessPolicy: defaultAccess ?? 'open',
+                capabilities: {
+                  accessible: accessibleCaps,
+                  denied: deniedCaps,
+                },
+              }, null, 2)
+            }]
           };
         }
 

@@ -4,6 +4,13 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`janee cap add/edit` — exec & agent scoping flags** — Both commands now accept `--allowed-agents`, `--mode`, `--allow-commands`, `--env-map`, `--work-dir`, and `--timeout`. `cap edit` also accepts `--clear-agents`. All 6 previously missing CapabilityConfig fields are now fully CLI-manageable.
+- **`janee service edit <name>`** — Edit an existing service in-place: update `--url`, `--test-path`, or rotate secrets (`--key`, `--api-secret`, `--passphrase`, `--pem-file`, `--credentials-file`, `--header`). Supports `--*-from-env` variants and `--json`.
+- **`janee config get/set`** — View and update server settings (`server.port`, `server.host`, `server.logBodies`, `server.strictDecryption`, `server.defaultAccess`) and LLM config (`llm.provider`, `llm.apiKey`, `llm.model`) without editing YAML. Values are type-validated (boolean, number, enum).
+- **`whoami` MCP tool + `janee whoami` CLI command** — Agents can discover their resolved identity as Janee sees it, which capabilities they can access vs. are denied, and the server's default access policy. CLI supports `--agent <name>` to preview what a specific agent would see. Handled locally (not forwarded to Authority in runner mode) since identity is session-local.
+
 ### Changed
 
 - **Config secrets separation** — Encrypted secrets and the master key are now stored in `~/.janee/credentials.json` instead of inline in `config.yaml`. This makes `config.yaml` human-readable (~150 lines vs 392) so you can `vim` it for capability tweaks and agent scoping. Existing v0.2.0 configs with inline secrets are auto-migrated on first load. `credentials.json` is written atomically (temp + rename). No new dependencies.
