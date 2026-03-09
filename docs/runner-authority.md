@@ -188,18 +188,98 @@ services:
 
 ## Troubleshooting
 
+### Quick diagnostics
+
+Run `janee doctor runner` to check connectivity, auth, tool forwarding, and identity parity in one command:
+
+```bash
+janee doctor runner http://authority:3100 --runner-key "$JANEE_RUNNER_KEY"
+```
+
+To test as a specific agent:
+
+```bash
+janee doctor runner http://authority:3100 --runner-key "$JANEE_RUNNER_KEY" --agent creature:patch
+```
+
+This outputs PASS/WARN/FAIL for each check with remediation hints.
+
+### Debugging access denials
+
+When an agent reports it can't do something, trace the exact policy evaluation:
+
+```bash
+# CLI — reads local config
+janee diagnose access gh-cli --agent creature:patch
+
+# With method/path for rule evaluation
+janee diagnose access stripe-read --agent my-agent --method DELETE --path /v1/charges/ch_123
+```
+
+Agents can also call `explain_access` directly via MCP (automatically forwarded to Authority in runner mode):
+
+```json
+{
+  "tool": "explain_access",
+  "arguments": {
+    "capability": "gh-cli",
+    "agent": "creature:patch"
+  }
+}
+```
+
+Both return a step-by-step trace: capability exists → mode → allowedAgents → defaultAccess → ownership → rules.
+
+### Structured denial codes
+
+When `execute` or `janee_exec` is denied, the error response includes a machine-readable `denial` field:
+
+```json
+{
+  "error": "Access denied: capability \"gh-cli\" is not accessible to this agent",
+  "denial": {
+    "reasonCode": "AGENT_NOT_ALLOWED",
+    "capability": "gh-cli",
+    "agentId": "unknown-agent",
+    "evaluatedPolicy": "Agent \"unknown-agent\" is not in allowedAgents [creature:patch]",
+    "nextStep": "Add this agent to allowedAgents: 'janee cap edit gh-cli --allowed-agents unknown-agent'"
+  }
+}
+```
+
+Reason codes: `CAPABILITY_NOT_FOUND`, `AGENT_NOT_ALLOWED`, `DEFAULT_ACCESS_RESTRICTED`, `OWNERSHIP_DENIED`, `RULE_DENY`, `MODE_MISMATCH`, `REASON_REQUIRED`, `COMMAND_NOT_ALLOWED`.
+
+### Support bundle
+
+For complex incidents, generate a redacted diagnostics bundle:
+
+```bash
+janee doctor bundle --agent creature:patch -o /tmp/janee-debug.json
+```
+
+This includes config metadata (no secrets), agent access summary, and recent denial events.
+
+### Common issues
+
 **Runner can't reach Authority**
 - Check that the Authority is listening on `0.0.0.0`, not `127.0.0.1`
 - In Docker, use `http://host.docker.internal:3100` (macOS/Windows) or the container network hostname
 - Verify the runner key matches on both sides
+- Run `janee doctor runner <url>` for a full connectivity check
 
 **Exec authorization fails with "Unknown capability"**
 - The `capabilityId` the agent sends must match a `name` in your `capabilities` config
 - The capability must have `mode: exec`
+- Run `janee diagnose access <cap> --agent <name>` to see where it fails
 
 **Commands fail but worked in non-Runner mode**
 - The command runs inside the container — ensure the executable is installed there
 - Working directory may differ; set `workDir` in the capability config
+
+**Agent says "not accessible" but should have access**
+- Check `allowedAgents` on the capability: `janee cap list --json`
+- Check `defaultAccess` policy: `janee config get server.defaultAccess`
+- Use `explain_access` or `janee diagnose access` for a full trace
 
 ## Recent Features
 

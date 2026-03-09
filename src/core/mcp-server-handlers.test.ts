@@ -3,13 +3,29 @@
  * Tests actual tool call behavior through Server + Client over InMemoryTransport.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { createMCPServer, captureClientInfo, Capability, ServiceConfig } from './mcp-server';
-import { SessionManager } from './sessions';
+
+import {
+  agentCreatedOwnership,
+  cliCreatedOwnership,
+  CredentialOwnership,
+} from './agent-scope';
 import { AuditLogger } from './audit';
-import { CredentialOwnership, agentCreatedOwnership, cliCreatedOwnership } from './agent-scope';
+import {
+  Capability,
+  captureClientInfo,
+  createMCPServer,
+  ServiceConfig,
+} from './mcp-server';
+import { SessionManager } from './sessions';
 
 // Helper to create a connected client+server pair
 async function createTestPair(overrides: {
@@ -19,6 +35,7 @@ async function createTestPair(overrides: {
   defaultAccess?: 'open' | 'restricted';
   onPersistOwnership?: (service: string, ownership: CredentialOwnership) => void;
   onForwardToolCall?: (toolName: string, args: Record<string, unknown>, agentId?: string) => Promise<unknown>;
+  onExecCommand?: (session: any, cap: Capability, cmd: string[], stdin?: string) => Promise<any>;
 } = {}) {
   const capabilities = overrides.capabilities ?? [{
     name: 'test-cap',
@@ -45,6 +62,7 @@ async function createTestPair(overrides: {
       headers: { 'content-type': 'application/json' },
       body: '{"ok":true}'
     }),
+    onExecCommand: overrides.onExecCommand,
     onPersistOwnership: overrides.onPersistOwnership,
     onForwardToolCall: overrides.onForwardToolCall,
   });
@@ -788,6 +806,351 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
 
       expect(parsed.agentId).toBe('authority-agent');
       expect(onForwardToolCall).toHaveBeenCalledWith('whoami', {}, 'runner-agent');
+    });
+  });
+
+  describe('Structured denial codes', () => {
+    it('should return CAPABILITY_NOT_FOUND for unknown capability on execute', async () => {
+      const { client } = await createTestPair();
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'nonexistent', method: 'GET', path: '/test' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('CAPABILITY_NOT_FOUND');
+      expect(parsed.denial.capability).toBe('nonexistent');
+      expect(parsed.denial.nextStep).toContain('janee cap list');
+    });
+
+    it('should return AGENT_NOT_ALLOWED when agent is not in allowedAgents', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'restricted-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        allowedAgents: ['agent-a']
+      }];
+
+      const { client } = await createTestPair({ clientName: 'agent-b', services, capabilities });
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'restricted-cap', method: 'GET', path: '/test' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('AGENT_NOT_ALLOWED');
+      expect(parsed.denial.agentId).toBe('agent-b');
+      expect(parsed.denial.nextStep).toContain('janee cap edit');
+    });
+
+    it('should return DEFAULT_ACCESS_RESTRICTED when defaultAccess blocks agent', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'open-cap', service: 'svc', ttl: '1h', autoApprove: true
+      }];
+
+      const { client } = await createTestPair({
+        clientName: 'some-agent', services, capabilities, defaultAccess: 'restricted'
+      });
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'open-cap', method: 'GET', path: '/test' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('DEFAULT_ACCESS_RESTRICTED');
+    });
+
+    it('should return MODE_MISMATCH when using execute for exec-mode capability', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'exec-cap', service: 'svc', ttl: '1h', autoApprove: true, mode: 'exec'
+      }];
+
+      const { client } = await createTestPair({ services, capabilities });
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'exec-cap', method: 'GET', path: '/test' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('MODE_MISMATCH');
+    });
+
+    it('should return REASON_REQUIRED when reason is missing', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'audit-cap', service: 'svc', ttl: '1h', autoApprove: true, requiresReason: true
+      }];
+
+      const { client } = await createTestPair({ services, capabilities });
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'audit-cap', method: 'GET', path: '/test' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('REASON_REQUIRED');
+    });
+
+    it('should return RULE_DENY when path-based rules deny the request', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'ruled-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        rules: { deny: ['DELETE /**'] }
+      }];
+
+      const { client } = await createTestPair({ services, capabilities });
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'ruled-cap', method: 'DELETE', path: '/anything' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('RULE_DENY');
+      expect(parsed.denial.nextStep).toContain('janee cap list');
+    });
+
+    it('should return CAPABILITY_NOT_FOUND for janee_exec with unknown capability', async () => {
+      const mockExec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await createTestPair({ onExecCommand: mockExec });
+      const result = await client.callTool({
+        name: 'janee_exec',
+        arguments: { capability: 'ghost', command: 'ls' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('CAPABILITY_NOT_FOUND');
+    });
+
+    it('should return MODE_MISMATCH for janee_exec on a proxy capability', async () => {
+      const mockExec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await createTestPair({ onExecCommand: mockExec });
+      const result = await client.callTool({
+        name: 'janee_exec',
+        arguments: { capability: 'test-cap', command: 'ls' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('MODE_MISMATCH');
+    });
+
+    it('should return COMMAND_NOT_ALLOWED for janee_exec with disallowed command', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'exec-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        mode: 'exec', allowCommands: ['ls', 'cat']
+      }];
+
+      const mockExec = vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await createTestPair({ services, capabilities, onExecCommand: mockExec });
+      const result = await client.callTool({
+        name: 'janee_exec',
+        arguments: { capability: 'exec-cap', command: 'rm -rf /' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.denial).toBeDefined();
+      expect(parsed.denial.reasonCode).toBe('COMMAND_NOT_ALLOWED');
+      expect(parsed.denial.nextStep).toContain('janee cap edit');
+    });
+
+    it('should NOT include denial field for non-denial errors', async () => {
+      const { client } = await createTestPair();
+      const result = await client.callTool({
+        name: 'execute',
+        arguments: { capability: 'test-cap', method: 'GET' }
+      });
+      expect(result.isError).toBe(true);
+      const parsed = extractJSON(result);
+      expect(parsed.error).toContain('Missing required argument: path');
+      expect(parsed.denial).toBeUndefined();
+    });
+  });
+
+  describe('explain_access', () => {
+    it('should show full trace for an allowed capability', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'my-cap', service: 'svc', ttl: '1h', autoApprove: true
+      }];
+
+      const { client } = await createTestPair({ clientName: 'agent-a', services, capabilities });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'my-cap' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(true);
+      expect(parsed.agent).toBe('agent-a');
+      expect(parsed.capability).toBe('my-cap');
+      expect(parsed.trace).toEqual(expect.arrayContaining([
+        expect.objectContaining({ check: 'capability_exists', result: 'pass' }),
+      ]));
+    });
+
+    it('should report capability not found', async () => {
+      const { client } = await createTestPair();
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'nonexistent' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(false);
+      expect(parsed.trace[0].check).toBe('capability_exists');
+      expect(parsed.trace[0].result).toBe('fail');
+      expect(parsed.nextStep).toBeDefined();
+    });
+
+    it('should show AGENT_NOT_ALLOWED when agent is not in allowedAgents', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'restricted', service: 'svc', ttl: '1h', autoApprove: true,
+        allowedAgents: ['agent-a']
+      }];
+
+      const { client } = await createTestPair({ clientName: 'agent-b', services, capabilities });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'restricted' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(false);
+      const agentStep = parsed.trace.find((t: any) => t.check === 'allowed_agents');
+      expect(agentStep.result).toBe('fail');
+      expect(agentStep.detail).toContain('agent-b');
+    });
+
+    it('should trace defaultAccess restricted', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'cap', service: 'svc', ttl: '1h', autoApprove: true
+      }];
+
+      const { client } = await createTestPair({
+        clientName: 'agent-x', services, capabilities, defaultAccess: 'restricted'
+      });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'cap' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(false);
+      const step = parsed.trace.find((t: any) => t.check === 'default_access');
+      expect(step.result).toBe('fail');
+      expect(step.detail).toContain('restricted');
+    });
+
+    it('should evaluate rules when method/path provided', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'ruled-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        rules: { deny: ['DELETE /**'] }
+      }];
+
+      const { client } = await createTestPair({ services, capabilities });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'ruled-cap', method: 'DELETE', path: '/anything' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(false);
+      const ruleStep = parsed.trace.find((t: any) => t.check === 'rules');
+      expect(ruleStep.result).toBe('fail');
+    });
+
+    it('should show allowed=true for rules that pass', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'ruled-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        rules: { deny: ['DELETE /**'] }
+      }];
+
+      const { client } = await createTestPair({ services, capabilities });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'ruled-cap', method: 'GET', path: '/ok' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(true);
+      const ruleStep = parsed.trace.find((t: any) => t.check === 'rules');
+      expect(ruleStep.result).toBe('pass');
+    });
+
+    it('should allow specifying a different agent via args', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'cap', service: 'svc', ttl: '1h', autoApprove: true,
+        allowedAgents: ['special-agent']
+      }];
+
+      const { client } = await createTestPair({ clientName: 'admin', services, capabilities });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'cap', agent: 'special-agent' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(true);
+      expect(parsed.agent).toBe('special-agent');
+    });
+
+    it('should be forwarded in runner mode', async () => {
+      const forwardResult = {
+        content: [{ type: 'text', text: JSON.stringify({ allowed: true, agent: 'test', trace: [] }) }],
+      };
+      const onForwardToolCall = vi.fn().mockResolvedValue(forwardResult);
+
+      const { client } = await createTestPair({ clientName: 'runner-agent', onForwardToolCall });
+      const result = await client.callTool({
+        name: 'explain_access',
+        arguments: { capability: 'test-cap' }
+      });
+      const parsed = extractJSON(result);
+
+      expect(parsed.allowed).toBe(true);
+      expect(onForwardToolCall).toHaveBeenCalledWith(
+        'explain_access',
+        expect.objectContaining({ capability: 'test-cap' }),
+        'runner-agent'
+      );
     });
   });
 });

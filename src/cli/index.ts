@@ -17,7 +17,13 @@ import {
   capabilityListCommand,
   capabilityRemoveCommand,
 } from './commands/capability';
-import { configGetCommand, configSetCommand } from './commands/config';
+import {
+  configGetCommand,
+  configSetCommand,
+} from './commands/config';
+import { diagnoseAccessCommand } from './commands/diagnose';
+import { doctorRunnerCommand } from './commands/doctor';
+import { doctorBundleCommand } from './commands/doctor-bundle';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
@@ -177,6 +183,37 @@ program
   .option('--agent <name>', 'Preview access for a specific agent identity')
   .option('--json', 'Output as JSON')
   .action(whoamiCommand);
+
+// Diagnostics
+const diagnose = program.command('diagnose').description('Debug access and configuration issues');
+
+diagnose
+  .command('access <capability>')
+  .description('Trace why an agent can or cannot access a capability')
+  .option('--agent <name>', 'Agent ID to evaluate (default: admin/CLI)')
+  .option('--method <method>', 'HTTP method for rules evaluation (e.g., GET, POST)')
+  .option('--path <path>', 'Request path for rules evaluation')
+  .option('--json', 'Output as JSON')
+  .action((capability: string, options: any) => diagnoseAccessCommand(capability, options));
+
+// Doctor
+const doctor = program.command('doctor').description('System health checks');
+
+doctor
+  .command('runner <authority-url>')
+  .description('Check runner-to-authority connectivity, auth, and tool forwarding')
+  .option('--runner-key <key>', 'Runner key (or set JANEE_RUNNER_KEY)')
+  .option('--agent <name>', 'Agent identity to test with (default: doctor-probe)')
+  .option('--json', 'Output as JSON')
+  .action((authorityUrl: string, options: any) => doctorRunnerCommand(authorityUrl, options));
+
+doctor
+  .command('bundle')
+  .description('Export a redacted diagnostics bundle for incident debugging')
+  .option('-o, --output <file>', 'Write bundle to file instead of stdout')
+  .option('--agent <name>', 'Include access summary for this agent')
+  .option('--lines <n>', 'Number of recent denials to include (default: 50)')
+  .action((options: any) => doctorBundleCommand(options));
 
 program
   .command('test [service]')

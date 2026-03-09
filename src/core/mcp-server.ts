@@ -36,6 +36,33 @@ const packageJsonPath = join(__dirname, "../../package.json");
 const pkgVersion =
   JSON.parse(readFileSync(packageJsonPath, "utf8")).version || "0.0.0";
 
+export type DenialReasonCode =
+  | 'CAPABILITY_NOT_FOUND'
+  | 'AGENT_NOT_ALLOWED'
+  | 'DEFAULT_ACCESS_RESTRICTED'
+  | 'OWNERSHIP_DENIED'
+  | 'RULE_DENY'
+  | 'MODE_MISMATCH'
+  | 'REASON_REQUIRED'
+  | 'COMMAND_NOT_ALLOWED';
+
+export interface DenialDetails {
+  reasonCode: DenialReasonCode;
+  capability?: string;
+  agentId?: string | null;
+  evaluatedPolicy?: string;
+  nextStep: string;
+}
+
+export class DenialError extends Error {
+  denial: DenialDetails;
+  constructor(message: string, denial: DenialDetails) {
+    super(message);
+    this.name = 'DenialError';
+    this.denial = denial;
+  }
+}
+
 /**
  * Check whether an agent can access a capability.
  * Checks capability-level allowedAgents first, then falls back to
@@ -60,6 +87,46 @@ function canAccessCapability(
   }
 
   return canAgentAccess(agentId, service?.ownership);
+}
+
+export type AccessDenialReason = 'AGENT_NOT_ALLOWED' | 'DEFAULT_ACCESS_RESTRICTED' | 'OWNERSHIP_DENIED';
+
+/**
+ * Returns the specific reason access was denied, or null if access is allowed.
+ */
+export function explainAccessDenial(
+  agentId: string | undefined,
+  cap: Capability,
+  service: ServiceConfig | undefined,
+  defaultAccessPolicy: 'open' | 'restricted' | undefined
+): { reason: AccessDenialReason; detail: string } | null {
+  if (!agentId) return null;
+
+  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
+    if (!cap.allowedAgents.includes(agentId)) {
+      return {
+        reason: 'AGENT_NOT_ALLOWED',
+        detail: `Agent "${agentId}" is not in allowedAgents [${cap.allowedAgents.join(', ')}]`
+      };
+    }
+    return null;
+  }
+
+  if (defaultAccessPolicy === 'restricted') {
+    return {
+      reason: 'DEFAULT_ACCESS_RESTRICTED',
+      detail: `defaultAccess is "restricted" and capability has no allowedAgents list`
+    };
+  }
+
+  if (!canAgentAccess(agentId, service?.ownership)) {
+    return {
+      reason: 'OWNERSHIP_DENIED',
+      detail: `Agent "${agentId}" is not listed in service ownership for "${service?.baseUrl || 'unknown'}"`
+    };
+  }
+
+  return null;
 }
 
 export interface Capability {
@@ -407,6 +474,34 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
     }
   };
 
+  // Tool: explain_access — full policy evaluation trace
+  const explainAccessTool: Tool = {
+    name: 'explain_access',
+    description: 'Trace exactly why a given agent can or cannot access a capability. Returns step-by-step policy evaluation (capability exists, mode, allowedAgents, defaultAccess, ownership, rules). Use for debugging access issues.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agent: {
+          type: 'string',
+          description: 'Agent ID to evaluate access for. Defaults to the calling agent.'
+        },
+        capability: {
+          type: 'string',
+          description: 'Capability name to check access for.'
+        },
+        method: {
+          type: 'string',
+          description: 'HTTP method for rules evaluation (optional, only applies to proxy capabilities).'
+        },
+        path: {
+          type: 'string',
+          description: 'Request path for rules evaluation (optional, only applies to proxy capabilities).'
+        }
+      },
+      required: ['capability']
+    }
+  };
+
   // Register tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const tools: Tool[] = [
@@ -415,6 +510,7 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
       manageCredentialTool,
       testServiceTool,
       whoamiTool,
+      explainAccessTool,
     ];
     if (onExecCommand && !options.hideExecTool) {
       tools.push(execTool);
@@ -537,25 +633,37 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           // Find capability
           const cap = capabilities.find((c) => c.name === capability);
           if (!cap) {
-            throw new Error(`Unknown capability: ${capability}`);
+            throw new DenialError(`Unknown capability: ${capability}`, {
+              reasonCode: 'CAPABILITY_NOT_FOUND',
+              capability,
+              nextStep: `Run 'janee cap list' to see available capabilities, or add one with 'janee cap add'.`
+            });
           }
 
           // Reject exec-mode capabilities — they should use janee_exec instead
           if (cap.mode === "exec") {
-            throw new Error(
+            throw new DenialError(
               `Capability "${capability}" is an exec-mode capability. Use the 'janee_exec' tool instead.`,
+              {
+                reasonCode: "MODE_MISMATCH",
+                capability,
+                nextStep: `Use the 'janee_exec' tool for exec-mode capabilities.`,
+              },
             );
           }
 
           // Check if reason required
           if (cap.requiresReason && !reason) {
-            throw new Error(`Capability "${capability}" requires a reason`);
+            throw new DenialError(`Capability "${capability}" requires a reason`, {
+              reasonCode: 'REASON_REQUIRED',
+              capability,
+              nextStep: `Include a 'reason' argument explaining why you need this access.`
+            });
           }
 
           // Check rules (path-based policies)
           const ruleCheck = checkRules(cap.rules, method, path);
           if (!ruleCheck.allowed) {
-            // Log denied request
             auditLogger.logDenied(
               cap.service,
               method,
@@ -563,7 +671,13 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
               ruleCheck.reason || "Request denied by policy",
               reason,
             );
-            throw new Error(ruleCheck.reason || "Request denied by policy");
+            throw new DenialError(ruleCheck.reason || "Request denied by policy", {
+              reasonCode: "RULE_DENY",
+              capability,
+              agentId: resolveAgentFromRequest(extra, args),
+              evaluatedPolicy: `rules for ${method} ${path}`,
+              nextStep: `Check capability rules with 'janee cap list --json' — the path/method may be explicitly denied.`,
+            });
           }
 
           // Check agent-scoped access (capability-level allowedAgents, then service-level ownership)
@@ -572,6 +686,12 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           if (
             !canAccessCapability(executeAgentId, cap, executeSvc, defaultAccess)
           ) {
+            const denialDetail = explainAccessDenial(
+              executeAgentId,
+              cap,
+              executeSvc,
+              defaultAccess,
+            );
             auditLogger.logDenied(
               cap.service,
               method,
@@ -579,8 +699,20 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
               "Agent does not have access to this capability",
               reason,
             );
-            throw new Error(
+            throw new DenialError(
               `Access denied: capability "${capability}" is not accessible to this agent`,
+              {
+                reasonCode: denialDetail?.reason || "AGENT_NOT_ALLOWED",
+                capability,
+                agentId: executeAgentId,
+                evaluatedPolicy: denialDetail?.detail,
+                nextStep:
+                  denialDetail?.reason === "AGENT_NOT_ALLOWED"
+                    ? `Add this agent to allowedAgents: 'janee cap edit ${capability} --allowed-agents ${executeAgentId}'`
+                    : denialDetail?.reason === "DEFAULT_ACCESS_RESTRICTED"
+                      ? `Either add allowedAgents to the capability or change defaultAccess to 'open'.`
+                      : `Check service ownership settings for the backing service.`,
+              },
             );
           }
 
@@ -672,13 +804,22 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
             // Standalone mode: validate locally
             const foundCap = capabilities.find((c) => c.name === execCapName);
             if (!foundCap) {
-              throw new Error(`Unknown capability: ${execCapName}`);
+              throw new DenialError(`Unknown capability: ${execCapName}`, {
+                reasonCode: 'CAPABILITY_NOT_FOUND',
+                capability: execCapName,
+                nextStep: `Run 'janee cap list' to see available capabilities, or add one with 'janee cap add'.`
+              });
             }
             execCap = execCwd ? { ...foundCap, workDir: execCwd } : foundCap;
 
             if (execCap.mode !== "exec") {
-              throw new Error(
+              throw new DenialError(
                 `Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`,
+                {
+                  reasonCode: "MODE_MISMATCH",
+                  capability: execCapName,
+                  nextStep: `Use the 'execute' tool for proxy-mode capabilities.`,
+                },
               );
             }
 
@@ -687,6 +828,12 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
             if (
               !canAccessCapability(execAgentId, execCap, execSvc, defaultAccess)
             ) {
+              const execDenialDetail = explainAccessDenial(
+                execAgentId,
+                execCap,
+                execSvc,
+                defaultAccess,
+              );
               auditLogger.logDenied(
                 execCap.service,
                 "EXEC",
@@ -694,13 +841,29 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
                 "Agent does not have access to this capability",
                 execReason,
               );
-              throw new Error(
+              throw new DenialError(
                 `Access denied: capability "${execCapName}" is not accessible to this agent`,
+                {
+                  reasonCode: execDenialDetail?.reason || "AGENT_NOT_ALLOWED",
+                  capability: execCapName,
+                  agentId: execAgentId,
+                  evaluatedPolicy: execDenialDetail?.detail,
+                  nextStep:
+                    execDenialDetail?.reason === "AGENT_NOT_ALLOWED"
+                      ? `Add this agent to allowedAgents: 'janee cap edit ${execCapName} --allowed-agents ${execAgentId}'`
+                      : execDenialDetail?.reason === "DEFAULT_ACCESS_RESTRICTED"
+                        ? `Either add allowedAgents to the capability or change defaultAccess to 'open'.`
+                        : `Check service ownership settings for the backing service.`,
+                },
               );
             }
 
             if (execCap.requiresReason && !execReason) {
-              throw new Error(`Capability "${execCapName}" requires a reason`);
+              throw new DenialError(`Capability "${execCapName}" requires a reason`, {
+                reasonCode: 'REASON_REQUIRED',
+                capability: execCapName,
+                nextStep: `Include a 'reason' argument explaining why you need this access.`
+              });
             }
 
             const cmdValidation = validateCommand(
@@ -715,7 +878,16 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
                 cmdValidation.reason || "Command not allowed",
                 execReason,
               );
-              throw new Error(cmdValidation.reason || "Command not allowed");
+              throw new DenialError(
+                cmdValidation.reason || "Command not allowed",
+                {
+                  reasonCode: "COMMAND_NOT_ALLOWED",
+                  capability: execCapName,
+                  agentId: execAgentId,
+                  evaluatedPolicy: `allowCommands: [${(execCap.allowCommands || []).join(", ")}]`,
+                  nextStep: `Update allowed commands: 'janee cap edit ${execCapName} --allow-commands "new-pattern"'`,
+                },
+              );
             }
 
             const execTtlSeconds = parseTTL(execCap.ttl);
@@ -935,6 +1107,112 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           };
         }
 
+        case 'explain_access': {
+          const { agent: explainAgent, capability: explainCapName, method: explainMethod, path: explainPath } = args as any;
+          const targetAgentId = explainAgent || resolveAgentFromRequest(extra, args);
+
+          interface TraceStep { check: string; result: 'pass' | 'fail' | 'skip'; detail: string }
+          const trace: TraceStep[] = [];
+
+          const explainCap = capabilities.find(c => c.name === explainCapName);
+          if (!explainCap) {
+            trace.push({ check: 'capability_exists', result: 'fail', detail: `Capability "${explainCapName}" not found` });
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  agent: targetAgentId ?? null,
+                  capability: explainCapName,
+                  allowed: false,
+                  trace,
+                  nextStep: `Run 'janee cap list' to see available capabilities.`
+                }, null, 2)
+              }]
+            };
+          }
+          trace.push({ check: 'capability_exists', result: 'pass', detail: `Capability "${explainCapName}" exists (service: ${explainCap.service})` });
+
+          // Mode check
+          if (explainMethod && explainCap.mode === 'exec') {
+            trace.push({ check: 'mode', result: 'fail', detail: `Capability is exec-mode but method/path were provided (use janee_exec)` });
+          } else if (!explainMethod && explainCap.mode !== 'exec') {
+            trace.push({ check: 'mode', result: 'pass', detail: `Capability mode: ${explainCap.mode || 'proxy'}` });
+          } else {
+            trace.push({ check: 'mode', result: 'pass', detail: `Capability mode: ${explainCap.mode || 'proxy'}` });
+          }
+
+          // allowedAgents
+          if (explainCap.allowedAgents && explainCap.allowedAgents.length > 0) {
+            if (!targetAgentId) {
+              trace.push({ check: 'allowed_agents', result: 'pass', detail: `No agent ID (admin/CLI) — bypasses allowedAgents` });
+            } else if (explainCap.allowedAgents.includes(targetAgentId)) {
+              trace.push({ check: 'allowed_agents', result: 'pass', detail: `Agent "${targetAgentId}" is in allowedAgents [${explainCap.allowedAgents.join(', ')}]` });
+            } else {
+              trace.push({ check: 'allowed_agents', result: 'fail', detail: `Agent "${targetAgentId}" is NOT in allowedAgents [${explainCap.allowedAgents.join(', ')}]` });
+            }
+          } else {
+            trace.push({ check: 'allowed_agents', result: 'skip', detail: `No allowedAgents restriction on this capability` });
+          }
+
+          // defaultAccess
+          if (targetAgentId && (!explainCap.allowedAgents || explainCap.allowedAgents.length === 0)) {
+            if (defaultAccess === 'restricted') {
+              trace.push({ check: 'default_access', result: 'fail', detail: `defaultAccess is "restricted" and no allowedAgents list — agent blocked` });
+            } else {
+              trace.push({ check: 'default_access', result: 'pass', detail: `defaultAccess is "${defaultAccess ?? 'open'}" — agent allowed` });
+            }
+          } else {
+            trace.push({ check: 'default_access', result: 'skip', detail: targetAgentId ? `allowedAgents list takes precedence` : `No agent ID (admin/CLI)` });
+          }
+
+          // Ownership
+          const explainSvc = services.get(explainCap.service);
+          if (targetAgentId && explainSvc?.ownership) {
+            if (canAgentAccess(targetAgentId, explainSvc.ownership)) {
+              trace.push({ check: 'ownership', result: 'pass', detail: `Agent can access service (ownership: ${JSON.stringify(explainSvc.ownership)})` });
+            } else {
+              trace.push({ check: 'ownership', result: 'fail', detail: `Agent cannot access service (ownership: ${JSON.stringify(explainSvc.ownership)})` });
+            }
+          } else {
+            trace.push({ check: 'ownership', result: 'skip', detail: explainSvc?.ownership ? `No agent ID (admin/CLI)` : `No ownership restrictions on service` });
+          }
+
+          // Rules check (only if method/path provided)
+          if (explainMethod && explainPath && explainCap.mode !== 'exec') {
+            const ruleResult = checkRules(explainCap.rules, explainMethod, explainPath);
+            if (ruleResult.allowed) {
+              trace.push({ check: 'rules', result: 'pass', detail: `${explainMethod} ${explainPath} is allowed by rules` });
+            } else {
+              trace.push({ check: 'rules', result: 'fail', detail: ruleResult.reason || `${explainMethod} ${explainPath} is denied by rules` });
+            }
+          } else if (explainCap.mode === 'exec') {
+            trace.push({ check: 'rules', result: 'skip', detail: `Exec-mode capabilities use allowCommands, not path rules` });
+          } else {
+            trace.push({ check: 'rules', result: 'skip', detail: `No method/path provided for rules evaluation` });
+          }
+
+          // Command validation for exec mode
+          if (explainCap.mode === 'exec') {
+            trace.push({ check: 'allow_commands', result: 'skip', detail: `allowCommands: [${(explainCap.allowCommands || []).join(', ')}] — provide a specific command to validate` });
+          }
+
+          const hasFail = trace.some(t => t.result === 'fail');
+          const firstFail = trace.find(t => t.result === 'fail');
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                agent: targetAgentId ?? null,
+                capability: explainCapName,
+                allowed: !hasFail,
+                trace,
+                ...(hasFail && firstFail ? { nextStep: firstFail.detail } : {})
+              }, null, 2)
+            }]
+          };
+        }
+
         case 'whoami': {
           const whoamiAgentId = resolveAgentFromRequest(extra, args);
 
@@ -970,17 +1248,17 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error) {
+      const payload: Record<string, any> = {
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+      if (error instanceof DenialError) {
+        payload.denial = error.denial;
+      }
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              {
-                error: error instanceof Error ? error.message : "Unknown error",
-              },
-              null,
-              2,
-            ),
+            text: JSON.stringify(payload, null, 2),
           },
         ],
         isError: true,
