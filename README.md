@@ -23,6 +23,8 @@
 | 🏠 **Local-first** | Keys encrypted on your machine, never sent to a cloud |
 | 🖥️ **Exec mode** | Run CLI tools with injected credentials — agents never see the keys |
 | 🤖 **GitHub App auth** | Short-lived tokens for autonomous agents — no static PATs |
+| 🐦 **Twitter/X OAuth 1.0a** | Per-request OAuth signing — 4 secrets stay encrypted |
+| ☁️ **AWS SigV4** | Sign AWS API requests server-side — SES, S3, and more |
 | 🔧 **Automatic git auth** | `git push/pull` just works when credentials include GitHub tokens |
 
 ---
@@ -373,6 +375,78 @@ capabilities:
 **Services** = Real APIs with real keys  
 **Capabilities** = What agents can request, with policies
 
+### Supported auth types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `bearer` | Bearer token in Authorization header | Stripe, OpenAI, GitHub |
+| `basic` | HTTP Basic Auth (username + password) | Internal APIs |
+| `hmac-bybit` | HMAC-SHA256 signing for Bybit | Bybit exchange |
+| `hmac-okx` | HMAC-SHA256 + passphrase for OKX | OKX exchange |
+| `hmac-mexc` | HMAC-SHA256 signing for MEXC | MEXC exchange |
+| `headers` | Custom key-value headers | Non-standard APIs |
+| `service-account` | Google service account JSON key | Google Cloud |
+| `github-app` | Short-lived GitHub installation tokens | GitHub API |
+| `oauth1a-twitter` | OAuth 1.0a per-request signing | Twitter/X API v2 |
+| `aws-sigv4` | AWS Signature V4 per-request signing | SES, S3, and other AWS services |
+
+#### Twitter/X OAuth 1.0a
+
+Janee computes OAuth 1.0a signatures (HMAC-SHA1) server-side, so your 4 Twitter secrets stay encrypted at rest and never enter the agent's context:
+
+```yaml
+services:
+  twitter:
+    baseUrl: https://api.x.com
+    auth:
+      type: oauth1a-twitter
+      consumerKey: xxx        # encrypted at rest
+      consumerSecret: xxx     # encrypted at rest
+      accessToken: xxx        # encrypted at rest
+      accessTokenSecret: xxx  # encrypted at rest
+
+capabilities:
+  twitter:
+    service: twitter
+    ttl: 1h
+    autoApprove: true
+```
+
+Or use the built-in template:
+
+```bash
+janee add twitter
+```
+
+#### AWS SigV4
+
+Janee computes AWS Signature V4 (HMAC-SHA256) per-request, keeping your access keys encrypted at rest. Non-secret fields (`region`, `awsService`) stay in plain config:
+
+```yaml
+services:
+  aws-ses:
+    baseUrl: https://email.us-east-1.amazonaws.com
+    auth:
+      type: aws-sigv4
+      accessKeyId: AKIA...     # encrypted at rest
+      secretAccessKey: xxx     # encrypted at rest
+      region: us-east-1
+      awsService: ses
+
+capabilities:
+  aws-ses:
+    service: aws-ses
+    ttl: 1h
+    autoApprove: true
+```
+
+Built-in templates for common AWS services:
+
+```bash
+janee add aws-ses    # Amazon SES
+janee add aws-s3     # Amazon S3
+```
+
 ### Access control
 
 Control which agents can use which capabilities:
@@ -550,6 +624,14 @@ janee add okx --auth-type hmac-okx --key-from-env OKX_KEY --secret-from-env OKX_
 
 # GitHub App auth (short-lived tokens)
 janee add github --auth-type github-app --app-id-from-env GH_APP_ID --pem-from-env GH_PEM --installation-id-from-env GH_INSTALL_ID
+
+# Twitter/X OAuth 1.0a (per-request signing)
+janee add twitter --consumer-key $TWITTER_CONSUMER_KEY --consumer-secret $TWITTER_CONSUMER_SECRET \
+  --access-token $TWITTER_ACCESS_TOKEN --access-token-secret $TWITTER_ACCESS_TOKEN_SECRET
+
+# AWS SigV4 (SES, S3, etc.)
+janee add aws-ses --access-key-id $AWS_ACCESS_KEY_ID --secret-access-key $AWS_SECRET_ACCESS_KEY \
+  --region us-east-1 --aws-service ses
 ```
 
 When all required credentials are provided via flags, Janee:
