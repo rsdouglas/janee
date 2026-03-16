@@ -338,19 +338,19 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
       }));
     }
 
+    function reloadConfig(apply: (result: ReloadResult) => void): void {
+      try {
+        const result = loadConfigForMCP();
+        apply(result);
+        currentServices = result.services;
+        console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
+      } catch (err) {
+        console.error(`[janee] SIGHUP reload failed: ${getErrorMessage(err)}`);
+      }
+    }
+
   } catch (error) {
     console.error('❌ Error:', getErrorMessage(error));
     process.exit(1);
-  }
-
-  function reloadConfig(apply: (result: ReloadResult) => void): void {
-    try {
-      const result = loadConfigForMCP();
-      apply(result);
-      currentServices = result.services;
-      console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
-    } catch (err) {
-      console.error(`[janee] SIGHUP reload failed: ${getErrorMessage(err)}`);
-    }
   }
 }
