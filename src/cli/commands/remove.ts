@@ -1,29 +1,16 @@
 import * as readline from 'readline/promises';
 import { stdin as input, stdout as output } from 'process';
-import { loadYAMLConfig, saveYAMLConfig, hasYAMLConfig } from '../config-yaml';
+import { cliError, handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig, saveYAMLConfig } from '../config-yaml';
 
 export async function removeCommand(serviceName: string, options: { yes?: boolean; json?: boolean } = {}): Promise<void> {
   try {
-    // Check for YAML config
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('❌ No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
 
-    // Check if service exists
     if (!config.services[serviceName]) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: `Service "${serviceName}" not found` }));
-      } else {
-        console.error(`❌ Service "${serviceName}" not found`);
-      }
-      process.exit(1);
+      cliError(`Service "${serviceName}" not found`, options.json);
     }
 
     // Check for capabilities using this service
@@ -78,19 +65,6 @@ export async function removeCommand(serviceName: string, options: { yes?: boolea
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: error.message }));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

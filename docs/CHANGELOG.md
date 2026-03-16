@@ -4,7 +4,13 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
-_(empty)_
+### Changed
+
+- **Refactor: Extract shared CLI utilities** — Common helpers (`cliError`, `requireConfig`, `resolveEnvVar`, `parseEnvMap`, `handleCommandError`) moved to `src/cli/cli-utils.ts`. Removes ~200 lines of duplicated code across 14 CLI command files. Error output format is now consistent (`{ ok: false, error }`) across all commands.
+- **Refactor: Extract shared types** — `APIRequest`, `APIResponse` moved to `src/core/types.ts`; `DenialError`/`DenialDetails` also relocated there. `SerializedSession` added to `core/sessions.ts` to replace 3 duplicate interface definitions in CLI commands.
+- **Refactor: Extract tool handlers from `mcp-server.ts`** — The 6 largest tool handlers (`execute`, `janee_exec`, `manage_credential`, `test_service`, `explain_access`, `whoami`) extracted to `src/core/tool-handlers.ts`, reducing the `createMCPServer` function by ~600 lines.
+- **Refactor: Deduplicate Authority REST routes** — New `mountAuthorityRoutes()` in `authority.ts` replaces ~80 lines of copy-pasted Express route definitions in `startMCPServerHTTP`.
+- **Refactor: Extract constants** — `DEFAULT_TIMEOUT_MS`, `REDACTED`, `MIN_SCRUB_LENGTH` now live in `core/types.ts` instead of being scattered as magic values across `exec.ts`, `authority.ts`, `serve-mcp.ts`, and `runner-proxy.ts`.
 
 ## [0.15.0] - 2026-03-09
 

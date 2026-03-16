@@ -21,6 +21,7 @@ import {
   testServiceAccountAuth,
   validateServiceAccountCredentials,
 } from '../../core/service-account';
+import { handleCommandError, parseEnvMap, resolveEnvVar } from '../cli-utils';
 import type {
   AuthConfig,
   CapabilityConfig,
@@ -30,39 +31,6 @@ import {
   loadYAMLConfig,
   saveYAMLConfig,
 } from '../config-yaml';
-
-function resolveEnvVar(varName: string, label: string): string {
-  const value = process.env[varName];
-  if (!value) {
-    console.error(`❌ Environment variable ${varName} is not set (needed for ${label})`);
-    process.exit(1);
-  }
-  return value.trim();
-}
-
-/**
- * Parse --env-map arguments like KEY=value or KEY={{credential}} into a Record.
- * Example: ["TWITTER_API_KEY={{credential}}", "TWITTER_USER=myhandle"]
- *   → { TWITTER_API_KEY: "{{credential}}", TWITTER_USER: "myhandle" }
- */
-function parseEnvMap(mappings: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const mapping of mappings) {
-    const eqIdx = mapping.indexOf('=');
-    if (eqIdx === -1) {
-      console.error(`❌ Invalid --env-map format: "${mapping}" (expected KEY=value)`);
-      process.exit(1);
-    }
-    const key = mapping.slice(0, eqIdx).trim();
-    const value = mapping.slice(eqIdx + 1).trim();
-    if (!key) {
-      console.error(`❌ Invalid --env-map format: "${mapping}" (empty key)`);
-      process.exit(1);
-    }
-    result[key] = value;
-  }
-  return result;
-}
 
 export async function addCommand(
   serviceName?: string,
@@ -815,19 +783,6 @@ export async function addCommand(
     console.log("Done! Run 'janee serve' to start.");
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: error.message }));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

@@ -1,15 +1,8 @@
-import { getConfigDir, getAuditDir, hasYAMLConfig, loadYAMLConfig } from '../config-yaml';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-
-interface Session {
-  id: string;
-  capability: string;
-  service: string;
-  createdAt: string;
-  expiresAt: string;
-  revoked: boolean;
-}
+import type { SerializedSession } from '../../core/sessions';
+import { handleCommandError } from '../cli-utils';
+import { getConfigDir, getAuditDir, hasYAMLConfig, loadYAMLConfig } from '../config-yaml';
 
 interface StatusInfo {
   version: string;
@@ -53,7 +46,7 @@ export async function statusCommand(options: { json?: boolean } = {}): Promise<v
 
     if (existsSync(sessionsFile)) {
       const data = readFileSync(sessionsFile, 'utf8');
-      const sessions: Session[] = JSON.parse(data);
+      const sessions: SerializedSession[] = JSON.parse(data);
       totalSessions = sessions.length;
       const now = new Date();
       activeSessions = sessions.filter(
@@ -132,20 +125,7 @@ export async function statusCommand(options: { json?: boolean } = {}): Promise<v
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 

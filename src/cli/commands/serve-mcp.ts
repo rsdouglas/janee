@@ -3,6 +3,8 @@ import { URL } from 'url';
 
 import { AuditLogger } from '../../core/audit';
 import { buildAuthHeaders } from '../../core/auth.js';
+import { DEFAULT_TIMEOUT_MS } from '../../core/types';
+import { getErrorMessage } from '../cli-utils';
 import {
   authorityAuthorizeExec,
   authorityCompleteExec,
@@ -231,7 +233,7 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
 
         return executeCommand(command, injectedEnv, {
           workDir: capability.workDir,
-          timeout: capability.timeout || 30000,
+          timeout: capability.timeout || DEFAULT_TIMEOUT_MS,
           stdin,
           credential,
           extraCredentials,
@@ -324,41 +326,31 @@ export async function serveMCPCommand(options: ServeMCPOptions = {}): Promise<vo
         } : {}),
       });
 
-      // SIGHUP reload: update serverOptions so new HTTP sessions pick up changes.
-      // Existing sessions keep their config until they reconnect.
-      process.on('SIGHUP', () => {
-        try {
-          const result = loadConfigForMCP();
-          serverOptions.capabilities = result.capabilities;
-          serverOptions.services = result.services;
-          currentServices = result.services;
-          console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
-        } catch (err) {
-          console.error(`[janee] SIGHUP reload failed: ${err instanceof Error ? err.message : err}`);
-        }
-      });
+      process.on('SIGHUP', () => reloadConfig((result) => {
+        serverOptions.capabilities = result.capabilities;
+        serverOptions.services = result.services;
+      }));
     } else {
       const mcpResult = await startMCPServer(serverOptions);
 
-      // SIGHUP reload: swap capabilities/services inside the running MCP server closure
-      process.on('SIGHUP', () => {
-        try {
-          const result = loadConfigForMCP();
-          mcpResult.reloadConfig(result);
-          currentServices = result.services;
-          console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
-        } catch (err) {
-          console.error(`[janee] SIGHUP reload failed: ${err instanceof Error ? err.message : err}`);
-        }
-      });
+      process.on('SIGHUP', () => reloadConfig((result) => {
+        mcpResult.reloadConfig(result);
+      }));
+    }
+
+    function reloadConfig(apply: (result: ReloadResult) => void): void {
+      try {
+        const result = loadConfigForMCP();
+        apply(result);
+        currentServices = result.services;
+        console.error(`[janee] SIGHUP: reloaded config (${result.capabilities.length} capabilities, ${result.services.size} services)`);
+      } catch (err) {
+        console.error(`[janee] SIGHUP reload failed: ${getErrorMessage(err)}`);
+      }
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
-    } else {
-      console.error('❌ Unknown error occurred');
-    }
+    console.error('❌ Error:', getErrorMessage(error));
     process.exit(1);
   }
 }

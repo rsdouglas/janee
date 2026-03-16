@@ -56,7 +56,7 @@ describe('listCommand', () => {
     }
     cap.restore();
     expect(mockExit).toHaveBeenCalledWith(1);
-    expect(cap.logs.join(' ')).toContain('No config found');
+    expect(cap.errors.join(' ')).toContain('No config found');
   });
 
   it('should show JSON error when no config exists with --json', async () => {

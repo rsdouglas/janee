@@ -43,38 +43,21 @@ import {
   Rules,
 } from './rules.js';
 import { SessionManager } from './sessions.js';
+import {
+  handleExec,
+  handleExecute,
+  handleExplainAccess,
+  handleManageCredential,
+  handleTestService,
+  handleWhoami,
+  ToolHandlerContext,
+} from './tool-handlers.js';
 
 // Read version from package.json
 const packageJsonPath = join(__dirname, "../../package.json");
 const pkgVersion =
   JSON.parse(readFileSync(packageJsonPath, "utf8")).version || "0.0.0";
 
-export type DenialReasonCode =
-  | 'CAPABILITY_NOT_FOUND'
-  | 'AGENT_NOT_ALLOWED'
-  | 'DEFAULT_ACCESS_RESTRICTED'
-  | 'OWNERSHIP_DENIED'
-  | 'RULE_DENY'
-  | 'MODE_MISMATCH'
-  | 'REASON_REQUIRED'
-  | 'COMMAND_NOT_ALLOWED';
-
-export interface DenialDetails {
-  reasonCode: DenialReasonCode;
-  capability?: string;
-  agentId?: string | null;
-  evaluatedPolicy?: string;
-  nextStep: string;
-}
-
-export class DenialError extends Error {
-  denial: DenialDetails;
-  constructor(message: string, denial: DenialDetails) {
-    super(message);
-    this.name = 'DenialError';
-    this.denial = denial;
-  }
-}
 
 /**
  * Check whether an agent can access a capability.
@@ -197,19 +180,10 @@ export interface ServiceConfig {
   ownership?: CredentialOwnership;
 }
 
-export interface APIRequest {
-  service: string;
-  path: string;
-  method: string;
-  headers: Record<string, string>;
-  body?: string;
-}
-
-export interface APIResponse {
-  statusCode: number;
-  headers: Record<string, string | string[]>;
-  body: string;
-}
+export type { APIRequest, APIResponse, DenialDetails, DenialReasonCode } from './types.js';
+export { DenialError } from './types.js';
+import type { APIRequest, APIResponse } from './types.js';
+import { DenialError } from './types.js';
 
 export interface ReloadResult {
   capabilities: Capability[];
@@ -266,25 +240,6 @@ export interface DoctorResult {
   checks: DoctorCheckResult[];
 }
 
-/**
- * Parse TTL string to seconds
- */
-function parseTTL(ttl: string): number {
-  const match = ttl.match(/^(\d+)([smhd])$/);
-  if (!match) throw new Error(`Invalid TTL format: ${ttl}`);
-
-  const value = parseInt(match[1]);
-  const unit = match[2];
-
-  const multipliers: Record<string, number> = {
-    s: 1,
-    m: 60,
-    h: 3600,
-    d: 86400,
-  };
-
-  return value * multipliers[unit];
-}
 
 export interface MCPServerResult {
   /** Swap capabilities and services in the closure. Used for SIGHUP reload. */
@@ -590,6 +545,22 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
         return result as any;
       }
 
+      const ctx: ToolHandlerContext = {
+        getCapabilities: () => capabilities,
+        getServices: () => services,
+        defaultAccess,
+        sessionManager,
+        auditLogger,
+        onExecute,
+        onExecCommand,
+        onForwardToolCall,
+        onPersistOwnership,
+        resolveAgent: resolveAgentFromRequest,
+        clientSessions,
+        explainAccessDenial,
+        canAccessCapability,
+      };
+
       switch (name) {
         case "list_services": {
           const listAgentId = resolveAgentFromRequest(extra, args);
@@ -629,689 +600,53 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
           if (!onReloadConfig) {
             throw new Error("Config reload not supported");
           }
-
           try {
             const result = onReloadConfig();
             const prevCapCount = capabilities.length;
             const prevServiceCount = services.size;
-
             capabilities = result.capabilities;
             services = result.services;
-
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    {
-                      success: true,
-                      message: "Configuration reloaded successfully",
-                      services: services.size,
-                      capabilities: capabilities.length,
-                      changes: {
-                        services: services.size - prevServiceCount,
-                        capabilities: capabilities.length - prevCapCount,
-                      },
-                    },
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-          } catch (error) {
-            throw new Error(
-              `Failed to reload config: ${error instanceof Error ? error.message : "Unknown error"}`,
-            );
-          }
-        }
-
-        case "execute": {
-          const { capability, method, path, body, headers, reason } =
-            args as any;
-
-          // Validate required arguments
-          if (!capability) {
-            throw new Error("Missing required argument: capability");
-          }
-          if (!method) {
-            throw new Error(
-              "Missing required argument: method (GET, POST, PUT, DELETE, etc.)",
-            );
-          }
-          if (!path) {
-            throw new Error("Missing required argument: path");
-          }
-
-          // Find capability
-          const cap = capabilities.find((c) => c.name === capability);
-          if (!cap) {
-            throw new DenialError(`Unknown capability: ${capability}`, {
-              reasonCode: 'CAPABILITY_NOT_FOUND',
-              capability,
-              nextStep: `Run 'janee cap list' to see available capabilities, or add one with 'janee cap add'.`
-            });
-          }
-
-          // Reject exec-mode capabilities — they should use janee_exec instead
-          if (cap.mode === "exec") {
-            throw new DenialError(
-              `Capability "${capability}" is an exec-mode capability. Use the 'janee_exec' tool instead.`,
-              {
-                reasonCode: "MODE_MISMATCH",
-                capability,
-                nextStep: `Use the 'janee_exec' tool for exec-mode capabilities.`,
-              },
-            );
-          }
-
-          // Check if reason required
-          if (cap.requiresReason && !reason) {
-            throw new DenialError(`Capability "${capability}" requires a reason`, {
-              reasonCode: 'REASON_REQUIRED',
-              capability,
-              nextStep: `Include a 'reason' argument explaining why you need this access.`
-            });
-          }
-
-          // Check rules (path-based policies)
-          const ruleCheck = checkRules(cap.rules, method, path);
-          if (!ruleCheck.allowed) {
-            auditLogger.logDenied(
-              cap.service,
-              method,
-              path,
-              ruleCheck.reason || "Request denied by policy",
-              reason,
-            );
-            throw new DenialError(ruleCheck.reason || "Request denied by policy", {
-              reasonCode: "RULE_DENY",
-              capability,
-              agentId: resolveAgentFromRequest(extra, args),
-              evaluatedPolicy: `rules for ${method} ${path}`,
-              nextStep: `Check capability rules with 'janee cap list --json' — the path/method may be explicitly denied.`,
-            });
-          }
-
-          // Check agent-scoped access (capability-level allowedAgents, then service-level ownership)
-          const executeAgentId = resolveAgentFromRequest(extra, args);
-          const executeSvc = services.get(cap.service);
-          if (
-            !canAccessCapability(executeAgentId, cap, executeSvc, defaultAccess)
-          ) {
-            const denialDetail = explainAccessDenial(
-              executeAgentId,
-              cap,
-              executeSvc,
-              defaultAccess,
-            );
-            auditLogger.logDenied(
-              cap.service,
-              method,
-              path,
-              "Agent does not have access to this capability",
-              reason,
-            );
-            throw new DenialError(
-              `Access denied: capability "${capability}" is not accessible to this agent`,
-              {
-                reasonCode: denialDetail?.reason || "AGENT_NOT_ALLOWED",
-                capability,
-                agentId: executeAgentId,
-                evaluatedPolicy: denialDetail?.detail,
-                nextStep:
-                  denialDetail?.reason === "AGENT_NOT_ALLOWED"
-                    ? `Add this agent to allowedAgents: 'janee cap edit ${capability} --allowed-agents ${executeAgentId}'`
-                    : denialDetail?.reason === "DEFAULT_ACCESS_RESTRICTED"
-                      ? `Either add allowedAgents to the capability or change defaultAccess to 'open'.`
-                      : `Check service ownership settings for the backing service.`,
-              },
-            );
-          }
-
-          // Get or create session
-          const ttlSeconds = parseTTL(cap.ttl);
-          const session = sessionManager.createSession(
-            cap.name,
-            cap.service,
-            ttlSeconds,
-            { agentId: executeAgentId, reason },
-          );
-
-          // Build API request
-          const apiReq: APIRequest = {
-            service: cap.service,
-            path,
-            method,
-            headers: headers || {},
-            body,
-          };
-
-          // Execute
-          const response = await onExecute(session, apiReq);
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(
-                  {
-                    status: response.statusCode,
-                    body: response.body,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        }
-
-        case "janee_exec": {
-          if (!onExecCommand) {
-            throw new Error(
-              "CLI execution not supported in this configuration",
-            );
-          }
-
-          const {
-            capability: execCapName,
-            command: rawExecCommand,
-            cwd: execCwd,
-            stdin: execStdin,
-            reason: execReason,
-          } = args as any;
-
-          if (!execCapName) {
-            throw new Error("Missing required argument: capability");
-          }
-          if (
-            !rawExecCommand ||
-            (Array.isArray(rawExecCommand) && rawExecCommand.length === 0) ||
-            (typeof rawExecCommand === "string" && rawExecCommand.trim() === "")
-          ) {
-            throw new Error("Missing required argument: command");
-          }
-
-          const execCommand: string[] = Array.isArray(rawExecCommand)
-            ? rawExecCommand
-            : typeof rawExecCommand === "string"
-              ? rawExecCommand.trim().split(/\s+/)
-              : [];
-
-          let execCap: Capability;
-          let execSession: any;
-
-          if (onForwardToolCall) {
-            // Runner mode: Authority handles validation and credential injection.
-            // Build a minimal capability stub so onExecCommand has the name.
-            execCap = {
-              name: execCapName,
-              service: "",
-              ttl: "1h",
-              mode: "exec",
-              workDir: execCwd,
-            } as Capability;
-            execSession = { agentId: resolveAgentFromRequest(extra, args) };
-          } else {
-            // Standalone mode: validate locally
-            const foundCap = capabilities.find((c) => c.name === execCapName);
-            if (!foundCap) {
-              throw new DenialError(`Unknown capability: ${execCapName}`, {
-                reasonCode: 'CAPABILITY_NOT_FOUND',
-                capability: execCapName,
-                nextStep: `Run 'janee cap list' to see available capabilities, or add one with 'janee cap add'.`
-              });
-            }
-            execCap = execCwd ? { ...foundCap, workDir: execCwd } : foundCap;
-
-            if (execCap.mode !== "exec") {
-              throw new DenialError(
-                `Capability "${execCapName}" is not an exec-mode capability. Use the 'execute' tool for API proxy capabilities.`,
-                {
-                  reasonCode: "MODE_MISMATCH",
-                  capability: execCapName,
-                  nextStep: `Use the 'execute' tool for proxy-mode capabilities.`,
-                },
-              );
-            }
-
-            const execAgentId = resolveAgentFromRequest(extra, args);
-            const execSvc = services.get(execCap.service);
-            if (
-              !canAccessCapability(execAgentId, execCap, execSvc, defaultAccess)
-            ) {
-              const execDenialDetail = explainAccessDenial(
-                execAgentId,
-                execCap,
-                execSvc,
-                defaultAccess,
-              );
-              auditLogger.logDenied(
-                execCap.service,
-                "EXEC",
-                execCommand.join(" "),
-                "Agent does not have access to this capability",
-                execReason,
-              );
-              throw new DenialError(
-                `Access denied: capability "${execCapName}" is not accessible to this agent`,
-                {
-                  reasonCode: execDenialDetail?.reason || "AGENT_NOT_ALLOWED",
-                  capability: execCapName,
-                  agentId: execAgentId,
-                  evaluatedPolicy: execDenialDetail?.detail,
-                  nextStep:
-                    execDenialDetail?.reason === "AGENT_NOT_ALLOWED"
-                      ? `Add this agent to allowedAgents: 'janee cap edit ${execCapName} --allowed-agents ${execAgentId}'`
-                      : execDenialDetail?.reason === "DEFAULT_ACCESS_RESTRICTED"
-                        ? `Either add allowedAgents to the capability or change defaultAccess to 'open'.`
-                        : `Check service ownership settings for the backing service.`,
-                },
-              );
-            }
-
-            if (execCap.requiresReason && !execReason) {
-              throw new DenialError(`Capability "${execCapName}" requires a reason`, {
-                reasonCode: 'REASON_REQUIRED',
-                capability: execCapName,
-                nextStep: `Include a 'reason' argument explaining why you need this access.`
-              });
-            }
-
-            const cmdValidation = validateCommand(
-              execCommand,
-              execCap.allowCommands || [],
-            );
-            if (!cmdValidation.allowed) {
-              auditLogger.logDenied(
-                execCap.service,
-                "EXEC",
-                execCommand.join(" "),
-                cmdValidation.reason || "Command not allowed",
-                execReason,
-              );
-              throw new DenialError(
-                cmdValidation.reason || "Command not allowed",
-                {
-                  reasonCode: "COMMAND_NOT_ALLOWED",
-                  capability: execCapName,
-                  agentId: execAgentId,
-                  evaluatedPolicy: `allowCommands: [${(execCap.allowCommands || []).join(", ")}]`,
-                  nextStep: `Update allowed commands: 'janee cap edit ${execCapName} --allow-commands "new-pattern"'`,
-                },
-              );
-            }
-
-            const execTtlSeconds = parseTTL(execCap.ttl);
-            execSession = sessionManager.createSession(
-              execCap.name,
-              execCap.service,
-              execTtlSeconds,
-              { reason: execReason },
-            );
-          }
-
-          const execResult = await onExecCommand(
-            execSession,
-            execCap,
-            execCommand,
-            execStdin,
-          );
-
-          // Log to audit
-          auditLogger.log(
-            {
-              service: execCap.service,
-              path: execCommand.join(" "),
-              method: "EXEC",
-              headers: { "x-janee-reason": execReason || "" },
-            },
-            {
-              statusCode: execResult.exitCode === 0 ? 200 : 500,
-              headers: {},
-              body: execResult.stdout,
-            },
-            execResult.executionTimeMs,
-          );
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(
-                  {
-                    exitCode: execResult.exitCode,
-                    stdout: execResult.stdout,
-                    stderr: execResult.stderr,
-                    executionTimeMs: execResult.executionTimeMs,
-                    executionTarget: "runner",
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        }
-
-        case "manage_credential": {
-          const {
-            action: credAction,
-            service: credService,
-            targetAgentId: credTarget,
-          } = args as any;
-          const credAgentId = resolveAgentFromRequest(extra, args);
-
-          if (!credService) {
-            throw new Error("Missing required argument: service");
-          }
-
-          const svc = services.get(credService);
-          if (!svc) {
-            throw new Error(`Unknown service: ${credService}`);
-          }
-
-          if (credAction === "view") {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    {
-                      service: credService,
-                      ownership: svc.ownership || {
-                        accessPolicy: "all-agents",
-                        note: "No ownership metadata (legacy credential)",
-                      },
-                      yourAccess: canAgentAccess(credAgentId, svc.ownership),
-                    },
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-          }
-
-          // Grant/revoke require ownership verification
-          if (!credAgentId) {
-            throw new Error("agentId is required for grant/revoke actions");
-          }
-
-          if (!svc.ownership) {
-            throw new Error(
-              "Cannot manage access for legacy credentials without ownership metadata. Re-add the service to enable scoping.",
-            );
-          }
-
-          if (svc.ownership.createdBy !== credAgentId) {
-            throw new Error(
-              "Only the credential owner can grant or revoke access",
-            );
-          }
-
-          if (credAction === "grant") {
-            if (!credTarget) {
-              throw new Error("targetAgentId is required for grant action");
-            }
-            const { grantAccess } = await import("./agent-scope.js");
-            svc.ownership = grantAccess(svc.ownership, credTarget);
-
-            // Persist ownership change to config storage
-            if (onPersistOwnership) {
-              onPersistOwnership(credService, svc.ownership);
-            }
-
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    {
-                      success: true,
-                      message: `Granted access to ${credTarget}`,
-                      ownership: svc.ownership,
-                      persisted: !!onPersistOwnership,
-                    },
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-          }
-
-          if (credAction === "revoke") {
-            if (!credTarget) {
-              throw new Error("targetAgentId is required for revoke action");
-            }
-            const { revokeAccess } = await import("./agent-scope.js");
-            svc.ownership = revokeAccess(svc.ownership, credTarget);
-
-            // Persist ownership change to config storage
-            if (onPersistOwnership) {
-              onPersistOwnership(credService, svc.ownership);
-            }
-
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    {
-                      success: true,
-                      message: `Revoked access from ${credTarget}`,
-                      ownership: svc.ownership,
-                      persisted: !!onPersistOwnership,
-                    },
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-          }
-
-          throw new Error(
-            `Unknown action: ${credAction}. Use 'view', 'grant', or 'revoke'.`,
-          );
-        }
-
-        case "test_service": {
-          const { service: testSvcName, timeout: testTimeout } = (args ||
-            {}) as { service?: string; timeout?: number };
-          const testOpts = testTimeout ? { timeout: testTimeout } : {};
-
-          let targets: [string, ServiceConfig][];
-          if (testSvcName) {
-            const svc = services.get(testSvcName);
-            if (!svc) {
-              throw new Error(
-                `Unknown service: ${testSvcName}. Use list_services to see available services.`,
-              );
-            }
-            targets = [[testSvcName, svc]];
-          } else {
-            targets = Array.from(services.entries());
-          }
-
-          if (targets.length === 0) {
-            throw new Error("No services configured");
-          }
-
-          const results: ServiceTestResult[] = await Promise.all(
-            targets.map(([name, config]) =>
-              testServiceConnection(name, config, testOpts),
-            ),
-          );
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(
-                  results.length === 1 ? results[0] : results,
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        }
-
-        case 'explain_access': {
-          const { agent: explainAgent, capability: explainCapName, method: explainMethod, path: explainPath } = args as any;
-          const targetAgentId = explainAgent || resolveAgentFromRequest(extra, args);
-
-          interface TraceStep { check: string; result: 'pass' | 'fail' | 'skip'; detail: string }
-          const trace: TraceStep[] = [];
-
-          const explainCap = capabilities.find(c => c.name === explainCapName);
-          if (!explainCap) {
-            trace.push({ check: 'capability_exists', result: 'fail', detail: `Capability "${explainCapName}" not found` });
             return {
               content: [{
-                type: 'text',
+                type: "text",
                 text: JSON.stringify({
-                  agent: targetAgentId ?? null,
-                  capability: explainCapName,
-                  allowed: false,
-                  trace,
-                  nextStep: `Run 'janee cap list' to see available capabilities.`
-                }, null, 2)
-              }]
+                  success: true, message: "Configuration reloaded successfully",
+                  services: services.size, capabilities: capabilities.length,
+                  changes: { services: services.size - prevServiceCount, capabilities: capabilities.length - prevCapCount },
+                }, null, 2),
+              }],
             };
+          } catch (error) {
+            throw new Error(`Failed to reload config: ${error instanceof Error ? error.message : "Unknown error"}`);
           }
-          trace.push({ check: 'capability_exists', result: 'pass', detail: `Capability "${explainCapName}" exists (service: ${explainCap.service})` });
-
-          // Mode check
-          if (explainMethod && explainCap.mode === 'exec') {
-            trace.push({ check: 'mode', result: 'fail', detail: `Capability is exec-mode but method/path were provided (use janee_exec)` });
-          } else if (!explainMethod && explainCap.mode !== 'exec') {
-            trace.push({ check: 'mode', result: 'pass', detail: `Capability mode: ${explainCap.mode || 'proxy'}` });
-          } else {
-            trace.push({ check: 'mode', result: 'pass', detail: `Capability mode: ${explainCap.mode || 'proxy'}` });
-          }
-
-          // allowedAgents
-          if (explainCap.allowedAgents && explainCap.allowedAgents.length > 0) {
-            if (!targetAgentId) {
-              trace.push({ check: 'allowed_agents', result: 'pass', detail: `No agent ID (admin/CLI) — bypasses allowedAgents` });
-            } else if (explainCap.allowedAgents.includes(targetAgentId)) {
-              trace.push({ check: 'allowed_agents', result: 'pass', detail: `Agent "${targetAgentId}" is in allowedAgents [${explainCap.allowedAgents.join(', ')}]` });
-            } else {
-              trace.push({ check: 'allowed_agents', result: 'fail', detail: `Agent "${targetAgentId}" is NOT in allowedAgents [${explainCap.allowedAgents.join(', ')}]` });
-            }
-          } else {
-            trace.push({ check: 'allowed_agents', result: 'skip', detail: `No allowedAgents restriction on this capability` });
-          }
-
-          // defaultAccess
-          if (targetAgentId && (!explainCap.allowedAgents || explainCap.allowedAgents.length === 0)) {
-            if (defaultAccess === 'restricted') {
-              trace.push({ check: 'default_access', result: 'fail', detail: `defaultAccess is "restricted" and no allowedAgents list — agent blocked` });
-            } else {
-              trace.push({ check: 'default_access', result: 'pass', detail: `defaultAccess is "${defaultAccess ?? 'open'}" — agent allowed` });
-            }
-          } else {
-            trace.push({ check: 'default_access', result: 'skip', detail: targetAgentId ? `allowedAgents list takes precedence` : `No agent ID (admin/CLI)` });
-          }
-
-          // Ownership
-          const explainSvc = services.get(explainCap.service);
-          if (targetAgentId && explainSvc?.ownership) {
-            if (canAgentAccess(targetAgentId, explainSvc.ownership)) {
-              trace.push({ check: 'ownership', result: 'pass', detail: `Agent can access service (ownership: ${JSON.stringify(explainSvc.ownership)})` });
-            } else {
-              trace.push({ check: 'ownership', result: 'fail', detail: `Agent cannot access service (ownership: ${JSON.stringify(explainSvc.ownership)})` });
-            }
-          } else {
-            trace.push({ check: 'ownership', result: 'skip', detail: explainSvc?.ownership ? `No agent ID (admin/CLI)` : `No ownership restrictions on service` });
-          }
-
-          // Rules check (only if method/path provided)
-          if (explainMethod && explainPath && explainCap.mode !== 'exec') {
-            const ruleResult = checkRules(explainCap.rules, explainMethod, explainPath);
-            if (ruleResult.allowed) {
-              trace.push({ check: 'rules', result: 'pass', detail: `${explainMethod} ${explainPath} is allowed by rules` });
-            } else {
-              trace.push({ check: 'rules', result: 'fail', detail: ruleResult.reason || `${explainMethod} ${explainPath} is denied by rules` });
-            }
-          } else if (explainCap.mode === 'exec') {
-            trace.push({ check: 'rules', result: 'skip', detail: `Exec-mode capabilities use allowCommands, not path rules` });
-          } else {
-            trace.push({ check: 'rules', result: 'skip', detail: `No method/path provided for rules evaluation` });
-          }
-
-          // Command validation for exec mode
-          if (explainCap.mode === 'exec') {
-            trace.push({ check: 'allow_commands', result: 'skip', detail: `allowCommands: [${(explainCap.allowCommands || []).join(', ')}] — provide a specific command to validate` });
-          }
-
-          const hasFail = trace.some(t => t.result === 'fail');
-          const firstFail = trace.find(t => t.result === 'fail');
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                agent: targetAgentId ?? null,
-                capability: explainCapName,
-                allowed: !hasFail,
-                trace,
-                ...(hasFail && firstFail ? { nextStep: firstFail.detail } : {})
-              }, null, 2)
-            }]
-          };
         }
 
-        case 'whoami': {
-          const whoamiAgentId = resolveAgentFromRequest(extra, args);
+        case "execute":
+          return await handleExecute(ctx, args, extra);
 
-          const accessibleCaps = capabilities
-            .filter(cap => canAccessCapability(whoamiAgentId, cap, services.get(cap.service), defaultAccess))
-            .map(cap => cap.name);
+        case "janee_exec":
+          return await handleExec(ctx, args, extra);
 
-          const deniedCaps = capabilities
-            .filter(cap => !canAccessCapability(whoamiAgentId, cap, services.get(cap.service), defaultAccess))
-            .map(cap => cap.name);
+        case "manage_credential":
+          return await handleManageCredential(ctx, args, extra);
 
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                agentId: whoamiAgentId ?? null,
-                identitySource: whoamiAgentId
-                  ? ((extra?.sessionId && clientSessions.has(extra.sessionId)) || clientSessions.has('__default__')
-                    ? 'transport (clientInfo.name)'
-                    : 'client-asserted (untrusted)')
-                  : 'none',
-                defaultAccessPolicy: defaultAccess ?? 'open',
-                capabilities: {
-                  accessible: accessibleCaps,
-                  denied: deniedCaps,
-                },
-              }, null, 2)
-            }]
-          };
-        }
+        case "test_service":
+          return await handleTestService(ctx, args);
+
+        case "explain_access":
+          return handleExplainAccess(ctx, args, extra);
+
+        case "whoami":
+          return handleWhoami(ctx, args, extra);
 
         case "doctor": {
           if (!options.onDoctorRunner) {
-            throw new Error(
-              "Doctor diagnostics only available in runner mode.",
-            );
+            throw new Error("Doctor diagnostics only available in runner mode.");
           }
           const doctorAgentId = resolveAgentFromRequest(extra, args);
           const doctorResult = await options.onDoctorRunner(doctorAgentId);
           return {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(doctorResult, null, 2),
-              },
-            ],
+            content: [{ type: "text", text: JSON.stringify(doctorResult, null, 2) }],
           };
         }
 
@@ -1475,86 +810,9 @@ export async function startMCPServerHTTP(
     }
   >();
 
-  // Authority REST endpoints -- active when runnerKey is provided
   if (httpOptions.runnerKey && httpOptions.authorityHooks) {
-    const { timingSafeEqual } = await import("crypto");
-    const runnerKey = httpOptions.runnerKey;
-    const hooks = httpOptions.authorityHooks;
-
-    const authMiddleware: express.RequestHandler = (req, res, next) => {
-      const provided = req.header("x-janee-runner-key");
-      if (
-        !provided ||
-        provided.length !== runnerKey.length ||
-        !timingSafeEqual(Buffer.from(provided), Buffer.from(runnerKey))
-      ) {
-        res.status(401).json({ error: "Unauthorized runner request" });
-        return;
-      }
-      next();
-    };
-
-    app.get("/v1/health", (_req, res) => {
-      res.status(200).json({ ok: true, mode: "authority" });
-    });
-
-    app.post("/v1/exec/authorize", authMiddleware, async (req, res) => {
-      try {
-        const body = req.body;
-        if (
-          !body?.runner?.runnerId ||
-          !Array.isArray(body?.command) ||
-          body.command.length === 0 ||
-          !body.capabilityId
-        ) {
-          res.status(400).json({ error: "Invalid authorize request" });
-          return;
-        }
-        const response = await hooks.authorizeExec(body);
-        res.status(200).json(response);
-      } catch (error) {
-        res
-          .status(403)
-          .json({
-            error:
-              error instanceof Error ? error.message : "Authorization failed",
-          });
-      }
-    });
-
-    app.post("/v1/exec/complete", authMiddleware, async (req, res) => {
-      try {
-        if (!req.body?.grantId) {
-          res.status(400).json({ error: "grantId is required" });
-          return;
-        }
-        await hooks.completeExec(req.body);
-        res.status(200).json({ ok: true });
-      } catch (error) {
-        res
-          .status(500)
-          .json({
-            error: error instanceof Error ? error.message : "completion failed",
-          });
-      }
-    });
-
-    if (hooks.testService) {
-      app.post("/v1/test", authMiddleware, async (req, res) => {
-        try {
-          const result = await hooks.testService!(req.body?.service, {
-            timeout: req.body?.timeout,
-          });
-          res.status(200).json(result);
-        } catch (error) {
-          res
-            .status(500)
-            .json({
-              error: error instanceof Error ? error.message : "Test failed",
-            });
-        }
-      });
-    }
+    const { mountAuthorityRoutes } = await import("./authority.js");
+    mountAuthorityRoutes(app, httpOptions.runnerKey, httpOptions.authorityHooks);
   }
 
   // Sweep idle sessions every 60 seconds

@@ -1,9 +1,7 @@
 import { canAgentAccess } from '../../core/agent-scope';
 import { checkRules } from '../../core/rules';
-import {
-  hasYAMLConfig,
-  loadYAMLConfig,
-} from '../config-yaml';
+import { handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig } from '../config-yaml';
 
 interface TraceStep {
   check: string;
@@ -16,14 +14,7 @@ export async function diagnoseAccessCommand(
   options: { agent?: string; method?: string; path?: string; json?: boolean } = {},
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const agentId = options.agent || undefined;
@@ -106,13 +97,7 @@ export async function diagnoseAccessCommand(
       ...(hasFail && firstFail ? { nextStep: firstFail.detail } : {})
     }, options.json);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    if (options.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }));
-    } else {
-      console.error('Error:', msg);
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 

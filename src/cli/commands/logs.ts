@@ -1,4 +1,5 @@
 import { AuditLogger } from '../../core/audit';
+import { handleCommandError } from '../cli-utils';
 import { getAuditDir } from '../config-yaml';
 
 export async function logsCommand(options: {
@@ -84,19 +85,6 @@ export async function logsCommand(options: {
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

@@ -2,29 +2,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { cliError, handleCommandError, requireConfig, resolveEnvVar } from '../cli-utils';
 import {
-  hasYAMLConfig,
   loadYAMLConfig,
   saveYAMLConfig,
 } from '../config-yaml';
-
-function cliError(msg: string, json?: boolean): never {
-  if (json) {
-    console.log(JSON.stringify({ ok: false, error: msg }));
-  } else {
-    console.error(`❌ ${msg}`);
-  }
-  process.exit(1);
-}
-
-function resolveEnvVar(varName: string, label: string): string {
-  const value = process.env[varName];
-  if (!value) {
-    console.error(`❌ Environment variable ${varName} is not set (needed for ${label})`);
-    process.exit(1);
-  }
-  return value.trim();
-}
 
 function expandHome(p: string): string {
   if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
@@ -58,7 +40,7 @@ export async function serviceEditCommand(
   options: ServiceEditOptions,
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) return cliError('No config found. Run `janee init` first.', options.json);
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const service = config.services[name];
@@ -190,12 +172,6 @@ export async function serviceEditCommand(
       for (const c of changes) console.log(`   ${c}`);
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error occurred';
-    if (options.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }));
-    } else {
-      console.error('❌ Error:', msg);
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

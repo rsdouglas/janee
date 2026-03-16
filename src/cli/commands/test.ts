@@ -2,10 +2,8 @@ import {
   ServiceTestResult,
   testServiceConnection,
 } from '../../core/health';
-import {
-  hasYAMLConfig,
-  loadYAMLConfig,
-} from '../config-yaml';
+import { cliError, handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig } from '../config-yaml';
 
 export interface TestCommandOptions {
   json?: boolean;
@@ -14,25 +12,13 @@ export interface TestCommandOptions {
 
 export async function testCommand(service: string | undefined, options: TestCommandOptions = {}): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'No config found' }, null, 2));
-      } else {
-        console.log('No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const serviceNames = Object.keys(config.services);
 
     if (serviceNames.length === 0) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'No services configured' }, null, 2));
-      } else {
-        console.log('No services configured. Run `janee add` first.');
-      }
-      process.exit(1);
+      cliError('No services configured. Run `janee add` first.', options.json);
     }
 
     const timeout = options.timeout ? parseInt(options.timeout) : undefined;
@@ -41,13 +27,7 @@ export async function testCommand(service: string | undefined, options: TestComm
     let targets: string[];
     if (service) {
       if (!config.services[service]) {
-        if (options.json) {
-          console.log(JSON.stringify({ error: `Unknown service: ${service}` }, null, 2));
-        } else {
-          console.error(`❌ Unknown service: ${service}`);
-          console.error(`Available: ${serviceNames.join(', ')}`);
-        }
-        process.exit(1);
+        cliError(`Unknown service: ${service}. Available: ${serviceNames.join(', ')}`, options.json);
       }
       targets = [service];
     } else {
@@ -95,19 +75,6 @@ export async function testCommand(service: string | undefined, options: TestComm
       process.exit(1);
     }
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

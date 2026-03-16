@@ -1,17 +1,8 @@
-import { getConfigDir } from '../config-yaml';
 import fs from 'fs';
 import path from 'path';
-
-interface Session {
-  id: string;
-  capability: string;
-  service: string;
-  agentId?: string;
-  reason?: string;
-  createdAt: string;
-  expiresAt: string;
-  revoked: boolean;
-}
+import type { SerializedSession } from '../../core/sessions';
+import { handleCommandError } from '../cli-utils';
+import { getConfigDir } from '../config-yaml';
 
 export async function revokeCommand(sessionIdPrefix: string): Promise<void> {
   try {
@@ -23,7 +14,7 @@ export async function revokeCommand(sessionIdPrefix: string): Promise<void> {
     }
 
     const data = fs.readFileSync(sessionsFile, 'utf8');
-    const sessions: Session[] = JSON.parse(data);
+    const sessions: SerializedSession[] = JSON.parse(data);
 
     // Find session by prefix
     const session = sessions.find(s => s.id.startsWith(sessionIdPrefix));
@@ -57,11 +48,6 @@ export async function revokeCommand(sessionIdPrefix: string): Promise<void> {
     console.log('Agent will lose access immediately on next request.');
 
   } catch (error) {
-    if (error instanceof Error) {
-      console.error('❌ Error:', error.message);
-    } else {
-      console.error('❌ Unknown error occurred');
-    }
-    process.exit(1);
+    handleCommandError(error);
   }
 }

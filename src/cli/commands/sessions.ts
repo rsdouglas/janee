@@ -1,17 +1,8 @@
-import { getConfigDir } from '../config-yaml';
 import fs from 'fs';
 import path from 'path';
-
-interface Session {
-  id: string;
-  capability: string;
-  service: string;
-  agentId?: string;
-  reason?: string;
-  createdAt: string;
-  expiresAt: string;
-  revoked: boolean;
-}
+import type { SerializedSession } from '../../core/sessions';
+import { handleCommandError } from '../cli-utils';
+import { getConfigDir } from '../config-yaml';
 
 export async function sessionsCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
@@ -29,7 +20,7 @@ export async function sessionsCommand(options: { json?: boolean } = {}): Promise
     }
 
     const data = fs.readFileSync(sessionsFile, 'utf8');
-    const sessions: Session[] = JSON.parse(data);
+    const sessions: SerializedSession[] = JSON.parse(data);
 
     // Filter active sessions
     const now = new Date();
@@ -91,20 +82,7 @@ export async function sessionsCommand(options: { json?: boolean } = {}): Promise
     console.log('');
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 

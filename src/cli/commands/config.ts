@@ -1,13 +1,5 @@
-import { hasYAMLConfig, loadYAMLConfig, saveYAMLConfig } from '../config-yaml';
-
-function cliError(msg: string, json?: boolean): never {
-  if (json) {
-    console.log(JSON.stringify({ ok: false, error: msg }));
-  } else {
-    console.error(`❌ ${msg}`);
-  }
-  process.exit(1);
-}
+import { cliError, handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig, saveYAMLConfig } from '../config-yaml';
 
 const VALID_KEYS: Record<string, { type: 'string' | 'number' | 'boolean'; enum?: string[] }> = {
   'server.port': { type: 'number' },
@@ -44,7 +36,7 @@ export async function configGetCommand(
   options: { json?: boolean } = {},
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) return cliError('No config found. Run `janee init` first.', options.json);
+    requireConfig(options.json);
     const config = loadYAMLConfig();
 
     if (!key) {
@@ -74,13 +66,7 @@ export async function configGetCommand(
       console.log(`${key} = ${value ?? '(not set)'}`);
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    if (options.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }));
-    } else {
-      console.error('❌ Error:', msg);
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 
@@ -90,7 +76,7 @@ export async function configSetCommand(
   options: { json?: boolean } = {},
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) return cliError('No config found. Run `janee init` first.', options.json);
+    requireConfig(options.json);
 
     const schema = VALID_KEYS[key];
     if (!schema) {
@@ -123,12 +109,6 @@ export async function configSetCommand(
       console.log(`✅ Set ${key} = ${parsed}`);
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    if (options.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }));
-    } else {
-      console.error('❌ Error:', msg);
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

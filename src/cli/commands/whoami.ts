@@ -1,5 +1,6 @@
 import { canAgentAccess } from '../../core/agent-scope';
-import { hasYAMLConfig, loadYAMLConfig } from '../config-yaml';
+import { handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig } from '../config-yaml';
 
 function canAccessCapability(
   agentId: string | undefined,
@@ -19,14 +20,7 @@ export async function whoamiCommand(
   options: { agent?: string; json?: boolean } = {},
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('❌ No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const agentId = options.agent || undefined;
@@ -84,12 +78,6 @@ export async function whoamiCommand(
     }
     console.log('');
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    if (options.json) {
-      console.log(JSON.stringify({ ok: false, error: msg }));
-    } else {
-      console.error('❌ Error:', msg);
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

@@ -6,6 +6,8 @@
  * (e.g. "creature:patch"), not the Runner's own name.
  */
 
+import { DEFAULT_TIMEOUT_MS } from './types.js';
+
 const agentSessions = new Map<string, string>();
 
 function parseSSE(text: string): any {
@@ -85,7 +87,7 @@ export async function forwardToolCall(
       method: 'tools/call',
       params: { name: toolName, arguments: args },
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });
 
   if (!res.ok) {

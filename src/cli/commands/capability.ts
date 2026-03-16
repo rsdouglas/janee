@@ -1,24 +1,13 @@
-/**
- * Capability management commands
- */
-
+import { cliError, handleCommandError, parseEnvMap, requireConfig } from '../cli-utils';
 import {
   CapabilityConfig,
-  hasYAMLConfig,
   loadYAMLConfig,
   saveYAMLConfig,
 } from '../config-yaml';
 
 export async function capabilityListCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'No config found' }, null, 2));
-      } else {
-        console.log('No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const capabilityNames = Object.keys(config.capabilities);
@@ -78,20 +67,7 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
       console.log('');
     }
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 
@@ -111,16 +87,6 @@ interface CapAddEditOptions {
   workDir?: string;
   timeout?: string;
   json?: boolean;
-}
-
-function parseEnvMap(mappings: string[]): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const m of mappings) {
-    const eq = m.indexOf('=');
-    if (eq <= 0) throw new Error(`Invalid env mapping "${m}" — expected KEY=value`);
-    env[m.substring(0, eq)] = m.substring(eq + 1);
-  }
-  return env;
 }
 
 function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOptions): void {
@@ -156,42 +122,20 @@ export async function capabilityAddCommand(
   options: CapAddEditOptions
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('❌ No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
 
     if (config.capabilities[name]) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" already exists. Use 'janee cap edit' to modify it.` }));
-      } else {
-        console.error(`❌ Capability "${name}" already exists. Use 'janee cap edit' to modify it.`);
-      }
-      process.exit(1);
+      cliError(`Capability "${name}" already exists. Use 'janee cap edit' to modify it.`, options.json);
     }
 
     if (!options.service) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: '--service is required' }));
-      } else {
-        console.error('❌ --service is required');
-      }
-      process.exit(1);
+      cliError('--service is required', options.json);
     }
 
     if (!config.services[options.service]) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: `Service "${options.service}" not found. Add it first with 'janee add'.` }));
-      } else {
-        console.error(`❌ Service "${options.service}" not found. Add it first with 'janee add'.`);
-      }
-      process.exit(1);
+      cliError(`Service "${options.service}" not found. Add it first with 'janee add'.`, options.json);
     }
 
     const capability: CapabilityConfig = {
@@ -229,20 +173,7 @@ export async function capabilityAddCommand(
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: error.message }));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 
@@ -251,24 +182,12 @@ export async function capabilityEditCommand(
   options: CapAddEditOptions
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('❌ No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
 
     if (!config.capabilities[name]) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" not found` }));
-      } else {
-        console.error(`❌ Capability "${name}" not found`);
-      }
-      process.exit(1);
+      cliError(`Capability "${name}" not found`, options.json);
     }
 
     const capability = config.capabilities[name];
@@ -296,20 +215,7 @@ export async function capabilityEditCommand(
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: error.message }));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
 
@@ -318,25 +224,12 @@ export async function capabilityRemoveCommand(
   options: { yes?: boolean; json?: boolean } = {}
 ): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'No config found. Run `janee init` first.' }));
-      } else {
-        console.error('❌ No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
 
-    // Check if capability exists
     if (!config.capabilities[name]) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: `Capability "${name}" not found` }));
-      } else {
-        console.error(`❌ Capability "${name}" not found`);
-      }
-      process.exit(1);
+      cliError(`Capability "${name}" not found`, options.json);
     }
 
     // Confirm deletion (skip if --yes flag is set or --json)
@@ -372,19 +265,6 @@ export async function capabilityRemoveCommand(
     }
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: error.message }));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ ok: false, error: 'Unknown error occurred' }));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }
