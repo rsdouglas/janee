@@ -36,7 +36,7 @@ function textResult(data: unknown): ToolResult {
 
 function parseTTL(ttl: string): number {
   const match = ttl.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) return 3600;
+  if (!match) throw new Error(`Invalid TTL format: ${ttl}`);
   const [, num, unit] = match;
   const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
   return parseInt(num) * multipliers[unit];
