@@ -4,6 +4,10 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-capability `access` override** — Capabilities can now set `access: open` or `access: restricted` to override the global `defaultAccess` policy. Useful for mixed environments where some capabilities (e.g. SerpAPI) should be open to all agents while others (e.g. Stripe) are locked to specific agents. Configurable via `janee cap add --access open` / `janee cap edit --access restricted` / `janee cap edit --clear-access`. Surfaced in `explain_access` traces and `cap list` output.
+
 ### Changed
 
 - **Refactor: Extract shared CLI utilities** — Common helpers (`cliError`, `requireConfig`, `resolveEnvVar`, `parseEnvMap`, `handleCommandError`) moved to `src/cli/cli-utils.ts`. Removes ~200 lines of duplicated code across 14 CLI command files. Error output format is now consistent (`{ ok: false, error }`) across all commands.
