@@ -6,9 +6,11 @@
  */
 
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
+
+import { DEFAULT_TIMEOUT_MS, MIN_SCRUB_LENGTH, REDACTED } from './types.js';
 
 export interface ExecCapability {
   service: string;
@@ -109,17 +111,17 @@ export function scrubCredentials(
 ): string {
   let scrubbed = output;
 
-  if (credential && credential.length >= 8) {
-    scrubbed = scrubbed.replaceAll(credential, '[REDACTED]');
+  if (credential && credential.length >= MIN_SCRUB_LENGTH) {
+    scrubbed = scrubbed.replaceAll(credential, REDACTED);
   }
-  if (extraCredentials?.apiKey && extraCredentials.apiKey.length >= 8) {
-    scrubbed = scrubbed.replaceAll(extraCredentials.apiKey, '[REDACTED]');
+  if (extraCredentials?.apiKey && extraCredentials.apiKey.length >= MIN_SCRUB_LENGTH) {
+    scrubbed = scrubbed.replaceAll(extraCredentials.apiKey, REDACTED);
   }
-  if (extraCredentials?.apiSecret && extraCredentials.apiSecret.length >= 8) {
-    scrubbed = scrubbed.replaceAll(extraCredentials.apiSecret, '[REDACTED]');
+  if (extraCredentials?.apiSecret && extraCredentials.apiSecret.length >= MIN_SCRUB_LENGTH) {
+    scrubbed = scrubbed.replaceAll(extraCredentials.apiSecret, REDACTED);
   }
-  if (extraCredentials?.passphrase && extraCredentials.passphrase.length >= 8) {
-    scrubbed = scrubbed.replaceAll(extraCredentials.passphrase, '[REDACTED]');
+  if (extraCredentials?.passphrase && extraCredentials.passphrase.length >= MIN_SCRUB_LENGTH) {
+    scrubbed = scrubbed.replaceAll(extraCredentials.passphrase, REDACTED);
   }
 
   return scrubbed;
@@ -138,7 +140,7 @@ export function hashPolicyFingerprint(capability: {
     mode: capability.mode,
     allowCommands: capability.allowCommands || [],
     workDir: capability.workDir || '',
-    timeout: capability.timeout || 30000,
+    timeout: capability.timeout || DEFAULT_TIMEOUT_MS,
     envKeys: Object.keys(capability.env || {}).sort(),
   });
 
@@ -192,7 +194,7 @@ export async function executeCommand(
     extraCredentials?: { apiKey?: string; apiSecret?: string; passphrase?: string };
   }
 ): Promise<ExecResult> {
-  const timeout = options.timeout || 30000;
+  const timeout = options.timeout || DEFAULT_TIMEOUT_MS;
   const startTime = Date.now();
 
   const mergedEnv = { ...process.env, ...injectedEnv };

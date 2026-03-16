@@ -1,15 +1,9 @@
-import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
+import { handleCommandError, requireConfig } from '../cli-utils';
+import { loadYAMLConfig } from '../config-yaml';
 
 export async function listCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
-    if (!hasYAMLConfig()) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'No config found' }, null, 2));
-      } else {
-        console.log('No config found. Run `janee init` first.');
-      }
-      process.exit(1);
-    }
+    requireConfig(options.json);
 
     const config = loadYAMLConfig();
     const serviceNames = Object.keys(config.services);
@@ -74,19 +68,6 @@ export async function listCommand(options: { json?: boolean } = {}): Promise<voi
     console.log('');
 
   } catch (error) {
-    if (error instanceof Error) {
-      if (options.json) {
-        console.log(JSON.stringify({ error: error.message }, null, 2));
-      } else {
-        console.error('❌ Error:', error.message);
-      }
-    } else {
-      if (options.json) {
-        console.log(JSON.stringify({ error: 'Unknown error occurred' }, null, 2));
-      } else {
-        console.error('❌ Unknown error occurred');
-      }
-    }
-    process.exit(1);
+    handleCommandError(error, options.json);
   }
 }

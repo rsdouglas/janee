@@ -3,23 +3,12 @@
  * Logs every API request to local files
  */
 
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
 
-export interface APIRequest {
-  service: string;
-  path: string;
-  method: string;
-  headers: Record<string, string>;
-  body?: string;
-}
-
-export interface APIResponse {
-  statusCode: number;
-  headers: Record<string, string | string[]>;
-  body: string;
-}
+export type { APIRequest, APIResponse } from './types';
+import type { APIRequest, APIResponse } from './types';
 
 export interface AuditEvent {
   id: string;

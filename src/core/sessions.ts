@@ -19,6 +19,17 @@ export interface Session {
   revoked: boolean;
 }
 
+export interface SerializedSession {
+  id: string;
+  capability: string;
+  service: string;
+  agentId?: string;
+  reason?: string;
+  createdAt: string;
+  expiresAt: string;
+  revoked: boolean;
+}
+
 export class SessionManager {
   private sessions: Map<string, Session> = new Map();
   private persistFile: string;

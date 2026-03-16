@@ -6,6 +6,7 @@ import {
   hashPolicyFingerprint,
   validateCommand,
 } from "./exec.js";
+import { DEFAULT_TIMEOUT_MS } from "./types.js";
 import { getInstallationToken, GitHubAppCredentials } from "./github-app.js";
 import { ServiceTestResult, testServiceConnection } from "./health.js";
 
@@ -60,19 +61,17 @@ export interface AuthorityExecHooks {
   ) => Promise<ServiceTestResult | ServiceTestResult[]>;
 }
 
-export function createAuthorityApp(
+/**
+ * Mount authority REST routes (health, exec/authorize, exec/complete, test)
+ * onto an existing Express app. Used by both standalone authority and the
+ * embedded authority inside startMCPServerHTTP.
+ */
+export function mountAuthorityRoutes(
+  app: express.Express,
   apiKey: string,
   hooks: AuthorityExecHooks,
-): express.Express {
-  const app = express();
-  app.use(express.json({ limit: "512kb" }));
-
-  app.use((req, res, next) => {
-    if (req.path === "/v1/health") {
-      next();
-      return;
-    }
-
+): void {
+  const authMiddleware: express.RequestHandler = (req, res, next) => {
     const provided = req.header("x-janee-runner-key");
     if (
       !provided ||
@@ -83,13 +82,13 @@ export function createAuthorityApp(
       return;
     }
     next();
-  });
+  };
 
   app.get("/v1/health", (_req, res) => {
     res.status(200).json({ ok: true, mode: "authority" });
   });
 
-  app.post("/v1/exec/authorize", async (req, res) => {
+  app.post("/v1/exec/authorize", authMiddleware, async (req, res) => {
     try {
       const body = req.body as ExecAuthorizeRequest;
       if (
@@ -113,7 +112,7 @@ export function createAuthorityApp(
     }
   });
 
-  app.post("/v1/exec/complete", async (req, res) => {
+  app.post("/v1/exec/complete", authMiddleware, async (req, res) => {
     try {
       const body = req.body as ExecCompleteRequest;
       if (!body?.grantId) {
@@ -132,7 +131,7 @@ export function createAuthorityApp(
   });
 
   if (hooks.testService) {
-    app.post("/v1/test", async (req, res) => {
+    app.post("/v1/test", authMiddleware, async (req, res) => {
       try {
         const result = await hooks.testService!(req.body?.service, {
           timeout: req.body?.timeout,
@@ -147,7 +146,15 @@ export function createAuthorityApp(
       }
     });
   }
+}
 
+export function createAuthorityApp(
+  apiKey: string,
+  hooks: AuthorityExecHooks,
+): express.Express {
+  const app = express();
+  app.use(express.json({ limit: "512kb" }));
+  mountAuthorityRoutes(app, apiKey, hooks);
   return app;
 }
 
@@ -267,8 +274,8 @@ export function buildAuthorityHooks(
         capabilityId: cap.name,
       });
       const effectiveTimeoutMs = Math.min(
-        req.timeoutMs || cap.timeout || 30000,
-        cap.timeout || 30000,
+        req.timeoutMs || cap.timeout || DEFAULT_TIMEOUT_MS,
+        cap.timeout || DEFAULT_TIMEOUT_MS,
       );
 
       return {
