@@ -734,6 +734,136 @@ describe('MCP Handler Integration — Agent-Scoped Credentials', () => {
     });
   });
 
+  describe('per-capability access override', () => {
+    it('should allow access to cap with access:"open" even when global defaultAccess is restricted', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [
+        { name: 'open-cap', service: 'svc', ttl: '1h', autoApprove: true, access: 'open' },
+        { name: 'default-cap', service: 'svc', ttl: '1h', autoApprove: true },
+      ];
+
+      const { client } = await createTestPair({
+        clientName: 'any-agent', services, capabilities, defaultAccess: 'restricted',
+      });
+
+      const openResult = await client.callTool({
+        name: 'execute', arguments: { capability: 'open-cap', method: 'GET', path: '/data' }
+      });
+      expect(openResult.isError).toBeFalsy();
+
+      const defaultResult = await client.callTool({
+        name: 'execute', arguments: { capability: 'default-cap', method: 'GET', path: '/data' }
+      });
+      expect(defaultResult.isError).toBe(true);
+    });
+
+    it('should deny access to cap with access:"restricted" even when global defaultAccess is open', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [
+        { name: 'locked-cap', service: 'svc', ttl: '1h', autoApprove: true, access: 'restricted' },
+        { name: 'normal-cap', service: 'svc', ttl: '1h', autoApprove: true },
+      ];
+
+      const { client } = await createTestPair({
+        clientName: 'any-agent', services, capabilities, defaultAccess: 'open',
+      });
+
+      const lockedResult = await client.callTool({
+        name: 'execute', arguments: { capability: 'locked-cap', method: 'GET', path: '/data' }
+      });
+      expect(lockedResult.isError).toBe(true);
+      const parsed = extractJSON(lockedResult);
+      expect(parsed.denial.reasonCode).toBe('DEFAULT_ACCESS_RESTRICTED');
+
+      const normalResult = await client.callTool({
+        name: 'execute', arguments: { capability: 'normal-cap', method: 'GET', path: '/data' }
+      });
+      expect(normalResult.isError).toBeFalsy();
+    });
+
+    it('should still respect allowedAgents on a restricted capability', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [{
+        name: 'stripe-cap', service: 'svc', ttl: '1h', autoApprove: true,
+        access: 'restricted', allowedAgents: ['billing-bot'],
+      }];
+
+      const { client: allowed } = await createTestPair({
+        clientName: 'billing-bot', services, capabilities,
+      });
+      const allowedResult = await allowed.callTool({
+        name: 'execute', arguments: { capability: 'stripe-cap', method: 'GET', path: '/balance' }
+      });
+      expect(allowedResult.isError).toBeFalsy();
+
+      const { client: denied } = await createTestPair({
+        clientName: 'other-agent', services, capabilities,
+      });
+      const deniedResult = await denied.callTool({
+        name: 'execute', arguments: { capability: 'stripe-cap', method: 'GET', path: '/balance' }
+      });
+      expect(deniedResult.isError).toBe(true);
+    });
+
+    it('should show cap-level access in list_services', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [
+        { name: 'serp', service: 'svc', ttl: '1h', autoApprove: true, access: 'open' },
+        { name: 'stripe', service: 'svc', ttl: '1h', autoApprove: true, access: 'restricted' },
+      ];
+
+      const { client } = await createTestPair({
+        clientName: 'any-agent', services, capabilities, defaultAccess: 'restricted',
+      });
+
+      const result = await client.callTool({ name: 'list_services', arguments: {} });
+      const parsed = extractJSON(result);
+      const accessible = (name: string) => parsed.find((c: any) => c.name === name)?.accessible;
+      expect(accessible('serp')).toBe(true);
+      expect(accessible('stripe')).toBe(false);
+    });
+
+    it('should trace cap-level access override in explain_access', async () => {
+      const services = new Map<string, ServiceConfig>([
+        ['svc', { baseUrl: 'https://api.test.com', auth: { type: 'bearer', key: 'k' } }],
+      ]);
+      const capabilities: Capability[] = [
+        { name: 'open-cap', service: 'svc', ttl: '1h', autoApprove: true, access: 'open' },
+        { name: 'locked-cap', service: 'svc', ttl: '1h', autoApprove: true, access: 'restricted' },
+      ];
+
+      const { client } = await createTestPair({
+        clientName: 'agent-x', services, capabilities, defaultAccess: 'restricted',
+      });
+
+      const openTrace = await client.callTool({
+        name: 'explain_access', arguments: { capability: 'open-cap' }
+      });
+      const openParsed = extractJSON(openTrace);
+      expect(openParsed.allowed).toBe(true);
+      const openStep = openParsed.trace.find((t: any) => t.check === 'default_access');
+      expect(openStep.result).toBe('pass');
+      expect(openStep.detail).toContain('capability access');
+
+      const lockedTrace = await client.callTool({
+        name: 'explain_access', arguments: { capability: 'locked-cap' }
+      });
+      const lockedParsed = extractJSON(lockedTrace);
+      expect(lockedParsed.allowed).toBe(false);
+      const lockedStep = lockedParsed.trace.find((t: any) => t.check === 'default_access');
+      expect(lockedStep.result).toBe('fail');
+      expect(lockedStep.detail).toContain('capability access');
+    });
+  });
+
   describe('whoami', () => {
     it('should return the resolved agent identity and accessible capabilities', async () => {
       const services = new Map<string, ServiceConfig>([

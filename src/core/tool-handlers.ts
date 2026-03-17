@@ -354,10 +354,12 @@ export function handleExplainAccess(
   }
 
   if (targetAgentId && (!explainCap.allowedAgents || explainCap.allowedAgents.length === 0)) {
-    if (ctx.defaultAccess === 'restricted') {
-      trace.push({ check: 'default_access', result: 'fail', detail: `defaultAccess is "restricted" and no allowedAgents list — agent blocked` });
+    const effectiveAccess = explainCap.access ?? ctx.defaultAccess;
+    const source = explainCap.access ? `capability access` : `global defaultAccess`;
+    if (effectiveAccess === 'restricted') {
+      trace.push({ check: 'default_access', result: 'fail', detail: `${source} is "restricted" and no allowedAgents list — agent blocked` });
     } else {
-      trace.push({ check: 'default_access', result: 'pass', detail: `defaultAccess is "${ctx.defaultAccess ?? 'open'}" — agent allowed` });
+      trace.push({ check: 'default_access', result: 'pass', detail: `${source} is "${effectiveAccess ?? 'open'}" — agent allowed` });
     }
   } else {
     trace.push({ check: 'default_access', result: 'skip', detail: targetAgentId ? `allowedAgents list takes precedence` : `No agent ID (admin/CLI)` });

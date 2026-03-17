@@ -78,7 +78,8 @@ function canAccessCapability(
     return cap.allowedAgents.includes(agentId);
   }
 
-  if (defaultAccessPolicy === "restricted") {
+  const effectiveAccess = cap.access ?? defaultAccessPolicy;
+  if (effectiveAccess === "restricted") {
     return false;
   }
 
@@ -108,10 +109,13 @@ export function explainAccessDenial(
     return null;
   }
 
-  if (defaultAccessPolicy === 'restricted') {
+  const effectiveAccess = cap.access ?? defaultAccessPolicy;
+  if (effectiveAccess === 'restricted') {
     return {
       reason: 'DEFAULT_ACCESS_RESTRICTED',
-      detail: `defaultAccess is "restricted" and capability has no allowedAgents list`
+      detail: cap.access
+        ? `Capability access is "restricted" and has no allowedAgents list`
+        : `defaultAccess is "restricted" and capability has no allowedAgents list`
     };
   }
 
@@ -133,6 +137,7 @@ export interface Capability {
   requiresReason?: boolean;
   rules?: Rules; // Optional allow/deny patterns
   allowedAgents?: string[]; // Restrict this capability to specific agent IDs
+  access?: 'open' | 'restricted'; // Per-capability override of global defaultAccess
   // Exec mode fields (RFC 0001)
   mode?: "proxy" | "exec";
   allowCommands?: string[];

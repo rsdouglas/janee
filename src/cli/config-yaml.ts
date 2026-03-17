@@ -66,6 +66,7 @@ export interface CapabilityConfig {
     deny?: string[];
   };
   allowedAgents?: string[];
+  access?: 'open' | 'restricted';
   mode?: 'proxy' | 'exec';
   allowCommands?: string[];
   env?: Record<string, string>;

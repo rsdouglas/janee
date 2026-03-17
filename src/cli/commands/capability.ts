@@ -24,6 +24,7 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
           allowRules: cap.rules?.allow || [],
           denyRules: cap.rules?.deny || [],
           mode: cap.mode,
+          access: cap.access,
           allowedAgents: cap.allowedAgents,
           allowCommands: cap.allowCommands,
           env: cap.env,
@@ -59,6 +60,7 @@ export async function capabilityListCommand(options: { json?: boolean } = {}): P
       if (cap.autoApprove !== undefined) console.log(`    Auto-approve: ${cap.autoApprove}`);
       if (cap.requiresReason !== undefined) console.log(`    Requires reason: ${cap.requiresReason}`);
       if (rules) console.log(`    Rules:${rules}`);
+      if (cap.access) console.log(`    Access: ${cap.access}`);
       if (cap.allowedAgents?.length) console.log(`    Allowed agents: ${cap.allowedAgents.join(', ')}`);
       if (cap.allowCommands?.length) console.log(`    Allow commands: ${cap.allowCommands.join(', ')}`);
       if (cap.env) console.log(`    Env: ${Object.entries(cap.env).map(([k,v]) => `${k}=${v}`).join(', ')}`);
@@ -81,6 +83,8 @@ interface CapAddEditOptions {
   clearRules?: boolean;
   allowedAgents?: string[];
   clearAgents?: boolean;
+  access?: string;
+  clearAccess?: boolean;
   mode?: string;
   allowCommands?: string[];
   envMap?: string[];
@@ -95,6 +99,15 @@ function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOption
   }
   if (options.clearAgents) {
     delete cap.allowedAgents;
+  }
+  if (options.access) {
+    if (options.access !== 'open' && options.access !== 'restricted') {
+      throw new Error(`Invalid access policy "${options.access}" — must be "open" or "restricted"`);
+    }
+    cap.access = options.access;
+  }
+  if (options.clearAccess) {
+    delete cap.access;
   }
   if (options.mode) {
     if (options.mode !== 'proxy' && options.mode !== 'exec') {
@@ -169,6 +182,7 @@ export async function capabilityAddCommand(
       console.log(`   Service: ${capability.service}`);
       console.log(`   TTL: ${capability.ttl}`);
       if (capability.mode) console.log(`   Mode: ${capability.mode}`);
+      if (capability.access) console.log(`   Access: ${capability.access}`);
       if (capability.allowedAgents) console.log(`   Allowed agents: ${capability.allowedAgents.join(', ')}`);
     }
 

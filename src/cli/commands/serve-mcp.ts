@@ -54,6 +54,7 @@ function loadConfigForMCP(): ReloadResult {
       requiresReason: cap.requiresReason,
       rules: cap.rules,
       allowedAgents: cap.allowedAgents,
+      access: cap.access,
       // Exec mode fields (RFC 0001)
       mode: cap.mode || 'proxy',
       allowCommands: cap.allowCommands,
