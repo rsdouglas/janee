@@ -4,6 +4,10 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
+_(empty)_
+
+## [0.16.0] - 2026-03-17
+
 ### Added
 
 - **Per-capability `access` override** — Capabilities can now set `access: open` or `access: restricted` to override the global `defaultAccess` policy. Useful for mixed environments where some capabilities (e.g. SerpAPI) should be open to all agents while others (e.g. Stripe) are locked to specific agents. Configurable via `janee cap add --access open` / `janee cap edit --access restricted` / `janee cap edit --clear-access`. Surfaced in `explain_access` traces and `cap list` output.
