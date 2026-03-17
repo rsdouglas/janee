@@ -4,7 +4,24 @@ All notable changes to Janee will be documented in this file.
 
 ## [Unreleased]
 
-_(empty)_
+### Fixed
+
+- **`whoami` and `doctor bundle` now respect per-capability `access` field** — Both commands were only checking the global `defaultAccess`, ignoring capability-level `access: open/restricted` overrides. This could report incorrect access for agents.
+- **Contradictory CLI flags now error** — `--allowed-agents` + `--clear-agents`, `--access` + `--clear-access`, and `--clear-rules` + `--allow`/`--deny` now produce a clear error instead of silently discarding one option.
+- **`cap add --mode exec` without `--allow-commands` now errors** — Previously created an unusable exec-mode capability with no allowed commands.
+- **`janee add --timeout` validates input** — Invalid values (NaN, zero, negative) now error instead of saving broken config.
+- **TTL format validated at save time** — `janee cap add --ttl garbage` now errors with expected format hint.
+- **`cap edit` with no options now errors** — Previously reported silent success with no changes made.
+- **`--access` help text corrected** — Removed nonexistent "inherit" option; points to `--clear-access` instead.
+- **`--access` warning scoped correctly** — Warning about `allowedAgents` precedence no longer fires when both are set in the same command.
+- **`revoke` prefix ambiguity check** — Ambiguous session ID prefixes now error with a list of matches instead of silently revoking the first.
+- **`logs --json --follow` error format** — Normalized to `{ ok: false, error }` for consistency.
+
+### Changed
+
+- **Consolidate access evaluation** — `canAccessCapability()` and `resolveAccess()` extracted to `agent-scope.ts` as single source of truth. Removed 5 duplicated implementations from `mcp-server.ts`, `whoami.ts`, `doctor-bundle.ts`, `overview.ts`, `authority.ts`, and `tool-handlers.ts`.
+- **Consolidate TTL logic** — `validateTTL()` and `parseTTL()` extracted to `types.ts`. Removed duplicates from `capability.ts` and `tool-handlers.ts`.
+- **`janee overview` colors** — Capabilities colored by access type: cyan for agent-specific (`allowedAgents`), green for globally open. Warns on exec/proxy mode option mismatches.
 
 ## [0.16.0] - 2026-03-17
 
