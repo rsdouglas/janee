@@ -114,6 +114,16 @@ export const serviceDirectory: ServiceTemplate[] = [
     docs: 'https://replicate.com/docs/reference/http',
     tags: ['ai', 'ml', 'models']
   },
+
+  // Web Scraping / Data Extraction
+  {
+    name: 'firecrawl',
+    description: 'Web scraping and crawling API for AI',
+    baseUrl: 'https://api.firecrawl.dev',
+    auth: { type: 'bearer', fields: ['key'] },
+    docs: 'https://docs.firecrawl.dev/api-reference/v2-introduction',
+    tags: ['scraping', 'web', 'ai', 'data']
+  },
   
   // Crypto Exchanges
   {

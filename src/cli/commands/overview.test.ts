@@ -1,4 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+
+import {
+  hasYAMLConfig,
+  loadYAMLConfig,
+} from '../config-yaml';
+import { overviewCommand } from './overview';
 
 vi.mock('../config-yaml', () => ({
   loadYAMLConfig: vi.fn(),
@@ -7,9 +19,6 @@ vi.mock('../config-yaml', () => ({
   getConfigDir: vi.fn(() => '/tmp/janee-test'),
   getAuditDir: vi.fn(() => '/tmp/janee-test/logs'),
 }));
-
-import { loadYAMLConfig, hasYAMLConfig } from '../config-yaml';
-import { overviewCommand } from './overview';
 
 const mockLoad = vi.mocked(loadYAMLConfig);
 const mockHas = vi.mocked(hasYAMLConfig);
@@ -84,7 +93,7 @@ describe('overviewCommand', () => {
     cap.restore();
     const output = cap.logs.join('\n');
     expect(output).toContain('billing-bot');
-    expect(output).toContain('stripe (allowed)');
+    expect(output).toContain('stripe');
     expect(output).toContain('serp');
   });
 

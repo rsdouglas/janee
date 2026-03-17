@@ -293,7 +293,7 @@ cap
   .option('--clear-rules', 'Clear all rules')
   .option('--allowed-agents <agents...>', 'Restrict to specific agent IDs')
   .option('--clear-agents', 'Remove all agent restrictions')
-  .option('--access <policy>', 'Per-capability access policy: open, restricted, or inherit')
+  .option('--access <policy>', 'Per-capability access policy: open or restricted (use --clear-access to inherit)')
   .option('--clear-access', 'Remove per-capability access override (inherit from global)')
   .option('--mode <mode>', 'Execution mode: proxy or exec')
   .option('--allow-commands <cmds...>', 'Allowed executables for exec mode')

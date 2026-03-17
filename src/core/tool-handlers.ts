@@ -1,4 +1,5 @@
 import {
+  canAccessCapability,
   canAgentAccess,
   CredentialOwnership,
 } from './agent-scope.js';
@@ -21,7 +22,10 @@ import type {
   APIRequest,
   APIResponse,
 } from './types.js';
-import { DenialError } from './types.js';
+import {
+  DenialError,
+  parseTTL,
+} from './types.js';
 
 export interface ToolHandlerContext {
   getCapabilities: () => Capability[];
@@ -36,21 +40,12 @@ export interface ToolHandlerContext {
   resolveAgent: (extra: any, args: any) => string | undefined;
   clientSessions: Map<string, string>;
   explainAccessDenial: (agentId: string | undefined, cap: Capability, service: ServiceConfig | undefined, defaultAccess: 'open' | 'restricted' | undefined) => { reason: string; detail: string } | null;
-  canAccessCapability: (agentId: string | undefined, cap: Capability, service: ServiceConfig | undefined, defaultAccess: 'open' | 'restricted' | undefined) => boolean;
 }
 
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 
 function textResult(data: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
-}
-
-function parseTTL(ttl: string): number {
-  const match = ttl.match(/^(\d+)(s|m|h|d)$/);
-  if (!match) throw new Error(`Invalid TTL format: ${ttl}`);
-  const [, num, unit] = match;
-  const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
-  return parseInt(num) * multipliers[unit];
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +99,7 @@ export async function handleExecute(
 
   const executeAgentId = ctx.resolveAgent(extra, args);
   const executeSvc = services.get(cap.service);
-  if (!ctx.canAccessCapability(executeAgentId, cap, executeSvc, ctx.defaultAccess)) {
+  if (!canAccessCapability(executeAgentId, cap, executeSvc, ctx.defaultAccess)) {
     const denialDetail = ctx.explainAccessDenial(executeAgentId, cap, executeSvc, ctx.defaultAccess);
     ctx.auditLogger.logDenied(cap.service, method, path, 'Agent does not have access to this capability', reason);
     throw new DenialError(
@@ -189,7 +184,7 @@ export async function handleExec(
 
     const execAgentId = ctx.resolveAgent(extra, args);
     const execSvc = services.get(execCap.service);
-    if (!ctx.canAccessCapability(execAgentId, execCap, execSvc, ctx.defaultAccess)) {
+    if (!canAccessCapability(execAgentId, execCap, execSvc, ctx.defaultAccess)) {
       const execDenialDetail = ctx.explainAccessDenial(execAgentId, execCap, execSvc, ctx.defaultAccess);
       ctx.auditLogger.logDenied(execCap.service, 'EXEC', execCommand.join(' '), 'Agent does not have access to this capability', execReason);
       throw new DenialError(
@@ -426,11 +421,11 @@ export function handleWhoami(
   const services = ctx.getServices();
 
   const accessibleCaps = capabilities
-    .filter(cap => ctx.canAccessCapability(whoamiAgentId, cap, services.get(cap.service), ctx.defaultAccess))
+    .filter(cap => canAccessCapability(whoamiAgentId, cap, services.get(cap.service), ctx.defaultAccess))
     .map(cap => cap.name);
 
   const deniedCaps = capabilities
-    .filter(cap => !ctx.canAccessCapability(whoamiAgentId, cap, services.get(cap.service), ctx.defaultAccess))
+    .filter(cap => !canAccessCapability(whoamiAgentId, cap, services.get(cap.service), ctx.defaultAccess))
     .map(cap => cap.name);
 
   return textResult({

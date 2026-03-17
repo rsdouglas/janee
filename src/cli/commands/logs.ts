@@ -14,7 +14,7 @@ export async function logsCommand(options: {
     if (options.follow) {
       // JSON mode not supported for follow (streaming)
       if (options.json) {
-        console.log(JSON.stringify({ error: '--json not supported with --follow' }, null, 2));
+        console.log(JSON.stringify({ ok: false, error: '--json not supported with --follow' }, null, 2));
         process.exit(1);
       }
 

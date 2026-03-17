@@ -177,3 +177,60 @@ export function revokeAccess(
 
   return updated;
 }
+
+// ---------------------------------------------------------------------------
+// Shared capability access evaluation
+// ---------------------------------------------------------------------------
+
+/** Minimal shape needed for access checks — satisfied by both runtime Capability and CLI CapabilityConfig */
+export interface AccessCheckCapability {
+  allowedAgents?: string[];
+  access?: 'open' | 'restricted';
+  service: string;
+}
+
+/** Minimal shape needed for service ownership lookups */
+export interface AccessCheckService {
+  ownership?: CredentialOwnership;
+}
+
+export type AccessResult = 'allowed' | 'open' | 'denied';
+
+/**
+ * Single source of truth for "can this agent access this capability?"
+ * No agentId (CLI/admin) always gets access.
+ */
+export function canAccessCapability(
+  agentId: string | undefined,
+  cap: AccessCheckCapability,
+  service: AccessCheckService | undefined,
+  defaultAccessPolicy: 'open' | 'restricted' | undefined,
+): boolean {
+  return resolveAccess(agentId, cap, service, defaultAccessPolicy) !== 'denied';
+}
+
+/**
+ * Richer version that returns *how* access was granted:
+ * - 'allowed': agent is explicitly listed in allowedAgents
+ * - 'open': access is open (global or per-capability policy)
+ * - 'denied': agent cannot access
+ */
+export function resolveAccess(
+  agentId: string | undefined,
+  cap: AccessCheckCapability,
+  service: AccessCheckService | undefined,
+  defaultAccessPolicy: 'open' | 'restricted' | undefined,
+): AccessResult {
+  if (!agentId) return 'open';
+
+  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
+    return cap.allowedAgents.includes(agentId) ? 'allowed' : 'denied';
+  }
+
+  const effective = cap.access ?? defaultAccessPolicy;
+  if (effective === 'restricted') return 'denied';
+
+  if (!canAgentAccess(agentId, service?.ownership)) return 'denied';
+
+  return 'open';
+}

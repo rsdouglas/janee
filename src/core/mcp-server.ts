@@ -25,6 +25,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import {
+  canAccessCapability,
   canAgentAccess,
   CredentialOwnership,
   resolveAgentIdentity,
@@ -53,33 +54,6 @@ const packageJsonPath = join(__dirname, "../../package.json");
 const pkgVersion =
   JSON.parse(readFileSync(packageJsonPath, "utf8")).version || "0.0.0";
 
-
-/**
- * Check whether an agent can access a capability.
- * Checks capability-level allowedAgents first, then falls back to
- * service-level ownership and the global defaultAccess policy.
- *
- * No agentId (e.g. CLI/admin) always gets access.
- */
-function canAccessCapability(
-  agentId: string | undefined,
-  cap: Capability,
-  service: ServiceConfig | undefined,
-  defaultAccessPolicy: "open" | "restricted" | undefined,
-): boolean {
-  if (!agentId) return true;
-
-  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
-    return cap.allowedAgents.includes(agentId);
-  }
-
-  const effectiveAccess = cap.access ?? defaultAccessPolicy;
-  if (effectiveAccess === "restricted") {
-    return false;
-  }
-
-  return canAgentAccess(agentId, service?.ownership);
-}
 
 export type AccessDenialReason = 'AGENT_NOT_ALLOWED' | 'DEFAULT_ACCESS_RESTRICTED' | 'OWNERSHIP_DENIED';
 
@@ -561,7 +535,6 @@ export function createMCPServer(options: MCPServerOptions): MCPServerResult {
         resolveAgent: resolveAgentFromRequest,
         clientSessions,
         explainAccessDenial,
-        canAccessCapability,
       };
 
       switch (name) {

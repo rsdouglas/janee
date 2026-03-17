@@ -16,15 +16,24 @@ export async function revokeCommand(sessionIdPrefix: string): Promise<void> {
     const data = fs.readFileSync(sessionsFile, 'utf8');
     const sessions: SerializedSession[] = JSON.parse(data);
 
-    // Find session by prefix
-    const session = sessions.find(s => s.id.startsWith(sessionIdPrefix));
+    const matches = sessions.filter(s => s.id.startsWith(sessionIdPrefix));
 
-    if (!session) {
+    if (matches.length === 0) {
       console.error(`❌ Session not found: ${sessionIdPrefix}`);
       console.error('');
       console.error('Run: janee sessions');
       process.exit(1);
     }
+
+    if (matches.length > 1) {
+      console.error(`❌ Ambiguous prefix "${sessionIdPrefix}" matches ${matches.length} sessions. Be more specific.`);
+      for (const m of matches) {
+        console.error(`   ${m.id.substring(0, 24)}... (${m.capability})`);
+      }
+      process.exit(1);
+    }
+
+    const session = matches[0];
 
     if (session.revoked) {
       console.log(`⚠️  Session already revoked: ${session.id.substring(0, 20)}...`);

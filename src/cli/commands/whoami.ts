@@ -1,20 +1,9 @@
-import { canAgentAccess } from '../../core/agent-scope';
-import { handleCommandError, requireConfig } from '../cli-utils';
+import { canAccessCapability } from '../../core/agent-scope';
+import {
+  handleCommandError,
+  requireConfig,
+} from '../cli-utils';
 import { loadYAMLConfig } from '../config-yaml';
-
-function canAccessCapability(
-  agentId: string | undefined,
-  cap: { allowedAgents?: string[]; service: string },
-  services: Record<string, { ownership?: any }>,
-  defaultAccess?: string,
-): boolean {
-  if (!agentId) return true;
-  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
-    return cap.allowedAgents.includes(agentId);
-  }
-  if (defaultAccess === 'restricted') return false;
-  return canAgentAccess(agentId, services[cap.service]?.ownership);
-}
 
 export async function whoamiCommand(
   options: { agent?: string; json?: boolean } = {},
@@ -32,7 +21,7 @@ export async function whoamiCommand(
 
     for (const name of capNames) {
       const cap = config.capabilities[name];
-      if (canAccessCapability(agentId, cap, config.services, defaultAccess)) {
+      if (canAccessCapability(agentId, cap, config.services[cap.service], defaultAccess)) {
         accessible.push(name);
       } else {
         denied.push(name);

@@ -184,6 +184,7 @@ describe('capabilityEditCommand — extended flags', () => {
     const cap = captureConsole();
     await capabilityEditCommand('stripe_read', {
       mode: 'exec',
+      allowCommands: ['curl'],
       timeout: '10000',
       json: true,
     });

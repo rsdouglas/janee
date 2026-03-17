@@ -587,6 +587,8 @@ janee add                     # Add a service (interactive)
 janee add stripe -u https://api.stripe.com -k sk_xxx  # Add with args
 janee remove <service>        # Remove a service
 janee remove <service> --yes  # Remove without confirmation
+janee overview                # One-screen summary of who can access what
+janee overview --json         # Output as JSON
 janee list                    # List configured services
 janee list --json             # Output as JSON (for integrations)
 janee search [query]          # Search service directory
@@ -606,7 +608,27 @@ janee logs --json             # Output as JSON
 janee sessions                # List active sessions
 janee sessions --json         # Output as JSON
 janee revoke <id>             # Kill a session
+janee status                  # Config and health status
+janee whoami --agent <name>   # Preview what an agent can access
+janee diagnose access <cap> --agent <name>  # Trace why access is allowed/denied
 ```
+
+### Overview
+
+`janee overview` gives you a one-screen summary of your entire configuration — which agents can access which capabilities, and whether anything is unreachable:
+
+```
+  22 services, 32 capabilities    (defaultAccess: restricted)
+
+  creature:must-trade: bybit, serper
+  creature:proof-ceo: gh-proof-ceo-proxy, cloudflare, resend, serper, ...
+  cursor-vscode: devto, cloudflare, serper, proof-admin, twitter, ...
+
+  Unreachable: mexc, google-analytics, fal
+  (no known agent can access these)
+```
+
+Agent-specific access (via `allowedAgents`) is colored cyan; globally open access (via `access: open` or default policy) is colored green. Use `--json` for machine-readable output.
 
 ### Non-interactive Setup (for AI agents)
 
@@ -671,7 +693,7 @@ Agent never touches the real key.
 - **Encryption**: Keys stored with AES-256-GCM
 - **Agent identity**: Derived from `clientInfo.name` in the MCP initialize handshake — no custom headers needed
 - **Agent isolation**: Each agent gets its own session with isolated identity (HTTP transport creates a Server+Transport per session)
-- **Access control**: Per-capability `allowedAgents` whitelist + server-wide `defaultAccess` policy
+- **Access control**: Per-capability `allowedAgents` whitelist + server-wide `defaultAccess` policy + per-capability `access: open/restricted` override
 - **Credential scoping**: Agent-created credentials default to `agent-only`
 - **Audit log**: Every request logged to `~/.janee/logs/`
 - **Sessions**: Time-limited, revocable
