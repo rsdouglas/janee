@@ -665,7 +665,8 @@ export async function addCommand(
     saveYAMLConfig(config);
 
     // Auto-create a default capability unless one already exists
-    if (!config.capabilities[serviceName]) {
+    const capCreated = !config.capabilities[serviceName];
+    if (capCreated) {
       const capConfig: CapabilityConfig = {
         service: serviceName,
         ttl: '1h',
@@ -683,24 +684,28 @@ export async function addCommand(
     }
 
     if (options.json) {
-      console.log(JSON.stringify({
-        ok: true,
-        service: serviceName,
-        capability: serviceName,
-        message: `Added service "${serviceName}" with capability "${serviceName}"`,
-      }));
+      const result: any = { ok: true, service: serviceName, message: `Added service "${serviceName}"` };
+      if (capCreated) {
+        result.capability = serviceName;
+        result.message += ` with capability "${serviceName}"`;
+      }
+      console.log(JSON.stringify(result));
       closeRL();
       return;
     }
 
     console.log(`✅ Added service "${serviceName}"`);
-    if (options.exec) {
-      console.log(`✅ Added exec-mode capability "${serviceName}" (1h TTL, auto-approve)`);
-      console.log(`   Allowed commands: ${(options.allowCommands || []).join(', ')}`);
+    if (capCreated) {
+      if (options.exec) {
+        console.log(`✅ Added exec-mode capability "${serviceName}" (1h TTL, auto-approve)`);
+        console.log(`   Allowed commands: ${(options.allowCommands || []).join(', ')}`);
+      } else {
+        console.log(`✅ Added capability "${serviceName}" (1h TTL, auto-approve)`);
+      }
+      console.log(`   Customize with: janee cap edit ${serviceName}`);
     } else {
-      console.log(`✅ Added capability "${serviceName}" (1h TTL, auto-approve)`);
+      console.log(`   Existing capability "${serviceName}" unchanged`);
     }
-    console.log(`   Customize with: janee cap edit ${serviceName}`);
     console.log();
     console.log("Done! Run 'janee serve' to start.");
 

@@ -94,9 +94,11 @@ describe('overviewCommand', () => {
       server: { defaultAccess: 'restricted' },
       services: {
         slack: { baseUrl: 'https://slack.com/api', auth: { type: 'bearer', key: 'k' } },
+        stripe: { baseUrl: 'https://api.stripe.com', auth: { type: 'bearer', key: 'k' } },
       },
       capabilities: {
         slack: { service: 'slack', ttl: '1h' },
+        stripe: { service: 'stripe', ttl: '1h', allowedAgents: ['bot-a'] },
       },
     }) as any);
 
@@ -113,9 +115,11 @@ describe('overviewCommand', () => {
     mockLoad.mockReturnValue(baseConfig({
       services: {
         stripe: { baseUrl: 'https://api.stripe.com', auth: { type: 'bearer', key: 'k' } },
+        serp: { baseUrl: 'https://serpapi.com', auth: { type: 'bearer', key: 'k' } },
       },
       capabilities: {
         stripe: { service: 'stripe', ttl: '1h', access: 'restricted' },
+        serp: { service: 'serp', ttl: '1h', allowedAgents: ['bot-a'] },
       },
     }) as any);
 
@@ -125,6 +129,28 @@ describe('overviewCommand', () => {
     const output = cap.logs.join('\n');
     expect(output).toContain('Unreachable');
     expect(output).toContain('stripe');
+  });
+
+  it('should not flag as unreachable when ownership grants access', async () => {
+    mockHas.mockReturnValue(true);
+    mockLoad.mockReturnValue(baseConfig({
+      services: {
+        slack: {
+          baseUrl: 'https://slack.com/api',
+          auth: { type: 'bearer', key: 'k' },
+          ownership: { accessPolicy: 'shared', sharedWith: ['bot-a'], createdAt: '2026-01-01' },
+        },
+      },
+      capabilities: {
+        slack: { service: 'slack', ttl: '1h' },
+      },
+    }) as any);
+
+    const cap = captureConsole();
+    await overviewCommand();
+    cap.restore();
+    const output = cap.logs.join('\n');
+    expect(output).not.toContain('Unreachable');
   });
 
   it('should output JSON', async () => {
