@@ -5,14 +5,6 @@ import type { CapabilityConfig, ServiceConfig as YAMLServiceConfig } from '../co
 
 type AccessPolicy = 'open' | 'restricted' | undefined;
 
-interface CapAccess {
-  name: string;
-  service: string;
-  mode: string;
-  access: AccessPolicy;
-  allowedAgents: string[];
-}
-
 function resolveEffectiveAccess(
   cap: CapabilityConfig,
   service: YAMLServiceConfig | undefined,
@@ -50,15 +42,6 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
       if (svc.ownership?.createdBy) knownAgents.add(svc.ownership.createdBy);
     }
 
-    // Build per-capability access info
-    const caps: CapAccess[] = capEntries.map(([name, cap]) => ({
-      name,
-      service: cap.service,
-      mode: cap.mode || 'proxy',
-      access: cap.access,
-      allowedAgents: cap.allowedAgents ?? [],
-    }));
-
     // Build per-agent access map
     const agentAccess: Record<string, { accessible: string[]; denied: string[] }> = {};
     for (const agentId of knownAgents) {
@@ -74,30 +57,31 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
     }
 
     // Find capabilities no known agent can reach
-    const unreachable = caps.filter(cap => {
-      if (cap.allowedAgents.length > 0) return false;
-      const effective = cap.access ?? globalDefault;
-      if (effective === 'restricted') return true;
-      return false;
-    });
+    const unreachable = capEntries.filter(([name]) => {
+      if (knownAgents.size === 0) return false;
+      return [...knownAgents].every(agentId => {
+        const { denied } = agentAccess[agentId];
+        return denied.includes(name);
+      });
+    }).map(([name]) => name);
 
     if (options.json) {
       console.log(JSON.stringify({
         services: serviceNames.length,
-        capabilities: caps.length,
+        capabilities: capEntries.length,
         globalDefaultAccess: globalDefault ?? 'open',
         agents: agentAccess,
-        unreachable: unreachable.map(c => c.name),
+        unreachable,
       }, null, 2));
       return;
     }
 
     // Human-readable output
     console.log('');
-    console.log(`  ${serviceNames.length} service${serviceNames.length !== 1 ? 's' : ''}, ${caps.length} capabilit${caps.length !== 1 ? 'ies' : 'y'}    (defaultAccess: ${globalDefault ?? 'open'})`);
+    console.log(`  ${serviceNames.length} service${serviceNames.length !== 1 ? 's' : ''}, ${capEntries.length} capabilit${capEntries.length !== 1 ? 'ies' : 'y'}    (defaultAccess: ${globalDefault ?? 'open'})`);
     console.log('');
 
-    if (caps.length === 0) {
+    if (capEntries.length === 0) {
       console.log('  No capabilities configured. Run `janee add <service>` to get started.');
       console.log('');
       return;
@@ -126,8 +110,8 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
     // Unreachable capabilities
     if (unreachable.length > 0) {
       console.log('');
-      console.log(`  Unreachable: ${unreachable.map(c => c.name).join(', ')}`);
-      console.log('  (restricted with no allowedAgents — no agent can use these)');
+      console.log(`  Unreachable: ${unreachable.join(', ')}`);
+      console.log('  (no known agent can access these)');
     }
 
     console.log('');
