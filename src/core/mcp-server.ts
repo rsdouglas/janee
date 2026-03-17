@@ -30,18 +30,8 @@ import {
   resolveAgentIdentity,
 } from './agent-scope.js';
 import { AuditLogger } from './audit.js';
-import {
-  ExecResult,
-  validateCommand,
-} from './exec.js';
-import {
-  ServiceTestResult,
-  testServiceConnection,
-} from './health.js';
-import {
-  checkRules,
-  Rules,
-} from './rules.js';
+import { ExecResult } from './exec.js';
+import { Rules } from './rules.js';
 import { SessionManager } from './sessions.js';
 import {
   handleExec,
@@ -52,6 +42,11 @@ import {
   handleWhoami,
   ToolHandlerContext,
 } from './tool-handlers.js';
+import type {
+  APIRequest,
+  APIResponse,
+} from './types.js';
+import { DenialError } from './types.js';
 
 // Read version from package.json
 const packageJsonPath = join(__dirname, "../../package.json");
@@ -185,10 +180,13 @@ export interface ServiceConfig {
   ownership?: CredentialOwnership;
 }
 
-export type { APIRequest, APIResponse, DenialDetails, DenialReasonCode } from './types.js';
+export type {
+  APIRequest,
+  APIResponse,
+  DenialDetails,
+  DenialReasonCode,
+} from './types.js';
 export { DenialError } from './types.js';
-import type { APIRequest, APIResponse } from './types.js';
-import { DenialError } from './types.js';
 
 export interface ReloadResult {
   capabilities: Capability[];

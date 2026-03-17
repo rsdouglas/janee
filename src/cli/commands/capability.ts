@@ -1,4 +1,9 @@
-import { cliError, handleCommandError, parseEnvMap, requireConfig } from '../cli-utils';
+import {
+  cliError,
+  handleCommandError,
+  parseEnvMap,
+  requireConfig,
+} from '../cli-utils';
 import {
   CapabilityConfig,
   loadYAMLConfig,

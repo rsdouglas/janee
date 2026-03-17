@@ -46,12 +46,14 @@ export async function diagnoseAccessCommand(
       trace.push({ check: 'allowed_agents', result: 'skip', detail: `No allowedAgents restriction on this capability` });
     }
 
-    // defaultAccess
+    // defaultAccess (with per-capability override)
     if (agentId && (!cap.allowedAgents || cap.allowedAgents.length === 0)) {
-      if (defaultAccess === 'restricted') {
-        trace.push({ check: 'default_access', result: 'fail', detail: `defaultAccess is "restricted" and no allowedAgents list — agent blocked` });
+      const effectiveAccess = cap.access ?? defaultAccess;
+      const source = cap.access ? 'capability access' : 'global defaultAccess';
+      if (effectiveAccess === 'restricted') {
+        trace.push({ check: 'default_access', result: 'fail', detail: `${source} is "restricted" and no allowedAgents list — agent blocked` });
       } else {
-        trace.push({ check: 'default_access', result: 'pass', detail: `defaultAccess is "${defaultAccess ?? 'open'}" — agent allowed` });
+        trace.push({ check: 'default_access', result: 'pass', detail: `${source} is "${effectiveAccess ?? 'open'}" — agent allowed` });
       }
     } else {
       trace.push({ check: 'default_access', result: 'skip', detail: agentId ? `allowedAgents list takes precedence` : `No agent ID (admin/CLI)` });

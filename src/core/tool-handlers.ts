@@ -3,13 +3,24 @@ import {
   CredentialOwnership,
 } from './agent-scope.js';
 import { AuditLogger } from './audit.js';
-import { ExecResult, validateCommand } from './exec.js';
-import { ServiceTestResult, testServiceConnection } from './health.js';
+import {
+  ExecResult,
+  validateCommand,
+} from './exec.js';
+import {
+  ServiceTestResult,
+  testServiceConnection,
+} from './health.js';
+import type {
+  Capability,
+  ServiceConfig,
+} from './mcp-server.js';
 import { checkRules } from './rules.js';
 import { SessionManager } from './sessions.js';
-import type { APIRequest, APIResponse } from './types.js';
-
-import type { Capability, ServiceConfig } from './mcp-server.js';
+import type {
+  APIRequest,
+  APIResponse,
+} from './types.js';
 import { DenialError } from './types.js';
 
 export interface ToolHandlerContext {
