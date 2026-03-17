@@ -3,8 +3,6 @@ import { URL } from 'url';
 
 import { AuditLogger } from '../../core/audit';
 import { buildAuthHeaders } from '../../core/auth.js';
-import { DEFAULT_TIMEOUT_MS } from '../../core/types';
-import { getErrorMessage } from '../cli-utils';
 import {
   authorityAuthorizeExec,
   authorityCompleteExec,
@@ -31,13 +29,15 @@ import {
   forwardToolCall,
   resetAuthoritySession,
 } from '../../core/runner-proxy.js';
-import { runDoctorChecks } from './doctor';
 import { SessionManager } from '../../core/sessions';
+import { DEFAULT_TIMEOUT_MS } from '../../core/types';
+import { getErrorMessage } from '../cli-utils';
 import {
   getAuditDir,
   hasYAMLConfig,
   loadYAMLConfig,
 } from '../config-yaml';
+import { runDoctorChecks } from './doctor';
 
 /**
  * Load config and convert to MCP format

@@ -27,6 +27,7 @@ import { doctorBundleCommand } from './commands/doctor-bundle';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
+import { overviewCommand } from './commands/overview';
 import { removeCommand } from './commands/remove';
 import { revokeCommand } from './commands/revoke';
 import { searchCommand } from './commands/search';
@@ -158,6 +159,12 @@ program
   .option('--host <host>', 'Host to bind to (default: 127.0.0.1)', '127.0.0.1')
   .option('--runner-key <key>', 'Shared runner API key (or JANEE_RUNNER_KEY)')
   .action(authorityCommand);
+
+program
+  .command('overview')
+  .description('Show a summary of services, capabilities, and agent access')
+  .option('--json', 'Output as JSON')
+  .action(overviewCommand);
 
 program
   .command('list')
