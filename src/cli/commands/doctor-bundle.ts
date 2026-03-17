@@ -1,5 +1,6 @@
 import { writeFileSync } from 'fs';
 
+import { canAccessCapability } from '../../core/agent-scope';
 import {
   AuditEvent,
   AuditLogger,
@@ -96,15 +97,7 @@ export async function doctorBundleCommand(
         const denied: string[] = [];
 
         for (const [name, cap] of Object.entries(config.capabilities)) {
-          const c = cap as any;
-          let allowed = true;
-
-          if (c.allowedAgents && c.allowedAgents.length > 0) {
-            allowed = c.allowedAgents.includes(agentId);
-          } else if (config.server?.defaultAccess === 'restricted') {
-            allowed = false;
-          }
-
+          const allowed = canAccessCapability(agentId, cap, config.services[cap.service], config.server?.defaultAccess);
           (allowed ? accessible : denied).push(name);
         }
 

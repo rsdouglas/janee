@@ -1,6 +1,9 @@
 import { canAgentAccess } from '../../core/agent-scope';
 import { checkRules } from '../../core/rules';
-import { handleCommandError, requireConfig } from '../cli-utils';
+import {
+  handleCommandError,
+  requireConfig,
+} from '../cli-utils';
 import { loadYAMLConfig } from '../config-yaml';
 
 interface TraceStep {

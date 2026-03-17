@@ -1,27 +1,19 @@
-import { canAgentAccess } from '../../core/agent-scope';
-import { handleCommandError, requireConfig } from '../cli-utils';
+import { resolveAccess } from '../../core/agent-scope';
+import {
+  handleCommandError,
+  requireConfig,
+} from '../cli-utils';
 import { loadYAMLConfig } from '../config-yaml';
-import type { CapabilityConfig, ServiceConfig as YAMLServiceConfig } from '../config-yaml';
 
-type AccessPolicy = 'open' | 'restricted' | undefined;
-
-function resolveEffectiveAccess(
-  cap: CapabilityConfig,
-  service: YAMLServiceConfig | undefined,
-  agentId: string,
-  globalDefault: AccessPolicy,
-): 'allowed' | 'denied' | 'open' {
-  if (cap.allowedAgents && cap.allowedAgents.length > 0) {
-    return cap.allowedAgents.includes(agentId) ? 'allowed' : 'denied';
-  }
-
-  const effective = cap.access ?? globalDefault;
-  if (effective === 'restricted') return 'denied';
-
-  if (!canAgentAccess(agentId, service?.ownership)) return 'denied';
-
-  return 'open';
-}
+const useColor = process.stdout.isTTY !== false && !process.env.NO_COLOR;
+const c = {
+  bold:    (s: string) => useColor ? `\x1b[1m${s}\x1b[22m` : s,
+  dim:     (s: string) => useColor ? `\x1b[2m${s}\x1b[22m` : s,
+  green:   (s: string) => useColor ? `\x1b[32m${s}\x1b[39m` : s,
+  yellow:  (s: string) => useColor ? `\x1b[33m${s}\x1b[39m` : s,
+  red:     (s: string) => useColor ? `\x1b[31m${s}\x1b[39m` : s,
+  cyan:    (s: string) => useColor ? `\x1b[36m${s}\x1b[39m` : s,
+};
 
 export async function overviewCommand(options: { json?: boolean } = {}): Promise<void> {
   try {
@@ -42,35 +34,35 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
       if (svc.ownership?.createdBy) knownAgents.add(svc.ownership.createdBy);
     }
 
-    // Build per-agent access map
-    const agentAccess: Record<string, { accessible: string[]; denied: string[] }> = {};
+    // Build per-agent access map with access type
+    const agentAccess: Record<string, { accessible: { name: string; type: 'allowed' | 'open' }[]; denied: string[] }> = {};
     for (const agentId of knownAgents) {
-      const accessible: string[] = [];
+      const accessible: { name: string; type: 'allowed' | 'open' }[] = [];
       const denied: string[] = [];
       for (const [name, cap] of capEntries) {
         const svc = config.services[cap.service];
-        const result = resolveEffectiveAccess(cap, svc, agentId, globalDefault);
+        const result = resolveAccess(agentId, cap, svc, globalDefault);
         if (result === 'denied') denied.push(name);
-        else accessible.push(name);
+        else accessible.push({ name, type: result });
       }
       agentAccess[agentId] = { accessible, denied };
     }
 
-    // Find capabilities no known agent can reach
     const unreachable = capEntries.filter(([name]) => {
       if (knownAgents.size === 0) return false;
-      return [...knownAgents].every(agentId => {
-        const { denied } = agentAccess[agentId];
-        return denied.includes(name);
-      });
+      return [...knownAgents].every(agentId => agentAccess[agentId].denied.includes(name));
     }).map(([name]) => name);
 
     if (options.json) {
+      const jsonAgents: Record<string, { accessible: string[]; denied: string[] }> = {};
+      for (const [agentId, data] of Object.entries(agentAccess)) {
+        jsonAgents[agentId] = { accessible: data.accessible.map(a => a.name), denied: data.denied };
+      }
       console.log(JSON.stringify({
         services: serviceNames.length,
         capabilities: capEntries.length,
         globalDefaultAccess: globalDefault ?? 'open',
-        agents: agentAccess,
+        agents: jsonAgents,
         unreachable,
       }, null, 2));
       return;
@@ -78,11 +70,11 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
 
     // Human-readable output
     console.log('');
-    console.log(`  ${serviceNames.length} service${serviceNames.length !== 1 ? 's' : ''}, ${capEntries.length} capabilit${capEntries.length !== 1 ? 'ies' : 'y'}    (defaultAccess: ${globalDefault ?? 'open'})`);
+    console.log(`  ${c.bold(`${serviceNames.length}`)} service${serviceNames.length !== 1 ? 's' : ''}, ${c.bold(`${capEntries.length}`)} capabilit${capEntries.length !== 1 ? 'ies' : 'y'}    ${c.dim(`(defaultAccess: ${globalDefault ?? 'open'})`)}`);
     console.log('');
 
     if (capEntries.length === 0) {
-      console.log('  No capabilities configured. Run `janee add <service>` to get started.');
+      console.log(`  No capabilities configured. Run ${c.cyan('janee add <service>')} to get started.`);
       console.log('');
       return;
     }
@@ -90,17 +82,14 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
     // Per-agent summary
     if (knownAgents.size > 0) {
       for (const agentId of [...knownAgents].sort()) {
-        const { accessible, denied } = agentAccess[agentId];
+        const { accessible } = agentAccess[agentId];
         if (accessible.length > 0) {
-          const labels = accessible.map(name => {
-            const cap = config.capabilities[name];
-            if (cap.allowedAgents?.includes(agentId)) return `${name} (allowed)`;
-            if (cap.access === 'open') return `${name} (open)`;
-            return name;
-          });
-          console.log(`  ${agentId}: ${labels.join(', ')}`);
+          const labels = accessible.map(a =>
+            a.type === 'allowed' ? c.cyan(a.name) : c.green(a.name)
+          );
+          console.log(`  ${c.bold(agentId)}: ${labels.join(c.dim(', '))}`);
         } else {
-          console.log(`  ${agentId}: (no access)`);
+          console.log(`  ${c.bold(agentId)}: ${c.dim('(no access)')}`);
         }
       }
     } else {
@@ -110,8 +99,8 @@ export async function overviewCommand(options: { json?: boolean } = {}): Promise
     // Unreachable capabilities
     if (unreachable.length > 0) {
       console.log('');
-      console.log(`  Unreachable: ${unreachable.join(', ')}`);
-      console.log('  (no known agent can access these)');
+      console.log(`  ${c.red('Unreachable')}: ${unreachable.map(n => c.yellow(n)).join(', ')}`);
+      console.log(`  ${c.dim('(no known agent can access these)')}`);
     }
 
     console.log('');

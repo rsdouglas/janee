@@ -1,14 +1,24 @@
-import { randomUUID, timingSafeEqual } from "crypto";
-import express from "express";
+import {
+  randomUUID,
+  timingSafeEqual,
+} from 'crypto';
+import express from 'express';
 
+import { canAccessCapability } from './agent-scope.js';
 import {
   buildExecEnv,
   hashPolicyFingerprint,
   validateCommand,
-} from "./exec.js";
-import { DEFAULT_TIMEOUT_MS } from "./types.js";
-import { getInstallationToken, GitHubAppCredentials } from "./github-app.js";
-import { ServiceTestResult, testServiceConnection } from "./health.js";
+} from './exec.js';
+import {
+  getInstallationToken,
+  GitHubAppCredentials,
+} from './github-app.js';
+import {
+  ServiceTestResult,
+  testServiceConnection,
+} from './health.js';
+import { DEFAULT_TIMEOUT_MS } from './types.js';
 
 export interface RunnerIdentity {
   runnerId: string;
@@ -207,12 +217,7 @@ export function buildAuthorityHooks(
       if (!cap) throw new Error(`Unknown capability: ${req.capabilityId}`);
       if (cap.mode !== "exec") throw new Error("Capability is not exec-mode");
 
-      if (
-        cap.allowedAgents &&
-        cap.allowedAgents.length > 0 &&
-        req.agentId &&
-        !cap.allowedAgents.includes(req.agentId)
-      ) {
+      if (!canAccessCapability(req.agentId, cap, undefined, undefined)) {
         throw new Error(
           `Agent ${req.agentId} is not allowed for capability ${cap.name}`,
         );

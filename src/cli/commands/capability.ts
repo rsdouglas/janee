@@ -1,3 +1,4 @@
+import { validateTTL } from '../../core/types';
 import {
   cliError,
   handleCommandError,
@@ -98,7 +99,14 @@ interface CapAddEditOptions {
   json?: boolean;
 }
 
-function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOptions): void {
+function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOptions, hadAllowedAgents = false): void {
+  if (options.allowedAgents && options.clearAgents) {
+    throw new Error('Conflicting options: --allowed-agents and --clear-agents cannot be used together');
+  }
+  if (options.access && options.clearAccess) {
+    throw new Error('Conflicting options: --access and --clear-access cannot be used together');
+  }
+
   if (options.allowedAgents) {
     cap.allowedAgents = options.allowedAgents.flatMap(a => a.split(',').map(s => s.trim()).filter(Boolean));
   }
@@ -109,6 +117,10 @@ function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOption
     if (options.access !== 'open' && options.access !== 'restricted') {
       throw new Error(`Invalid access policy "${options.access}" — must be "open" or "restricted"`);
     }
+    if (hadAllowedAgents && !options.clearAgents && !options.allowedAgents) {
+      console.error(`⚠️  This capability has allowedAgents, which take precedence over --access.`);
+      console.error(`   To apply access policy, also pass --clear-agents.`);
+    }
     cap.access = options.access;
   }
   if (options.clearAccess) {
@@ -117,6 +129,9 @@ function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOption
   if (options.mode) {
     if (options.mode !== 'proxy' && options.mode !== 'exec') {
       throw new Error(`Invalid mode "${options.mode}" — must be "proxy" or "exec"`);
+    }
+    if (options.mode === 'exec' && !options.allowCommands?.length && !cap.allowCommands?.length) {
+      throw new Error('Exec mode requires --allow-commands');
     }
     cap.mode = options.mode;
   }
@@ -131,7 +146,12 @@ function applyCapabilityOptions(cap: CapabilityConfig, options: CapAddEditOption
   }
   if (options.timeout) {
     cap.timeout = parseInt(options.timeout, 10);
-    if (isNaN(cap.timeout)) throw new Error(`Invalid timeout "${options.timeout}"`);
+    if (isNaN(cap.timeout) || cap.timeout <= 0) throw new Error(`Invalid timeout "${options.timeout}"`);
+  }
+
+  const effectiveMode = cap.mode ?? 'proxy';
+  if (effectiveMode === 'proxy' && (options.allowCommands || options.envMap || options.workDir || options.timeout)) {
+    console.error(`⚠️  Exec-mode options (--allow-commands, --env-map, --work-dir, --timeout) have no effect on proxy-mode capabilities.`);
   }
 }
 
@@ -156,9 +176,12 @@ export async function capabilityAddCommand(
       cliError(`Service "${options.service}" not found. Add it first with 'janee add'.`, options.json);
     }
 
+    const ttl = options.ttl || '1h';
+    validateTTL(ttl);
+
     const capability: CapabilityConfig = {
       service: options.service,
-      ttl: options.ttl || '1h',
+      ttl,
       autoApprove: options.autoApprove,
       requiresReason: options.requiresReason,
     };
@@ -170,6 +193,10 @@ export async function capabilityAddCommand(
     }
 
     applyCapabilityOptions(capability, options);
+
+    if ((capability.mode === 'exec') && capability.rules) {
+      console.error(`⚠️  Path rules (--allow/--deny) have no effect on exec-mode capabilities. Use --allow-commands instead.`);
+    }
 
     config.capabilities[name] = capability;
     saveYAMLConfig(config);
@@ -210,10 +237,28 @@ export async function capabilityEditCommand(
     }
 
     const capability = config.capabilities[name];
+    const hadAllowedAgents = !!(capability.allowedAgents?.length);
 
-    if (options.ttl) capability.ttl = options.ttl;
+    const hasChanges = options.ttl || options.autoApprove !== undefined ||
+      options.requiresReason !== undefined || options.clearRules || options.allow ||
+      options.deny || options.allowedAgents || options.clearAgents || options.access ||
+      options.clearAccess || options.mode || options.allowCommands || options.envMap ||
+      options.workDir || options.timeout;
+
+    if (!hasChanges) {
+      cliError('No changes specified. See `janee cap edit --help` for options.', options.json);
+    }
+
+    if (options.ttl) {
+      validateTTL(options.ttl);
+      capability.ttl = options.ttl;
+    }
     if (options.autoApprove !== undefined) capability.autoApprove = options.autoApprove;
     if (options.requiresReason !== undefined) capability.requiresReason = options.requiresReason;
+
+    if (options.clearRules && (options.allow || options.deny)) {
+      throw new Error('Conflicting options: --clear-rules and --allow/--deny cannot be used together');
+    }
 
     if (options.clearRules) {
       delete capability.rules;
@@ -223,7 +268,11 @@ export async function capabilityEditCommand(
       if (options.deny) capability.rules.deny = options.deny;
     }
 
-    applyCapabilityOptions(capability, options);
+    applyCapabilityOptions(capability, options, hadAllowedAgents);
+
+    if ((options.allow || options.deny) && (capability.mode === 'exec')) {
+      console.error(`⚠️  Path rules (--allow/--deny) have no effect on exec-mode capabilities. Use --allow-commands instead.`);
+    }
 
     saveYAMLConfig(config);
 

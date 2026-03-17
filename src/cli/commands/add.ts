@@ -677,7 +677,12 @@ export async function addCommand(
         if (options.allowCommands) capConfig.allowCommands = options.allowCommands;
         if (options.envMap) capConfig.env = parseEnvMap(options.envMap);
         if (options.workDir) capConfig.workDir = options.workDir;
-        if (options.timeout) capConfig.timeout = parseInt(options.timeout, 10);
+        if (options.timeout) {
+          capConfig.timeout = parseInt(options.timeout, 10);
+          if (isNaN(capConfig.timeout) || capConfig.timeout <= 0) {
+            throw new Error(`Invalid timeout "${options.timeout}"`);
+          }
+        }
       }
       config.capabilities[serviceName] = capConfig;
       saveYAMLConfig(config);
