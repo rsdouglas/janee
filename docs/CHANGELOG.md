@@ -7,6 +7,12 @@ All notable changes to Janee will be documented in this file.
 ### Added
 
 - **Per-capability `access` override** — Capabilities can now set `access: open` or `access: restricted` to override the global `defaultAccess` policy. Useful for mixed environments where some capabilities (e.g. SerpAPI) should be open to all agents while others (e.g. Stripe) are locked to specific agents. Configurable via `janee cap add --access open` / `janee cap edit --access restricted` / `janee cap edit --clear-access`. Surfaced in `explain_access` traces and `cap list` output.
+- **`janee overview` command** — One-screen summary of services, capabilities, and per-agent access. Shows which agents can reach which capabilities, highlights unreachable capabilities (restricted with no `allowedAgents`), and reports the global default access policy. Supports `--json`.
+- **`janee add` always creates a default capability** — Running `janee add resend --key xxx` now creates both the service and a ready-to-use capability in one step. Previously, non-interactive usage with partial prompting (e.g. prompted for test path) would ask whether to create a capability; now it always does. Customize afterward with `janee cap edit`.
+
+### Fixed
+
+- **`diagnose access` now respects per-capability `access` override** — The CLI diagnose command was not checking `cap.access` when evaluating the default access policy step, causing incorrect trace output for capabilities with per-capability overrides.
 
 ### Changed
 

@@ -664,104 +664,12 @@ export async function addCommand(
 
     saveYAMLConfig(config);
 
-    if (options.json) {
-      // JSON output for non-interactive/json mode
-      const result: any = {
-        ok: true,
-        service: serviceName,
-        message: `Added service "${serviceName}"`
-      };
-      
-      // If readline was never opened, we're fully non-interactive.
-      // Auto-create a capability with sensible defaults.
-      if (!prompted && !config.capabilities[serviceName]) {
-        const capConfig: CapabilityConfig = {
-          service: serviceName,
-          ttl: '1h',
-          autoApprove: true,
-        };
-        if (options.exec) {
-          capConfig.mode = 'exec';
-          if (options.allowCommands) capConfig.allowCommands = options.allowCommands;
-          if (options.envMap) capConfig.env = parseEnvMap(options.envMap);
-          if (options.workDir) capConfig.workDir = options.workDir;
-          if (options.timeout) capConfig.timeout = parseInt(options.timeout, 10);
-        }
-        config.capabilities[serviceName] = capConfig;
-        saveYAMLConfig(config);
-        result.capability = serviceName;
-        result.capabilityMessage = options.exec
-          ? `Added exec-mode capability "${serviceName}" (1h TTL, auto-approve, commands: ${(options.allowCommands || []).join(', ')})`
-          : `Added capability "${serviceName}" (1h TTL, auto-approve)`;
-      }
-      
-      console.log(JSON.stringify(result));
-      return;
-    }
-
-    console.log(`✅ Added service "${serviceName}"`);
-    console.log();
-
-    // If readline was never opened, we're fully non-interactive.
-    // Auto-create a capability with sensible defaults instead of prompting.
-    if (!prompted) {
-      if (!config.capabilities[serviceName]) {
-        const capConfig: CapabilityConfig = {
-          service: serviceName,
-          ttl: '1h',
-          autoApprove: true,
-        };
-        if (options.exec) {
-          capConfig.mode = 'exec';
-          if (options.allowCommands) capConfig.allowCommands = options.allowCommands;
-          if (options.envMap) capConfig.env = parseEnvMap(options.envMap);
-          if (options.workDir) capConfig.workDir = options.workDir;
-          if (options.timeout) capConfig.timeout = parseInt(options.timeout, 10);
-        }
-        config.capabilities[serviceName] = capConfig;
-        saveYAMLConfig(config);
-        if (options.exec) {
-          console.log(`✅ Added exec-mode capability "${serviceName}" (1h TTL, auto-approve)`);
-          console.log(`   Allowed commands: ${(options.allowCommands || []).join(', ')}`);
-        } else {
-          console.log(`✅ Added capability "${serviceName}" (1h TTL, auto-approve)`);
-        }
-        console.log();
-      }
-      console.log("Done! Run 'janee serve' to start.");
-      return;
-    }
-
-    // Ask about capability
-    const createCapAnswer = await getRL().question('Create a capability for this service? (Y/n): ');
-    const createCap = !createCapAnswer || createCapAnswer.toLowerCase() === 'y' || createCapAnswer.toLowerCase() === 'yes';
-
-    if (createCap) {
-      const capNameDefault = serviceName;
-      const capNameInput = await getRL().question(`Capability name (default: ${capNameDefault}): `);
-      const capName = capNameInput.trim() || capNameDefault;
-
-      // Check if capability already exists
-      if (config.capabilities[capName]) {
-        console.error(`❌ Capability "${capName}" already exists`);
-        process.exit(1);
-      }
-
-      const ttlInput = await getRL().question('TTL (e.g., 1h, 30m): ');
-      const ttl = ttlInput.trim() || '1h';
-
-      const autoApproveInput = await getRL().question('Auto-approve? (Y/n): ');
-      const autoApprove = !autoApproveInput || autoApproveInput.toLowerCase() === 'y' || autoApproveInput.toLowerCase() === 'yes';
-
-      const requiresReasonInput = await getRL().question('Requires reason? (y/N): ');
-      const requiresReason = requiresReasonInput.toLowerCase() === 'y' || requiresReasonInput.toLowerCase() === 'yes';
-
-      // Add capability
+    // Auto-create a default capability unless one already exists
+    if (!config.capabilities[serviceName]) {
       const capConfig: CapabilityConfig = {
         service: serviceName,
-        ttl,
-        autoApprove,
-        requiresReason
+        ttl: '1h',
+        autoApprove: true,
       };
       if (options.exec) {
         capConfig.mode = 'exec';
@@ -770,17 +678,33 @@ export async function addCommand(
         if (options.workDir) capConfig.workDir = options.workDir;
         if (options.timeout) capConfig.timeout = parseInt(options.timeout, 10);
       }
-      config.capabilities[capName] = capConfig;
-
+      config.capabilities[serviceName] = capConfig;
       saveYAMLConfig(config);
-
-      console.log(`✅ Added capability "${capName}"`);
-      console.log();
     }
 
-    closeRL();
+    if (options.json) {
+      console.log(JSON.stringify({
+        ok: true,
+        service: serviceName,
+        capability: serviceName,
+        message: `Added service "${serviceName}" with capability "${serviceName}"`,
+      }));
+      closeRL();
+      return;
+    }
 
+    console.log(`✅ Added service "${serviceName}"`);
+    if (options.exec) {
+      console.log(`✅ Added exec-mode capability "${serviceName}" (1h TTL, auto-approve)`);
+      console.log(`   Allowed commands: ${(options.allowCommands || []).join(', ')}`);
+    } else {
+      console.log(`✅ Added capability "${serviceName}" (1h TTL, auto-approve)`);
+    }
+    console.log(`   Customize with: janee cap edit ${serviceName}`);
+    console.log();
     console.log("Done! Run 'janee serve' to start.");
+
+    closeRL();
 
   } catch (error) {
     handleCommandError(error, options.json);
