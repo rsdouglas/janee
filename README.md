@@ -84,6 +84,10 @@ No more copying keys between tools. No more "which agent has which API configure
 
 ---
 
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/rsdouglas-janee).
+
 ## Quick Start
 
 ### Install
