@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/rsdouglas-janee-badge.png)](https://mseep.ai/app/rsdouglas-janee)
+
 # Janee 🔐
 
 **Secrets management for AI agents via MCP**
